@@ -1,6 +1,6 @@
 # mf-analyser — standing context for every session
 
-Internal "Excel-driven research analytics platform". Monorepo: `backend/` (Python 3.12, FastAPI, Pydantic v2, uv) and `frontend/` (React 18, TypeScript, Vite, Tailwind, Recharts). The build proceeds in numbered phases (see README.md → "Build phases"); one phase per session, one commit per phase.
+Internal "Excel-driven research analytics platform". Monorepo: `backend/` (Python 3.12, FastAPI, Pydantic v2, uv) and `frontend/` (React 18, TypeScript, Vite, Tailwind, Recharts). The build proceeds in numbered phases 0–9, specified with acceptance criteria in `docs/BUILD_KIT.md`; one phase per session, one commit per phase. Phase 0 is done. Use plan mode for Phases 2, 3 and 7.
 
 ## Standing rules
 

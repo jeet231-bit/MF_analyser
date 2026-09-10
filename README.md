@@ -57,7 +57,7 @@ Backend settings are read from environment variables prefixed `MFA_` (see `backe
 
 ## Build phases
 
-The system is built one phase per session; each phase is committed separately and ends by running its tests and demonstrating its acceptance criteria.
+The system is built one phase per session; each phase is committed separately and ends by running its tests and demonstrating its acceptance criteria. The full specification and per-phase prompts are in [docs/BUILD_KIT.md](docs/BUILD_KIT.md); the research methodology the workbook implements is in `docs/Mutual Fund Analytics/`.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
