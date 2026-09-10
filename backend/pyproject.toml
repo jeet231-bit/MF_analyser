@@ -36,7 +36,8 @@ packages = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q -m 'not real'"
+markers = ["real: integration tests against the real workbook in samples/ (slow)"]
 filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.ruff]

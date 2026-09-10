@@ -32,6 +32,17 @@ Internal "Excel-driven research analytics platform". Monorepo: `backend/` (Pytho
 - Real master workbooks go in `samples/` (git-ignored). The pytest fixture workbook is generated in code with openpyxl, never committed as a binary.
 - Commit per phase. After each phase, run the tests and demonstrate the acceptance criteria.
 
+## Scale facts (drive every design decision from Phase 2 on)
+
+The real master workbook (in `samples/`, git-ignored) has 39 sheets, ~1.57 million non-empty cells and ~794 thousand formula cells; a full openpyxl load takes minutes and gigabytes. Consequences already built into Phase 1 and binding afterwards:
+
+- Parse with openpyxl `read_only=True` streaming, two passes (formulas, then cached values); merged ranges, tables, defined names and macro/pivot/external-link flags come from the OOXML parts directly (`app/parser/package.py`).
+- Cells live in a columnar `CellColumns` (parallel lists), never one object per cell. Sheets are persisted one at a time as gzipped JSON blobs (`raw_sheets` table) so peak memory is one sheet.
+- Dates are stored as Excel serial numbers with `value_type="date"`; the number format says how to display them.
+- The function inventory strips string literals and `_xlfn.` prefixes; it is the contract for engine coverage. Real workbook inventory: IF, VLOOKUP, HLOOKUP, COUNTIFS, IFERROR, AND, OR, SEARCH, ISNUMBER, CONCATENATE, COUNTIF, SUMPRODUCT, SUMIF, COUNT, AVERAGEIF, LEFT, DATE, YEAR, MONTH, DAY.
+- Phase 2 must not build 794k independent ASTs naively: parse each distinct formula text once (cache by text) and prefer R1C1-normalised patterns so a column of copied formulas shares one AST and one dependency template. Phase 3 needs the same reuse for evaluation.
+- Pivot tables are not recalculated; their cached outputs are treated as constants (inputs). Flagged in `RawWorkbook.warnings`.
+
 ## Environment notes (this machine)
 
 - Windows 11. No `make` or `winget` on PATH; the root `package.json` scripts (`npm run dev|test|lint`) mirror every Makefile target.

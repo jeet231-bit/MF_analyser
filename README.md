@@ -55,6 +55,24 @@ npm run lint               # ruff + eslint + tsc    (make lint)
 
 Backend settings are read from environment variables prefixed `MFA_` (see `backend/.env.example`).
 
+The integration test against the real master workbook is opt-in because it parses over a million cells:
+
+```bash
+cd backend && uv run pytest -m real -s
+```
+
+## API (so far)
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/health` | Liveness, DB check |
+| POST | `/api/workbooks` | Upload `.xlsx`/`.xlsm`; parses into an immutable version, returns summary counts and the Excel function inventory |
+| GET | `/api/workbooks` | List versions |
+| GET | `/api/workbooks/{id}` | One version with its summary |
+| GET | `/api/workbooks/{id}/raw?sheet=` | The RawWorkbook extraction (all sheets, or one) |
+
+Interactive docs: http://127.0.0.1:8000/api/docs
+
 ## Build phases
 
 The system is built one phase per session; each phase is committed separately and ends by running its tests and demonstrating its acceptance criteria. The full specification and per-phase prompts are in [docs/BUILD_KIT.md](docs/BUILD_KIT.md); the research methodology the workbook implements is in `docs/Mutual Fund Analytics/`.
@@ -62,7 +80,7 @@ The system is built one phase per session; each phase is committed separately an
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 0 | Scaffold, tooling, CLAUDE.md, health-check loop | done |
-| 1 | Excel ingestion → RawWorkbook (formulas + cached values, function inventory) | |
+| 1 | Excel ingestion → RawWorkbook (formulas + cached values, function inventory) | done |
 | 2 | Logic interpretation: ASTs, dependency DAG, cell/sheet classification, business rules | |
 | 3 | Analytical engine: full and incremental runs, lineage | |
 | 4 | Validation and reconciliation; activation gate | |
