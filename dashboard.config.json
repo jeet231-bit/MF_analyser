@@ -1,0 +1,15 @@
+{
+  "$schema": "./dashboard.config.schema.json",
+  "version": 1,
+  "description": "Workbook-specific display overlay. This is the ONLY place workbook-specific names or preferences may live (CLAUDE.md rule 3). Keys are filled in once a workbook is active.",
+  "workbook": {
+    "displayName": null
+  },
+  "sheetRoleOverrides": {},
+  "outputSheets": [],
+  "labelOverrides": {},
+  "numberFormat": {
+    "grouping": "indian",
+    "decimals": 2
+  }
+}

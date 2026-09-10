@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dashboard.config.json",
+  "type": "object",
+  "required": ["version"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "description": { "type": "string" },
+    "workbook": {
+      "type": "object",
+      "properties": { "displayName": { "type": ["string", "null"] } }
+    },
+    "sheetRoleOverrides": {
+      "type": "object",
+      "description": "sheet name -> input | transformation | calculation | reference | output",
+      "additionalProperties": { "enum": ["input", "transformation", "calculation", "reference", "output"] }
+    },
+    "outputSheets": { "type": "array", "items": { "type": "string" } },
+    "labelOverrides": {
+      "type": "object",
+      "description": "'Sheet!A1' -> display label",
+      "additionalProperties": { "type": "string" }
+    },
+    "numberFormat": {
+      "type": "object",
+      "properties": {
+        "grouping": { "enum": ["indian", "international"] },
+        "decimals": { "type": "integer", "minimum": 0, "maximum": 6 }
+      }
+    }
+  }
+}
