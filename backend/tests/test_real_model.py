@@ -11,7 +11,11 @@ from app.storage import logic, workbooks
 from app.storage.db import get_session_factory
 
 SAMPLES = Path(__file__).resolve().parents[2] / "samples"
-WORKBOOKS = sorted(SAMPLES.glob("*.xls[xm]")) if SAMPLES.exists() else []
+WORKBOOKS = (
+    sorted(SAMPLES.glob("*.xls[xm]"), key=lambda p: (p.name != "master.xlsx", p.name))
+    if SAMPLES.exists()
+    else []
+)
 TIME_BUDGET_SECONDS = 120
 
 pytestmark = pytest.mark.real

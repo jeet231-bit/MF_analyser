@@ -66,6 +66,7 @@ cd backend && uv run pytest -m real -s
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/health` | Liveness, DB check |
+| GET | `/api/config` | Display settings from `dashboard.config.json` (name, scope, number format) |
 | POST | `/api/workbooks` | Upload `.xlsx`/`.xlsm`; parses into an immutable version, returns summary counts and the Excel function inventory |
 | GET | `/api/workbooks` | List versions |
 | GET | `/api/workbooks/{id}` | One version with its summary |
@@ -90,10 +91,19 @@ The system is built one phase per session; each phase is committed separately an
 | 3 | Analytical engine: full and incremental runs, lineage | |
 | 4 | Validation and reconciliation; activation gate | |
 | 5 | Versioning and logic diff with impact analysis | |
-| 6 | Dashboard shell and design system | |
+| 6 | Dashboard shell, design system, overview page (pulled forward; module views wait for the engine) | done |
 | 7 | Module views: inputs, calculations, outputs, versions, validation | |
 | 8 | Exports: xlsx, csv, pdf | |
 | 9 | Hardening and real-workbook QA; runbook | |
+
+## Runbook: a new master version
+
+1. Close the workbook in Excel. Excel holds an exclusive lock on OneDrive files, and an upload or test that reads a locked file fails with "permission denied".
+2. Save a **copy** of the master as `samples/master.xlsx`. Never point the system at the file Excel has open; `samples/` is a drop zone for copies and is git-ignored.
+3. Upload it (`POST /api/workbooks`, or the dashboard's upload control) and interpret it (`POST /api/workbooks/{id}/interpret`). The dashboard overview then shows the new version, its sheet roles, and any reported cycles.
+4. From Phase 5 on, the upload also produces a diff against the active version, and activation goes through the validation gate.
+
+Keep the master free of circular references: the analyser reports a cycle readably and refuses to evaluate it rather than iterating around it.
 
 ## Known constraints (v1)
 

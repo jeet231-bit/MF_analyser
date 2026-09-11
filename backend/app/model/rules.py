@@ -184,7 +184,8 @@ def extract_rules(
             "return": render(node.args[2]) if len(node.args) > 2 else None,
             "table": table,
         }
-        desc = f"{node.name}: look up {detail['key']} in {target_sheet}!{detail['range']}"
+        where = detail["range"] if "!" in detail["range"] else f"{target_sheet}!{detail['range']}"
+        desc = f"{node.name}: look up {detail['key']} in {where}"
         if detail["return"] is not None:
             desc += f", return {detail['return']}"
         if exact is not None:

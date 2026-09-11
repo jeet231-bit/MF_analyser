@@ -16,8 +16,29 @@ export function formatNumber(
   }).format(value);
 }
 
+/** Whole-number counts: grouped, no decimals. */
+export function formatCount(value: number | null | undefined, grouping: Grouping = "indian"): string {
+  return formatNumber(value, { grouping, decimals: 0 });
+}
+
 export function formatTimestamp(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(d);
+}
+
+export function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(d);
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function formatSeconds(seconds: number): string {
+  return seconds < 10 ? `${seconds.toFixed(1)} s` : `${Math.round(seconds)} s`;
 }

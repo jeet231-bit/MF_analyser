@@ -5,7 +5,6 @@ from __future__ import annotations
 from app.model.schema import SheetModel, SheetRole
 
 LOOKUP_FUNCTIONS = {"VLOOKUP", "HLOOKUP", "XLOOKUP", "LOOKUP", "INDEX", "MATCH"}
-REFERENCE_MAX_CELLS = 2000
 
 
 def infer_role(
@@ -16,19 +15,23 @@ def infer_role(
 ) -> tuple[SheetRole, str]:
     """Return (role, reason).
 
-    - no formulas, read by others via lookups and small → reference
+    - reads no other sheet and is consumed only through lookup functions → reference
+      (a lookup table, whatever its size, even if it derives some of its own columns)
     - no formulas → input
     - formulas, nothing reads it → output
     - formulas, mostly reads other sheets → transformation
     - otherwise → calculation
     """
     readers = [s for s in sheet.feeds if s != sheet.name]
+    reads_others = [s for s in sheet.reads if s != sheet.name]
+    if readers and read_by_lookup_only and not reads_others:
+        how = (
+            "no formulas"
+            if sheet.formula_cells == 0
+            else f"{sheet.formula_cells} formula cells over its own data only"
+        )
+        return "reference", f"{how}; read only through lookup functions by {', '.join(readers)}"
     if sheet.formula_cells == 0:
-        if readers and read_by_lookup_only and sheet.cell_count <= REFERENCE_MAX_CELLS:
-            return (
-                "reference",
-                f"no formulas; {sheet.cell_count} cells read only through lookup functions",
-            )
         if readers:
             return "input", f"no formulas; read by {', '.join(readers)}"
         return "input", "no formulas and nothing reads it"

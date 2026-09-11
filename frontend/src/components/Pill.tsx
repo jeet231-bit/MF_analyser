@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 export type PillTone = "neutral" | "positive" | "warning" | "negative" | "accent";
@@ -11,15 +12,26 @@ const tones: Record<PillTone, string> = {
 };
 
 /** Small status marker. Semantic tones are reserved for validation and deltas. */
-export function Pill({ tone = "neutral", children }: { tone?: PillTone; children: React.ReactNode }) {
+export function Pill({
+  tone = "neutral",
+  children,
+  dot = true,
+  className,
+}: {
+  tone?: PillTone;
+  children: ReactNode;
+  dot?: boolean;
+  className?: string;
+}) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-heading text-xs font-medium",
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 font-heading text-xs font-medium",
         tones[tone],
+        className,
       )}
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+      {dot && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" aria-hidden />}
       {children}
     </span>
   );

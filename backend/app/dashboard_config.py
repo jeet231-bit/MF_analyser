@@ -13,12 +13,27 @@ from app.config import BACKEND_ROOT
 DEFAULT_PATH = BACKEND_ROOT.parent / "dashboard.config.json"
 
 
+class WorkbookDisplay(BaseModel):
+    display_name: str | None = Field(default=None, alias="displayName")
+
+    model_config = {"populate_by_name": True, "extra": "ignore"}
+
+
+class NumberFormat(BaseModel):
+    grouping: str = "indian"
+    decimals: int = 2
+
+    model_config = {"extra": "ignore"}
+
+
 class DashboardConfig(BaseModel):
     version: int = 1
+    workbook: WorkbookDisplay = Field(default_factory=WorkbookDisplay)
     sheet_scope: list[str] = Field(default_factory=list, alias="sheetScope")
     sheet_role_overrides: dict[str, str] = Field(default_factory=dict, alias="sheetRoleOverrides")
     output_sheets: list[str] = Field(default_factory=list, alias="outputSheets")
     label_overrides: dict[str, str] = Field(default_factory=dict, alias="labelOverrides")
+    number_format: NumberFormat = Field(default_factory=NumberFormat, alias="numberFormat")
 
     model_config = {"populate_by_name": True, "extra": "ignore"}
 

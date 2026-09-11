@@ -1,27 +1,108 @@
-import { HealthPage } from "@/modules/system/HealthPage";
+import { useEffect, useState } from "react";
+import { getConfig } from "@/api/config";
+import { getModel } from "@/api/model";
+import { listWorkbooks } from "@/api/workbooks";
+import { Button, EmptyState, ProgressBar } from "@/components";
+import { useAsync } from "@/lib/useAsync";
+import { OverviewPage } from "@/modules/overview/OverviewPage";
+import { UploadPanel } from "@/modules/overview/UploadPanel";
+import { AppShell } from "@/modules/shell/AppShell";
+import { Sidebar } from "@/modules/shell/Sidebar";
 import { useTheme } from "@/theme";
 
 export default function App() {
   const { theme, toggle } = useTheme();
-  return (
-    <div className="mx-auto max-w-[1200px] px-4 py-6">
-      <header className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-ink">MF Analyser</h1>
-          <p className="text-sm text-muted">Excel-driven research analytics · phase 0 scaffold</p>
+  const config = useAsync(getConfig, []);
+  const versions = useAsync(listWorkbooks, []);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<{ active: boolean; label?: string }>({ active: false });
+
+  const versionList = versions.data ?? [];
+  const effectiveId = selectedId && versionList.some((v) => v.id === selectedId) ? selectedId : (versionList[0]?.id ?? null);
+  const version = versionList.find((v) => v.id === effectiveId) ?? null;
+
+  const model = useAsync(
+    () => (effectiveId ? getModel(effectiveId) : Promise.reject(new Error("no version"))),
+    [effectiveId],
+  );
+
+  useEffect(() => {
+    document.title = config.data?.display_name ? `${config.data.display_name} · MF Analyser` : "MF Analyser";
+  }, [config.data?.display_name]);
+
+  const onBusy = (active: boolean, label?: string) => setBusy({ active, label });
+  const displayName = config.data?.display_name ?? null;
+
+  const sidebar = (
+    <div className="flex h-full flex-col">
+      <Sidebar
+        displayName={displayName}
+        versions={versionList}
+        selectedVersionId={effectiveId}
+        onSelectVersion={setSelectedId}
+        model={model.status === "ready" ? model.data : null}
+        activeItem="overview"
+        theme={theme}
+        onToggleTheme={toggle}
+      />
+      {versionList.length > 0 && (
+        <div className="border-t border-hairline px-3 py-2">
+          <UploadPanel
+            compact
+            onBusy={onBusy}
+            onDone={(id) => {
+              setSelectedId(id);
+              versions.reload();
+            }}
+          />
         </div>
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-          className="rounded-sm border border-hairline bg-surface px-2 py-1 font-heading text-xs font-medium text-ink hover:border-accent"
-        >
-          {theme === "dark" ? "Light" : "Dark"} theme
-        </button>
-      </header>
-      <main className="grid gap-3 md:grid-cols-2">
-        <HealthPage />
-      </main>
+      )}
     </div>
+  );
+
+  let content: React.ReactNode;
+  if (versions.status === "error") {
+    content = (
+      <EmptyState
+        tone="error"
+        title="Could not reach the backend"
+        description={versions.error}
+        action={<Button onClick={versions.reload}>Retry</Button>}
+      />
+    );
+  } else if (versions.status === "loading" && !versions.data) {
+    content = (
+      <div aria-busy="true" className="space-y-2">
+        <div className="h-8 w-64 animate-pulse rounded-md bg-surface" />
+        <div className="h-40 animate-pulse rounded-md border border-hairline bg-surface" />
+      </div>
+    );
+  } else if (!version) {
+    content = (
+      <UploadPanel
+        onBusy={onBusy}
+        onDone={(id) => {
+          setSelectedId(id);
+          versions.reload();
+        }}
+      />
+    );
+  } else {
+    content = (
+      <OverviewPage
+        displayName={displayName}
+        version={version}
+        model={model}
+        onBusy={onBusy}
+        onVersionChanged={versions.reload}
+      />
+    );
+  }
+
+  return (
+    <>
+      <ProgressBar active={busy.active} label={busy.label} />
+      <AppShell sidebar={sidebar}>{content}</AppShell>
+    </>
   );
 }
