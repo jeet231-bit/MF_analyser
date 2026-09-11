@@ -10,6 +10,8 @@ Builds on the Phase 1 fixture (Inputs / Lookup / Calc) and adds:
 
 from __future__ import annotations
 
+from openpyxl.worksheet.formula import ArrayFormula
+
 from tests.fixtures.workbook import (
     FIXTURE_CACHED_VALUES,
     build_fixture_workbook,
@@ -56,7 +58,98 @@ def build_logic_fixture_workbook():
     o["A1"], o["B1"] = "Total sales", "=SUM(Series!B2:B21)"
     o["A2"], o["B2"] = "Peak cumulative", "=MAX(Series!C2:C21)"
     o["A3"], o["B3"] = "High months", '=COUNTIF(Series!D2:D21,"High")'
+
+    # Excel semantics the engine must reproduce exactly (cached values in SEMANTICS_CACHED).
+    sm = wb.create_sheet("Semantics")
+    sm["A1"], sm["A2"], sm["B2"], sm["A3"], sm["B3"], sm["A4"], sm["B4"] = (
+        "x",
+        "y",
+        7,
+        "t",
+        "12",
+        "e",
+        "=1/0",
+    )
+    for i, v in enumerate(["--", 1, "--", "x"], start=1):
+        sm[f"D{i}"] = v
+    for i, v in enumerate([2, 3, 4, 5, 6], start=1):
+        sm[f"E{i}"] = v
+    for addr, formula in SEMANTICS_FORMULAS.items():
+        if addr in ("F1", "F2"):
+            continue
+        sm[addr] = formula
+    sm["F1"] = ArrayFormula("F1:F2", "=E1:E2*2")
     return wb
+
+
+SEMANTICS_FORMULAS: dict[str, str] = {
+    "C1": "=B1+1",
+    "C2": '=B1&"x"',
+    "C3": "=B3+1",
+    "C4": "=B4*2",
+    "C5": '="a"+1',
+    "C6": "=B1=0",
+    "C7": '=IF(B1,"t","f")',
+    "C8": '=COUNTIF(D1:D5,"<>--")',
+    "C9": '=COUNTIF(D1:D5,"*-")',
+    "C10": '=SUMIF(D1:D5,">0")',
+    "C11": "=SUMPRODUCT(D1:D5,E1:E5)",
+    "C12": '=SEARCH("ta",B3&"beta")',
+    "C13": '=ISNUMBER(SEARCH("zz","abc"))',
+    "C14": '=LEFT("Fund - Growth",4)',
+    "C15": "=DATE(2026,1,31)",
+    "C16": "=YEAR(C15)",
+    "C17": "=MONTH(C15)",
+    "C18": "=DAY(C15)",
+    "C19": '=HLOOKUP("Rating",Lookup!$A$1:$B$4,3,FALSE)',
+    "C20": '=VLOOKUP("Zed",Lookup!$A:$B,2,FALSE)',
+    "C21": '=IFERROR(C20,"missing")',
+    "C22": '=AVERAGEIF(E1:E5,">3")',
+    "C23": "=COUNT(D1:E5)",
+    "C24": '=AND(B2>5,B3="12")',
+    "C25": '=OR(B2<5,B1="")',
+    "C26": "=B2>B3",
+    "C27": "=B3*1",
+    "C28": "=Threshold*10",
+    "C29": '=CONCATENATE("v",B2,"-",C6)',
+    "F1": "=E1:E2*2",
+    "F2": "=E1:E2*2",
+}
+
+SEMANTICS_CACHED: dict[str, object] = {
+    "B4": "#DIV/0!",
+    "C1": 1,
+    "C2": "x",
+    "C3": 13,
+    "C4": "#DIV/0!",
+    "C5": "#VALUE!",
+    "C6": True,
+    "C7": "f",
+    "C8": 3,
+    "C9": 2,
+    "C10": 1,
+    "C11": 3,
+    "C12": 5,
+    "C13": False,
+    "C14": "Fund",
+    "C15": 46053,
+    "C16": 2026,
+    "C17": 1,
+    "C18": 31,
+    "C19": 2,
+    "C20": "#N/A",
+    "C21": "missing",
+    "C22": 5,
+    "C23": 6,
+    "C24": True,
+    "C25": True,
+    "C26": False,
+    "C27": 12,
+    "C28": 7.5,
+    "C29": "v7-TRUE",
+    "F1": 4,
+    "F2": 6,
+}
 
 
 def logic_cached_values() -> dict[tuple[str, str], object]:
@@ -76,6 +169,8 @@ def logic_cached_values() -> dict[tuple[str, str], object]:
     values[("Outputs", "B1")] = sum(SALES)
     values[("Outputs", "B2")] = cumulative
     values[("Outputs", "B3")] = sum(1 for x in SALES if band(x) == "High")
+    for addr, value in SEMANTICS_CACHED.items():
+        values[("Semantics", addr)] = value
     return values
 
 

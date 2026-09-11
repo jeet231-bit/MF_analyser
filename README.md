@@ -76,6 +76,10 @@ cd backend && uv run pytest -m real -s
 | GET | `/api/workbooks/{id}/graph?level=sheet\|block\|cell&cell=Sheet!A1&depth=` | Dependency graph at the chosen level |
 | GET | `/api/workbooks/{id}/rules?sheet=&kind=` | Extracted business rules |
 | PATCH | `/api/workbooks/{id}/model/sheets/{name}` | Override a sheet's role with a reason |
+| POST | `/api/workbooks/{id}/runs` | Execute the model: `{overrides: {"Sheet!A1": v}, mode: "auto"|"full"}`; the first override-free run is the baseline, later override runs are incremental |
+| GET | `/api/workbooks/{id}/runs`, `/api/runs/{run_id}` | Run list and one run's summary (blocks, cells, seconds, hot templates) |
+| GET | `/api/runs/{run_id}/values?sheet=&range=` | Computed and input values of a sheet for a run |
+| GET | `/api/workbooks/{id}/lineage/{Sheet!A1}?run_id=&depth=` | Explain a cell: formula, consumed values, expandable |
 
 Interactive docs: http://127.0.0.1:8000/api/docs
 
@@ -88,7 +92,7 @@ The system is built one phase per session; each phase is committed separately an
 | 0 | Scaffold, tooling, CLAUDE.md, health-check loop | done |
 | 1 | Excel ingestion → RawWorkbook (formulas + cached values, function inventory) | done |
 | 2 | Logic interpretation: formula templates, block-level dependency DAG, classification, business rules | done |
-| 3 | Analytical engine: full and incremental runs, lineage | |
+| 3 | Analytical engine: vectorised block-by-block runs, incremental what-ifs, lineage | done |
 | 4 | Validation and reconciliation; activation gate | |
 | 5 | Versioning and logic diff with impact analysis | |
 | 6 | Dashboard shell, design system, overview page (pulled forward; module views wait for the engine) | done |

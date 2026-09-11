@@ -53,7 +53,14 @@ def test_interpret_with_explicit_scope(client: TestClient, version_id: str) -> N
 
 def test_model_endpoint(client: TestClient, interpreted: str) -> None:
     full = client.get(f"/api/workbooks/{interpreted}/model").json()
-    assert {s["name"] for s in full["sheets"]} == {"Inputs", "Lookup", "Calc", "Series", "Outputs"}
+    assert {s["name"] for s in full["sheets"]} == {
+        "Inputs",
+        "Lookup",
+        "Calc",
+        "Series",
+        "Outputs",
+        "Semantics",
+    }
     assert full["templates"] and "ast" not in full["templates"][0]
     with_ast = client.get(f"/api/workbooks/{interpreted}/model", params={"include": "ast"}).json()
     assert with_ast["templates"][0]["ast"]["kind"]
@@ -70,7 +77,7 @@ def test_model_endpoint(client: TestClient, interpreted: str) -> None:
 def test_graph_levels(client: TestClient, interpreted: str) -> None:
     sheet = client.get(f"/api/workbooks/{interpreted}/graph", params={"level": "sheet"}).json()
     ids = {n["id"] for n in sheet["nodes"]}
-    assert ids == {"Inputs", "Lookup", "Calc", "Series", "Outputs"}
+    assert ids == {"Inputs", "Lookup", "Calc", "Series", "Outputs", "Semantics"}
     depth = {n["id"]: n["depth"] for n in sheet["nodes"]}
     assert depth["Inputs"] == 0 and depth["Series"] == 1 and depth["Outputs"] == 2
     # B1 reads the Sales input block, B2 reads both Cumulative blocks, B3 reads the Band block.

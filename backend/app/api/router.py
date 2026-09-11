@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 
-from app.api import config, health, models, workbooks
+from app.api import config, health, models, runs, workbooks
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
 api_router.include_router(config.router, tags=["config"])
 api_router.include_router(workbooks.router, tags=["workbooks"])
 api_router.include_router(models.router, tags=["logic model"])
+api_router.include_router(runs.router, tags=["engine"])

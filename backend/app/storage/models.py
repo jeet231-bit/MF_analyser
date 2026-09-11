@@ -42,6 +42,9 @@ class WorkbookVersion(Base):
     logic_models: Mapped[list[LogicModelRow]] = relationship(
         back_populates="version", cascade="all, delete-orphan", order_by="LogicModelRow.created_at"
     )
+    runs: Mapped[list[Run]] = relationship(
+        back_populates="version", cascade="all, delete-orphan", order_by="Run.created_at"
+    )
 
 
 class RawSheetBlob(Base):
@@ -95,3 +98,39 @@ class SheetRoleOverride(Base):
     role: Mapped[str] = mapped_column(String(32), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class Run(Base):
+    """One engine run: model version + overrides -> computed values (per-sheet blobs)."""
+
+    __tablename__ = "runs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    version_id: Mapped[str] = mapped_column(
+        ForeignKey("workbook_versions.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # full | incremental
+    parent_run_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    overrides_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="ok")
+    summary_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    version: Mapped[WorkbookVersion] = relationship(back_populates="runs")
+    sheets: Mapped[list[RunSheetValues]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+
+
+class RunSheetValues(Base):
+    """Gzipped columnar JSON of a run's formula-cell values for one sheet."""
+
+    __tablename__ = "run_values"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
+    sheet_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    cell_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+    run: Mapped[Run] = relationship(back_populates="sheets")

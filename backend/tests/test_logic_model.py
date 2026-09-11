@@ -122,14 +122,17 @@ def test_sheet_roles_and_graph(model: WorkbookLogicModel) -> None:
         "Calc": "output",
         "Series": "calculation",
         "Outputs": "output",
+        "Semantics": "output",
     }
     assert all(s.role_source == "heuristic" for s in model.sheets)
     edges = {(e.source, e.target) for e in model.sheet_edges}
     assert edges == {
         ("Inputs", "Calc"),
         ("Inputs", "Series"),
+        ("Inputs", "Semantics"),
         ("Lookup", "Calc"),
         ("Lookup", "Series"),
+        ("Lookup", "Semantics"),
         ("Series", "Outputs"),
     }
     assert model.sheet("Series").feeds == ["Outputs"]
