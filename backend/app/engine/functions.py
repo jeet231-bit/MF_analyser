@@ -401,7 +401,8 @@ def fn_sumif(ctx: BlockContext, args: list[Node]) -> Values:
     tv = target.values
     numeric = tv.kind == NUMBER
     shape = np.broadcast_shapes(mask.shape, tv.kind.shape)
-    m = np.broadcast_to(mask, shape) & np.broadcast_to(numeric, shape)
+    matched = np.broadcast_to(mask, shape)
+    m = matched & np.broadcast_to(numeric, shape)
     nums = np.where(m, np.broadcast_to(tv.num, shape), 0.0)
     total = window_sum(nums)
     out = Values.number(0.0, total.shape)
@@ -413,6 +414,17 @@ def fn_sumif(ctx: BlockContext, args: list[Node]) -> Values:
         out.err[n == 0] = int(XlError.DIV0)
     else:
         out.num = total
+    # Excel: an error in a *matched* cell of the sum/average range is the result (unmatched
+    # errors are ignored). A single #N/A lookup inside a category turns its average into #N/A.
+    matched_err = matched & np.broadcast_to(tv.kind == ERROR, shape)
+    if matched_err.any():
+        errs = np.broadcast_to(tv.err, shape)
+        flat_err = matched_err.reshape(*shape[:-2], -1)
+        first = np.argmax(flat_err, axis=-1)
+        code = np.take_along_axis(errs.reshape(*shape[:-2], -1), first[..., None], axis=-1)[..., 0]
+        has = flat_err.any(axis=-1)
+        out.kind[has] = ERROR
+        out.err[has] = code[has]
     return out
 
 

@@ -138,6 +138,10 @@ SEMANTICS_FORMULAS: dict[str, str] = {
     "C31": "=SUMIF(I1:I10,1,H1:H10)",
     "C32": "=AVERAGEIF(I1:I10,1,H1:H10)",
     "C33": "=SUMPRODUCT(H1:H10,I1:I10)",
+    # An error in a matched cell of the sum/average range is the result; unmatched errors are ignored.
+    "C34": '=IFERROR(SUMIF(A1:A4,"e",B1:B4),"err")',
+    "C35": '=SUMIF(A1:A4,"y",B1:B4)',
+    "C36": '=IFERROR(AVERAGEIF(A1:A4,"e",B1:B4),"err")',
 }
 
 # 1e16 swallows every +1 that follows it (ulp is 2), then -1e16 cancels it: Excel returns 0.
@@ -148,6 +152,9 @@ SEMANTICS_CACHED: dict[str, object] = {
     "C31": 0,
     "C32": 0,
     "C33": 0,
+    "C34": "err",
+    "C35": 7,
+    "C36": "err",
     "B4": "#DIV/0!",
     "C1": 1,
     "C2": "x",
