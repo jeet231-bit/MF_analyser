@@ -1,0 +1,964 @@
+<title>Fund Research Console</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --rail:#101216; --rail-ink:#E7E8EA; --rail-muted:#8A8F97; --rail-line:#22262C; --rail-active:#1B1F26;
+  --ground:#F5F5F3; --card:#FFFFFF; --card-2:#FAFAF8;
+  --ink:#17191D; --ink-2:#41454C; --muted:#6B7078; --line:#E5E5E1;
+  --accent:#2F55D4; --accent-soft:#EAEEFB;
+  --hero:#17191D; --hero-a:#242A36; --hero-ink:#F3F3F1; --hero-muted:#9A9FA7; --hero-line:#2A2E35;
+  --q1:#184F95; --q2:#2A78D6; --q3:#5598E7; --q4:#86B6EF;
+  --q1-ink:#FFFFFF; --q2-ink:#FFFFFF; --q3-ink:#0B2545; --q4-ink:#0B2545;
+  --up:#006300; --down:#D03B3B; --warn:#A16207;
+  --shadow:0 1px 2px rgba(16,18,22,.04);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0C0E11; --card:#16181D; --card-2:#1B1E24;
+  --ink:#E9EAEC; --ink-2:#C0C4CA; --muted:#8E949C; --line:#24272C;
+  --accent:#8CA2EE; --accent-soft:#1C2333;
+  --hero:#1E222A; --hero-a:#2A3240; --hero-ink:#F3F3F1; --hero-muted:#9A9FA7; --hero-line:#2E333B;
+  --q1:#86B6EF; --q2:#5598E7; --q3:#2A78D6; --q4:#184F95;
+  --q1-ink:#0B2545; --q2-ink:#0B2545; --q3-ink:#FFFFFF; --q4-ink:#FFFFFF;
+  --up:#0CA30C; --down:#E06A6A; --warn:#D9A94A;
+  --shadow:none;
+}}
+:root[data-theme="dark"]{
+  --ground:#0C0E11; --card:#16181D; --card-2:#1B1E24;
+  --ink:#E9EAEC; --ink-2:#C0C4CA; --muted:#8E949C; --line:#24272C;
+  --accent:#8CA2EE; --accent-soft:#1C2333;
+  --hero:#1E222A; --hero-a:#2A3240; --hero-ink:#F3F3F1; --hero-muted:#9A9FA7; --hero-line:#2E333B;
+  --q1:#86B6EF; --q2:#5598E7; --q3:#2A78D6; --q4:#184F95;
+  --q1-ink:#0B2545; --q2-ink:#0B2545; --q3-ink:#FFFFFF; --q4-ink:#FFFFFF;
+  --up:#0CA30C; --down:#E06A6A; --warn:#D9A94A;
+  --shadow:none;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:"Instrument Sans",system-ui,sans-serif;font-size:14px;line-height:1.5;padding:0}
+h1,h2,h3,h4,.disp{font-family:"Schibsted Grotesk",system-ui,sans-serif;text-wrap:balance}
+button{font:inherit;cursor:pointer}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* ---------- shell ---------- */
+.app{display:grid;grid-template-columns:238px 1fr;min-height:100vh}
+@media(max-width:900px){.app{grid-template-columns:1fr}}
+
+.rail{background:var(--rail);color:var(--rail-ink);padding:22px 16px 20px;display:flex;flex-direction:column;gap:18px;position:sticky;top:0;height:100vh;overflow-y:auto}
+@media(max-width:900px){.rail{position:static;height:auto}}
+.brand{display:flex;align-items:center;gap:10px}
+.brand .mk{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#3E6BFF,#1B3AA8);display:grid;place-items:center;font-family:"Schibsted Grotesk";font-weight:700;font-size:13px;color:#fff}
+.brand .nm{font-family:"Schibsted Grotesk";font-weight:600;font-size:14px;letter-spacing:-.01em}
+.brand .sb{font-size:11px;color:var(--rail-muted);margin-top:-2px}
+
+.vchip{background:var(--rail-active);border:1px solid var(--rail-line);border-radius:10px;padding:9px 11px;font-size:11.5px;color:var(--rail-muted);display:flex;flex-direction:column;gap:3px}
+.vchip b{color:var(--rail-ink);font-weight:600;font-size:12.5px}
+.vchip .dot{width:6px;height:6px;border-radius:50%;background:#3DBE7A;display:inline-block;margin-right:5px;vertical-align:1px}
+
+.seg{display:flex;background:var(--rail-active);border:1px solid var(--rail-line);border-radius:10px;padding:3px;gap:3px}
+.seg button{flex:1;background:none;border:0;color:var(--rail-muted);font-size:12px;font-weight:600;padding:6px 4px;border-radius:7px;font-family:"Schibsted Grotesk"}
+.seg button[aria-pressed="true"]{background:#F3F3F1;color:#101216}
+
+.navgrp{display:flex;flex-direction:column;gap:2px}
+.navlbl{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#5E636B;font-weight:600;padding:0 8px;margin:10px 0 4px}
+.nav{display:flex;align-items:center;gap:9px;background:none;border:0;color:var(--rail-muted);padding:7px 9px;border-radius:8px;width:100%;text-align:left;font-size:13px}
+.nav:hover{color:var(--rail-ink);background:#191D23}
+.nav[aria-current="page"]{background:var(--rail-active);color:#fff;font-weight:600}
+.nav .ic{width:15px;height:15px;flex:none;opacity:.85}
+.nav .ct{margin-left:auto;font-size:11px;color:#5E636B;font-variant-numeric:tabular-nums}
+.nav .pipd{margin-left:auto;width:6px;height:6px;border-radius:50%;background:var(--warn)}
+.rail .foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--rail-line);display:flex;flex-direction:column;gap:2px}
+
+/* ---------- main ---------- */
+main{padding:26px 30px 60px;min-width:0}
+@media(max-width:640px){main{padding:20px 16px 48px}}
+.mockbar{display:flex;align-items:center;gap:8px;background:var(--accent-soft);color:var(--accent);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:600;margin-bottom:20px}
+.phead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.phead h1{font-size:25px;font-weight:600;letter-spacing:-.02em;margin:0 0 4px}
+.phead .sub{color:var(--muted);font-size:13px}
+.acts{display:flex;gap:8px}
+.btn{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--ink);font-family:"Schibsted Grotesk"}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.pri{background:var(--ink);border-color:var(--ink);color:var(--ground)}
+.btn.pri:hover{opacity:.88;color:var(--ground)}
+
+.grid{display:grid;gap:18px}
+.c12{grid-template-columns:repeat(12,1fr)}
+@media(max-width:900px){.c12{grid-template-columns:1fr}.c12>*{grid-column:auto!important}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:19px 20px;box-shadow:var(--shadow);min-width:0}
+.card h3{font-size:14.5px;font-weight:600;margin:0 0 2px}
+.card .cs{font-size:12px;color:var(--muted);margin:0 0 14px}
+.chead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px}
+.chead h3{margin:0}
+.chead .cs{margin:2px 0 0}
+.lnk{background:none;border:0;color:var(--accent);font-size:12.5px;font-weight:600;padding:0}
+
+/* hero */
+.hero{background:linear-gradient(152deg,var(--hero-a) 0%,var(--hero) 58%);color:var(--hero-ink);border:1px solid var(--hero-line);border-radius:20px;padding:22px;display:flex;flex-direction:column;gap:16px}
+.hero .hl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--hero-muted);font-weight:600}
+.hero .big{font-family:"Schibsted Grotesk";font-size:42px;font-weight:600;line-height:1;letter-spacing:-.03em}
+.hero .bsub{color:var(--hero-muted);font-size:12.5px}
+.htiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ht{background:#21252C;border-radius:11px;padding:11px 12px}
+:root[data-theme="dark"] .ht{background:#272C34}
+.ht .v{font-family:"Schibsted Grotesk";font-size:19px;font-weight:600;line-height:1.1}
+.ht .l{font-size:10.5px;color:var(--hero-muted);margin-top:2px}
+
+/* stat tile */
+.st .l{font-size:11.5px;color:var(--muted);font-weight:500}
+.st .v{font-family:"Schibsted Grotesk";font-size:27px;font-weight:600;letter-spacing:-.02em;line-height:1.15;margin-top:3px}
+.st .d{font-size:12px;margin-top:3px;font-weight:600}
+.up{color:var(--up)}.down{color:var(--down)}
+
+/* quartile */
+.qbar{display:flex;gap:2px;height:34px;border-radius:8px;overflow:hidden;margin:4px 0 12px}
+.qbar span{display:grid;place-items:center;font-size:11.5px;font-weight:700;font-family:"Schibsted Grotesk"}
+.qlgd{display:flex;flex-wrap:wrap;gap:12px}
+.qlgd .i{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
+.qlgd .sw{width:10px;height:10px;border-radius:3px;flex:none}
+.qp{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:6px;color:#fff;font-family:"Schibsted Grotesk"}
+.qp.n{background:var(--line);color:var(--muted)}
+.sq1{background:var(--q1);color:var(--q1-ink)}.sq2{background:var(--q2);color:var(--q2-ink)}
+.sq3{background:var(--q3);color:var(--q3-ink)}.sq4{background:var(--q4);color:var(--q4-ink)}
+
+/* bar list */
+.blist{display:flex;flex-direction:column;gap:11px}
+.brow{display:grid;grid-template-columns:1fr auto;gap:4px}
+.brow .bl{font-size:12.5px;color:var(--ink-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brow .bv{font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.btrack{grid-column:1/-1;display:flex;height:7px;background:var(--card-2);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.bfill{display:block;height:100%;background:var(--accent);border-radius:3px}
+
+/* movers */
+.mv{display:flex;flex-direction:column}
+.mvr{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--line)}
+.mvr:last-child{border-bottom:0}
+.mvr .nmw{min-width:0;flex:1}
+.mvr .nm{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mvr .ct{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mvr .rk{font-family:"Schibsted Grotesk";font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+.mvr .dl{font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums;min-width:44px;text-align:right}
+
+/* table */
+.twrap{overflow-x:auto;border:1px solid var(--line);border-radius:18px;background:var(--card)}
+
+/* section header, pivot row, narrative, insight cards */
+.seche{display:flex;align-items:center;gap:11px;margin:30px 0 15px}
+.seche .si{width:32px;height:32px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:15px;flex:none}
+.seche h2{font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;margin:0}
+.seche .ss{font-size:12px;color:var(--muted);margin:1px 0 0}
+.pivot{display:flex;flex-wrap:wrap;align-items:center;gap:7px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:16px}
+.pivot .pl{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--muted);margin-right:5px}
+.narr{font-size:13px;color:var(--ink-2);line-height:1.55;margin:0 0 13px}
+.narr b{color:var(--ink);font-weight:600}
+.narr .kw{color:var(--accent);font-weight:600}
+.icard{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:19px 20px;min-width:0;display:flex;flex-direction:column}
+.icard .ieyebrow{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--accent);margin-bottom:7px}
+.icard h3{font-size:15.5px;font-weight:600;margin:0 0 7px;letter-spacing:-.01em}
+.icard .ifoot{margin-top:auto;padding-top:13px}
+.ilist{display:flex;flex-direction:column;gap:1px}
+.ilrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.ilrow:last-child{border-bottom:0}
+.ilrow .rnk{width:19px;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+.ilrow .nm{flex:1;min-width:0;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ilrow .sub{font-size:11px;color:var(--muted);font-weight:400}
+.ilrow .val{font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mini{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted)}
+.mtrack{flex:1;height:6px;background:var(--card-2);border:1px solid var(--line);border-radius:4px;overflow:hidden;display:flex}
+.mfill{display:block;height:100%}
+.confoot{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);text-align:center;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:720px}
+th{text-align:left;font-family:"Schibsted Grotesk";font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--card-2);position:sticky;top:0}
+td{padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:var(--card-2)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.fname{font-weight:600}
+.fsub{font-size:11.5px;color:var(--muted);font-weight:400}
+
+/* filters */
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
+.fld{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:13px;color:var(--ink);font-family:inherit}
+.fld:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.search{flex:1;min-width:200px;display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:0 12px}
+.search input{border:0;background:none;padding:9px 0;font:inherit;color:var(--ink);width:100%}
+.search input:focus{outline:none}
+.chips{display:flex;gap:6px}
+.chip{background:var(--card);border:1px solid var(--line);border-radius:7px;padding:6px 11px;font-size:12px;font-weight:600;color:var(--ink-2)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+
+/* fund detail */
+.fhero{display:grid;grid-template-columns:1.4fr 1fr;gap:18px}
+@media(max-width:900px){.fhero{grid-template-columns:1fr}.fhero .hero{order:-1}}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tag{background:var(--card-2);border:1px solid var(--line);border-radius:6px;padding:3px 9px;font-size:11.5px;color:var(--ink-2)}
+.bbrow{display:grid;grid-template-columns:118px 1fr;gap:12px;align-items:center;padding:5px 0}
+.bbrow .pl{font-size:11.5px;color:var(--ink-2)}
+.bbrow .pl b{display:block;font-size:10.5px;color:var(--muted);font-weight:600;letter-spacing:.06em}
+.bbt{position:relative;height:22px;display:flex;align-items:center;gap:2px}
+.bbseg{height:9px;border-radius:3px}
+.bbv{font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums;margin-left:6px}
+.lgd{display:flex;gap:14px;margin:2px 0 10px}
+.lgd .i{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
+.lgd .sw{width:12px;height:8px;border-radius:2px}
+
+/* workbook view */
+.wbnote{display:flex;gap:10px;align-items:flex-start;background:var(--card-2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 11px 11px 0;padding:12px 15px;font-size:12.5px;color:var(--ink-2);margin-bottom:16px}
+.gridcell{font-variant-numeric:tabular-nums}
+.fcell{color:var(--accent);cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+.lin{background:var(--card-2);border:1px solid var(--line);border-radius:12px;padding:14px}
+.lin .fx{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;background:var(--card);border:1px solid var(--line);border-radius:7px;padding:9px 11px;overflow-x:auto;color:var(--ink-2)}
+.lstep{display:flex;gap:9px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.lstep:last-child{border-bottom:0}
+.lstep .ok{color:var(--up);font-weight:700}
+
+.tip{position:fixed;pointer-events:none;background:var(--hero);color:var(--hero-ink);border-radius:8px;padding:7px 10px;font-size:12px;line-height:1.4;z-index:50;box-shadow:0 4px 14px rgba(0,0,0,.22)}
+.tip b{font-family:"Schibsted Grotesk"}
+[hidden]{display:none!important}
+@media(prefers-reduced-motion:no-preference){.nav,.btn,.chip{transition:background .15s ease,color .15s ease,border-color .15s ease}}
+</style>
+
+<div class="app">
+<nav class="rail">
+  <div class="brand">
+    <div class="mk">M</div>
+    <div><div class="nm">Equity MF Analyser</div><div class="sb">Research console</div></div>
+  </div>
+
+  <div class="vchip">
+    <span><span class="dot"></span><b>master.xlsx</b></span>
+    <span>11 Sept 2026 · active · validated</span>
+  </div>
+
+  <div class="seg" role="group" aria-label="View">
+    <button type="button" id="vwResearch" aria-pressed="true">Research</button>
+    <button type="button" id="vwWorkbook" aria-pressed="false">Workbook</button>
+  </div>
+
+  <div id="navResearch">
+    <div class="navgrp">
+      <button class="nav" data-screen="dash" aria-current="page">Dashboard</button>
+      <button class="nav" data-screen="insights">Insights <span class="ct">9</span></button>
+      <button class="nav" data-screen="funds">Funds <span class="ct">3,249</span></button>
+      <button class="nav" data-screen="cats">Categories <span class="ct">42</span></button>
+      <button class="nav" data-screen="move">Movement <span class="ct">86</span></button>
+    </div>
+  </div>
+
+  <div id="navWorkbook" hidden>
+    <div class="navgrp">
+      <div class="navlbl">Outputs</div>
+      <button class="nav" data-screen="wb" aria-current="page">Report</button>
+      <button class="nav" data-screen="wb">Composite Ranks</button>
+      <button class="nav" data-screen="wb">Summary-Performance</button>
+      <div class="navlbl">Calculations</div>
+      <button class="nav" data-screen="wb">P2P Perf</button>
+      <button class="nav" data-screen="wb">Roll Perf</button>
+      <button class="nav" data-screen="wb">Bull-Bear Returns</button>
+      <button class="nav" data-screen="wb">Stat Comp</button>
+      <button class="nav" data-screen="wb">CY Returns</button>
+      <button class="nav" data-screen="wb">Averages</button>
+      <div class="navlbl">Reference</div>
+      <button class="nav" data-screen="wb">MF Master</button>
+      <button class="nav" data-screen="wb">Domain</button>
+      <button class="nav" data-screen="wb">First NAV</button>
+      <button class="nav" data-screen="wb">Nifty</button>
+      <div class="navlbl">Inputs</div>
+      <button class="nav" data-screen="wb">Weights &amp; dates</button>
+    </div>
+  </div>
+
+  <div class="foot">
+    <button class="nav" data-screen="upload">Upload version</button>
+    <button class="nav" data-screen="admin">Admin <span class="pipd" title="4 warnings"></span></button>
+    <button class="nav" id="themeBtn">Dark theme</button>
+  </div>
+</nav>
+
+<main>
+<div class="mockbar">Design mockup · structure and names from the live model · all figures illustrative</div>
+
+<!-- ================= DASHBOARD ================= -->
+<section id="s-dash">
+  <div class="phead">
+    <div>
+      <h1>Research overview</h1>
+      <div class="sub">Universe as of 31 Aug 2026 · recalculated 11 Sept, 3:42 pm</div>
+    </div>
+    <div class="acts"><button class="btn">Export</button><button class="btn pri">Run what-if</button></div>
+  </div>
+
+  <div class="grid c12" style="margin-bottom:18px">
+    <div class="hero" style="grid-column:span 4">
+      <div>
+        <div class="hl">Rated universe</div>
+        <div class="big tnum">3,249</div>
+        <div class="bsub">funds across 42 categories · 1,544 with a complete record</div>
+      </div>
+      <p class="narr" style="color:var(--hero-muted);margin:0;font-size:12.5px">
+        <b style="color:var(--hero-ink)">86 funds changed rank</b> since 31 Aug — 51 up, 35 down.
+        Two of those moves are data repairs, not market movement.
+        <b style="color:var(--hero-ink)">31 funds</b> have held Q1 across all three stored versions.
+      </p>
+      <div class="htiles">
+        <div class="ht"><div class="v tnum">812</div><div class="l">Top quartile</div></div>
+        <div class="ht"><div class="v tnum">86</div><div class="l">Rank changes</div></div>
+        <div class="ht"><div class="v tnum">14</div><div class="l">New funds</div></div>
+      </div>
+    </div>
+
+    <div class="card" style="grid-column:span 5">
+      <div class="chead">
+        <div><h3>Quartile distribution</h3><p class="cs">Composite quartile within category · 3,249 rated funds</p></div>
+        <button class="lnk" data-goto="cats">Break down</button>
+      </div>
+      <div class="qbar" role="img" aria-label="Quartile distribution: Q1 812 funds, Q2 814, Q3 811, Q4 812">
+        <span class="sq1" style="flex:812">812</span>
+        <span class="sq2" style="flex:814">814</span>
+        <span class="sq3" style="flex:811">811</span>
+        <span class="sq4" style="flex:812">812</span>
+      </div>
+      <div class="qlgd">
+        <div class="i"><span class="sw" style="background:var(--q1)"></span>Q1 · top</div>
+        <div class="i"><span class="sw" style="background:var(--q2)"></span>Q2</div>
+        <div class="i"><span class="sw" style="background:var(--q3)"></span>Q3</div>
+        <div class="i"><span class="sw" style="background:var(--q4)"></span>Q4 · bottom</div>
+      </div>
+      <p class="cs" style="margin:14px 0 0">Categories with fewer than 4 rated funds are left unranked and shown as “--”, per the workbook rule.</p>
+    </div>
+
+    <div class="card" style="grid-column:span 3">
+      <div class="st"><div class="l">Engine agreement with Excel</div><div class="v tnum">100.00%</div><div class="d up">789,828 of 789,828 cells</div></div>
+      <div style="height:1px;background:var(--line);margin:15px 0"></div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--muted)">Last upload</span><b>11 Sept, 3:31 pm</b></div>
+        <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--muted)">Validation</span><b style="color:var(--warn)">Passed · 5 warnings</b></div>
+        <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--muted)">Data findings</span><b>4 open</b></div>
+      </div>
+      <button class="lnk" style="margin-top:14px">Open admin →</button>
+    </div>
+  </div>
+
+  <div class="grid c12">
+    <div class="card" style="grid-column:span 5">
+      <div class="chead">
+        <div><h3>Biggest rank movers</h3><p class="cs">Composite rank vs version of 31 Aug</p></div>
+        <button class="lnk" data-goto="move">All 86 →</button>
+      </div>
+      <div class="mv">
+        <div class="mvr"><div class="nmw"><div class="nm">Kotak Nifty Bank Index Fund - Dir</div><div class="ct">Direct · Index Funds</div></div><div class="rk tnum">7</div><div class="dl up">▲ 23</div></div>
+        <div class="mvr"><div class="nmw"><div class="nm">WhiteOak Capital Balanced Advantage - Dir</div><div class="ct">Direct · Dynamic Asset Allocation</div></div><div class="rk tnum">12</div><div class="dl up">▲ 18</div></div>
+        <div class="mvr"><div class="nmw"><div class="nm">UTI Nifty 500 Index Fund - Reg</div><div class="ct">Regular · Index Funds</div></div><div class="rk tnum">31</div><div class="dl up">▲ 11</div></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Edelweiss Nifty REITs &amp; Realty - Dir</div><div class="ct">Direct · Thematic</div></div><div class="rk tnum">44</div><div class="dl down">▼ 16</div></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Axis Nifty Energy Index Fund - Reg</div><div class="ct">Regular · Sectoral - Energy</div></div><div class="rk tnum">58</div><div class="dl down">▼ 27</div></div>
+      </div>
+    </div>
+
+    <div class="card" style="grid-column:span 4">
+      <div class="chead">
+        <div><h3>Category averages</h3><p class="cs">3-year rolling return · top 6 of 42</p></div>
+        <button class="lnk" data-goto="cats">All →</button>
+      </div>
+      <div class="blist">
+        <div class="brow"><span class="bl">Direct-Thematic</span><span class="bv tnum">22.4%</span><span class="btrack"><span class="bfill" style="width:100%"></span></span></div>
+        <div class="brow"><span class="bl">Direct-Multi Asset Allocation</span><span class="bv tnum">18.9%</span><span class="btrack"><span class="bfill" style="width:84%"></span></span></div>
+        <div class="brow"><span class="bl">Regular-Multi Asset Allocation</span><span class="bv tnum">18.0%</span><span class="btrack"><span class="bfill" style="width:80%"></span></span></div>
+        <div class="brow"><span class="bl">Direct-Aggressive Hybrid Fund</span><span class="bv tnum">16.1%</span><span class="btrack"><span class="bfill" style="width:72%"></span></span></div>
+        <div class="brow"><span class="bl">Regular-Aggressive Hybrid Fund</span><span class="bv tnum">14.1%</span><span class="btrack"><span class="bfill" style="width:63%"></span></span></div>
+        <div class="brow"><span class="bl">Direct-Balanced Hybrid Fund</span><span class="bv tnum">11.6%</span><span class="btrack"><span class="bfill" style="width:52%"></span></span></div>
+      </div>
+    </div>
+
+    <div class="card" style="grid-column:span 3">
+      <div class="chead"><div><h3>Watchlist</h3><p class="cs">Pinned by you</p></div></div>
+      <div class="mv">
+        <div class="mvr"><div class="nmw"><div class="nm">WhiteOak Aggressive Hybrid</div><div class="ct">Reg · Growth</div></div><span class="qp sq1">Q1</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Navi Nifty REITs &amp; Realty</div><div class="ct">Dir · Index</div></div><span class="qp sq2">Q2</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">UTI BSE India Sector Leaders</div><div class="ct">Reg · Thematic</div></div><span class="qp sq3">Q3</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Alphagrep Multi Asset</div><div class="ct">Dir · Multi Asset</div></div><span class="qp n">--</span></div>
+      </div>
+      <p class="cs" style="margin:12px 0 0">“--” means the fund is missing from CY Returns — see data findings.</p>
+    </div>
+  </div>
+  <p class="confoot">Pantomath Group — Equity MF Research Engine · Private &amp; Confidential</p>
+</section>
+
+<!-- ================= INSIGHTS ================= -->
+<section id="s-insights" hidden>
+  <div class="phead">
+    <div><h1>Insights</h1><div class="sub">Questions this data answers · every line computed from the active version, nothing written by hand</div></div>
+    <div class="acts"><button class="btn">Export brief</button><button class="btn pri">Generate PDF</button></div>
+  </div>
+
+  <div class="seche">
+    <div class="si">◎</div>
+    <div><h2>Who is winning</h2><p class="ss">Leaders by the measures the workbook already ranks</p></div>
+  </div>
+  <div class="grid c12">
+    <div class="icard" style="grid-column:span 4">
+      <div class="ieyebrow">Long term</div>
+      <h3>Best over ten years</h3>
+      <p class="narr">Ranked on <span class="kw">Rank-LT</span>. <b>HDFC Flexi Cap</b> leads its category on long-term performance for the third version running.</p>
+      <div class="ilist">
+        <div class="ilrow"><span class="rnk">1</span><span class="nm">HDFC Flexi Cap Fund<span class="sub"> · Dir</span></span><span class="val">31.2%</span></div>
+        <div class="ilrow"><span class="rnk">2</span><span class="nm">Nippon India Growth<span class="sub"> · Dir</span></span><span class="val">28.7%</span></div>
+        <div class="ilrow"><span class="rnk">3</span><span class="nm">Quant Small Cap Fund<span class="sub"> · Dir</span></span><span class="val">27.9%</span></div>
+        <div class="ilrow"><span class="rnk">4</span><span class="nm">Mirae Asset Large Cap<span class="sub"> · Reg</span></span><span class="val">24.1%</span></div>
+      </div>
+      <div class="ifoot"><button class="lnk" data-goto="funds">Sort funds by Rank-LT →</button></div>
+    </div>
+
+    <div class="icard" style="grid-column:span 4">
+      <div class="ieyebrow">Consistency</div>
+      <h3>Held Q1 every version</h3>
+      <p class="narr"><b>31 of 812</b> current Q1 funds have been Q1 in all three stored versions. Consistency is the signal a single month cannot show.</p>
+      <div class="ilist">
+        <div class="ilrow"><span class="nm">HDFC Hybrid Equity<span class="sub"> · Reg</span></span><span class="val">3 / 3</span></div>
+        <div class="ilrow"><span class="nm">ICICI Pru Equity &amp; Debt<span class="sub"> · Reg</span></span><span class="val">3 / 3</span></div>
+        <div class="ilrow"><span class="nm">WhiteOak Aggressive Hybrid<span class="sub"> · Reg</span></span><span class="val">3 / 3</span></div>
+        <div class="ilrow"><span class="nm">Kotak Nifty Bank Index<span class="sub"> · Dir</span></span><span class="val">2 / 3</span></div>
+      </div>
+      <div class="ifoot"><button class="lnk">See all 31 →</button></div>
+    </div>
+
+    <div class="icard" style="grid-column:span 4">
+      <div class="ieyebrow">Risk adjusted</div>
+      <h3>Best return per unit of risk</h3>
+      <p class="narr">Top of <span class="kw">RANK-RAR</span> with a standard-deviation rank in the top half — return that did not come from volatility alone.</p>
+      <div class="ilist">
+        <div class="ilrow"><span class="rnk">1</span><span class="nm">SBI Equity Hybrid<span class="sub"> · Reg</span></span><span class="val">1.42</span></div>
+        <div class="ilrow"><span class="rnk">2</span><span class="nm">Canara Robeco Equity Hybrid<span class="sub"> · Dir</span></span><span class="val">1.36</span></div>
+        <div class="ilrow"><span class="rnk">3</span><span class="nm">Mirae Asset Hybrid Equity<span class="sub"> · Reg</span></span><span class="val">1.29</span></div>
+        <div class="ilrow"><span class="rnk">4</span><span class="nm">Kotak Equity Hybrid<span class="sub"> · Reg</span></span><span class="val">1.24</span></div>
+      </div>
+      <div class="ifoot"><button class="lnk" data-goto="funds">Open in Funds →</button></div>
+    </div>
+  </div>
+
+  <div class="seche">
+    <div class="si">◑</div>
+    <div><h2>How they behave</h2><p class="ss">Bull and bear scores split the universe into four different recommendations</p></div>
+  </div>
+  <div class="grid c12">
+    <div class="icard" style="grid-column:span 4">
+      <div class="ieyebrow">All weather</div>
+      <h3>Q1 in bull and bear</h3>
+      <p class="narr"><b>47 funds</b> sit in the top quartile on both phases — they captured the upside and held the downside.</p>
+      <div class="ilist">
+        <div class="ilrow"><span class="nm">ICICI Pru Equity &amp; Debt<span class="sub"> · Reg</span></span><span class="qp sq1">Q1 / Q1</span></div>
+        <div class="ilrow"><span class="nm">HDFC Hybrid Equity<span class="sub"> · Reg</span></span><span class="qp sq1">Q1 / Q1</span></div>
+        <div class="ilrow"><span class="nm">Kotak Equity Hybrid<span class="sub"> · Dir</span></span><span class="qp sq1">Q1 / Q1</span></div>
+      </div>
+      <div class="ifoot"><button class="lnk">See all 47 →</button></div>
+    </div>
+
+    <div class="icard" style="grid-column:span 4">
+      <div class="ieyebrow">Downside protection</div>
+      <h3>Held up best when markets fell</h3>
+      <p class="narr">Top <span class="kw">bear final score</span> across the five bear phases. <b>Useful for conservative allocations</b> even where the bull rank is mid-table.</p>
+      <div class="ilist">
+        <div class="ilrow"><span class="nm">SBI Equity Hybrid<span class="sub"> · Reg</span></span><span class="val">−9.1%</span></div>
+        <div class="ilrow"><span class="nm">Canara Robeco Equity Hybrid<span class="sub"> · Reg</span></span><span class="val">−10.4%</span></div>
+        <div class="ilrow"><span class="nm">WhiteOak Aggressive Hybrid<span class="sub"> · Reg</span></span><span class="val">−11.2%</span></div>
+      </div>
+      <div class="ifoot"><button class="lnk">Compare bull vs bear →</button></div>
+    </div>
+
+    <div class="icard" style="grid-column:span 4">
+      <div class="ieyebrow">Caution</div>
+      <h3>High return, high volatility</h3>
+      <p class="narr"><b>24 funds</b> rank top-quartile on return but bottom-quartile on standard deviation — the return came with the ride.</p>
+      <div class="ilist">
+        <div class="ilrow"><span class="nm">Quant Small Cap Fund<span class="sub"> · Dir</span></span><span class="val down">σ Q4</span></div>
+        <div class="ilrow"><span class="nm">Axis Nifty Energy Index<span class="sub"> · Reg</span></span><span class="val down">σ Q4</span></div>
+        <div class="ilrow"><span class="nm">Edelweiss Nifty REITs &amp; Realty<span class="sub"> · Dir</span></span><span class="val down">σ Q4</span></div>
+      </div>
+      <div class="ifoot"><button class="lnk">See all 24 →</button></div>
+    </div>
+  </div>
+
+  <div class="seche">
+    <div class="si">⌸</div>
+    <div><h2>Houses and managers</h2><p class="ss">Where the Q1 funds actually sit</p></div>
+  </div>
+  <div class="grid c12">
+    <div class="icard" style="grid-column:span 5">
+      <div class="ieyebrow">AMC league table</div>
+      <h3>Q1 funds by house</h3>
+      <p class="narr"><b>ICICI Prudential</b> has the most top-quartile funds; <b>Quant</b> has the highest hit rate, with 9 of its 14 rated funds in Q1.</p>
+      <div class="ilist">
+        <div class="ilrow"><span class="nm">ICICI Prudential</span><span class="mtrack" style="max-width:90px"><span class="mfill" style="width:100%;background:var(--q1)"></span></span><span class="val">38 / 104</span></div>
+        <div class="ilrow"><span class="nm">HDFC</span><span class="mtrack" style="max-width:90px"><span class="mfill" style="width:87%;background:var(--q1)"></span></span><span class="val">33 / 96</span></div>
+        <div class="ilrow"><span class="nm">Kotak Mahindra</span><span class="mtrack" style="max-width:90px"><span class="mfill" style="width:76%;background:var(--q1)"></span></span><span class="val">29 / 88</span></div>
+        <div class="ilrow"><span class="nm">Quant</span><span class="mtrack" style="max-width:90px"><span class="mfill" style="width:24%;background:var(--q2)"></span></span><span class="val">9 / 14</span></div>
+        <div class="ilrow"><span class="nm">WhiteOak Capital</span><span class="mtrack" style="max-width:90px"><span class="mfill" style="width:21%;background:var(--q2)"></span></span><span class="val">8 / 31</span></div>
+      </div>
+      <div class="ifoot"><button class="lnk">Switch to hit rate →</button></div>
+    </div>
+
+    <div class="icard" style="grid-column:span 4">
+      <div class="ieyebrow">Fund managers</div>
+      <h3>Most Q1 funds managed</h3>
+      <p class="narr">From the manager column on the master. <b>One manager</b> runs five top-quartile funds across three categories.</p>
+      <div class="ilist">
+        <div class="ilrow"><span class="rnk">1</span><span class="nm">Sankaran Naren<span class="sub"> · ICICI Pru</span></span><span class="val">5</span></div>
+        <div class="ilrow"><span class="rnk">2</span><span class="nm">Chirag Setalvad<span class="sub"> · HDFC</span></span><span class="val">4</span></div>
+        <div class="ilrow"><span class="rnk">3</span><span class="nm">Harsha Upadhyaya<span class="sub"> · Kotak</span></span><span class="val">4</span></div>
+        <div class="ilrow"><span class="rnk">4</span><span class="nm">Ramesh Mantri<span class="sub"> · WhiteOak</span></span><span class="val">3</span></div>
+      </div>
+      <div class="ifoot"><button class="lnk">Open manager view →</button></div>
+    </div>
+
+    <div class="icard" style="grid-column:span 3">
+      <div class="ieyebrow">Selection matters</div>
+      <h3>Widest dispersion</h3>
+      <p class="narr">Categories where the gap between the best and worst fund is largest — <b>where picking well pays most</b>.</p>
+      <div class="ilist">
+        <div class="ilrow"><span class="nm">Thematic</span><span class="val">28.4 pts</span></div>
+        <div class="ilrow"><span class="nm">Small Cap</span><span class="val">21.7 pts</span></div>
+        <div class="ilrow"><span class="nm">Sectoral - Energy</span><span class="val">19.2 pts</span></div>
+        <div class="ilrow"><span class="nm">Arbitrage</span><span class="val">2.1 pts</span></div>
+      </div>
+      <div class="ifoot"><button class="lnk" data-goto="cats">Categories →</button></div>
+    </div>
+  </div>
+
+  <div class="seche">
+    <div class="si">₹</div>
+    <div><h2>Cost and scale</h2><p class="ss">Whether the expense is buying performance, and where the money actually sits</p></div>
+  </div>
+  <div class="grid c12">
+    <div class="icard" style="grid-column:span 4">
+      <div class="ieyebrow">Best value</div>
+      <h3>Q1 performance at Q1 cost</h3>
+      <p class="narr"><b>63 funds</b> are top quartile on composite rank and top quartile on expense — performance that is not being paid for twice.</p>
+      <div class="ilist">
+        <div class="ilrow"><span class="nm">UTI Nifty 500 Index<span class="sub"> · Dir</span></span><span class="val">0.18%</span></div>
+        <div class="ilrow"><span class="nm">Kotak Nifty Bank Index<span class="sub"> · Dir</span></span><span class="val">0.21%</span></div>
+        <div class="ilrow"><span class="nm">Navi Nifty REITs &amp; Realty<span class="sub"> · Dir</span></span><span class="val">0.24%</span></div>
+      </div>
+      <div class="ifoot"><button class="lnk">See all 63 →</button></div>
+    </div>
+
+    <div class="icard" style="grid-column:span 4">
+      <div class="ieyebrow">Review</div>
+      <h3>Expensive and lagging</h3>
+      <p class="narr"><b>18 funds</b> sit in Q4 on both composite rank and expense. These are the exit conversations.</p>
+      <div class="ilist">
+        <div class="ilrow"><span class="nm">UTI BSE India Sector Leaders<span class="sub"> · Reg</span></span><span class="val down">2.24%</span></div>
+        <div class="ilrow"><span class="nm">Axis Nifty Energy Index<span class="sub"> · Reg</span></span><span class="val down">2.11%</span></div>
+        <div class="ilrow"><span class="nm">Edelweiss Nifty REITs<span class="sub"> · Reg</span></span><span class="val down">1.98%</span></div>
+      </div>
+      <div class="ifoot"><button class="lnk">See all 18 →</button></div>
+    </div>
+
+    <div class="icard" style="grid-column:span 4">
+      <div class="ieyebrow">Investor impact</div>
+      <h3>Large funds in the bottom half</h3>
+      <p class="narr">Weighted by corpus. <b>₹41,200 Cr</b> sits in funds ranked Q3 or Q4 — a small number of large funds carries most of that.</p>
+      <div class="ilist">
+        <div class="ilrow"><span class="nm">A large flexi-cap fund<span class="sub"> · Reg</span></span><span class="val">₹12,400 Cr</span></div>
+        <div class="ilrow"><span class="nm">A large hybrid fund<span class="sub"> · Reg</span></span><span class="val">₹9,100 Cr</span></div>
+        <div class="ilrow"><span class="nm">A large thematic fund<span class="sub"> · Reg</span></span><span class="val">₹6,800 Cr</span></div>
+      </div>
+      <div class="ifoot"><button class="lnk">Corpus view →</button></div>
+    </div>
+  </div>
+
+  <p class="confoot">Pantomath Group — Equity MF Research Engine · Private &amp; Confidential</p>
+</section>
+
+<!-- ================= FUNDS ================= -->
+<section id="s-funds" hidden>
+  <div class="phead">
+    <div><h1>Funds</h1><div class="sub">3,249 rated funds · click any row for the full record</div></div>
+    <div class="acts"><button class="btn">Export view</button></div>
+  </div>
+
+  <div class="pivot">
+    <span class="pl">Analyse funds by</span>
+    <button class="chip" aria-pressed="true">Category</button>
+    <button class="chip" aria-pressed="false">AMC</button>
+    <button class="chip" aria-pressed="false">Fund manager</button>
+    <button class="chip" aria-pressed="false">Plan</button>
+    <button class="chip" aria-pressed="false">Sub-nature</button>
+    <button class="chip" aria-pressed="false">Corpus band</button>
+    <button class="chip" aria-pressed="false">Expense band</button>
+  </div>
+
+  <div class="filters">
+    <div class="search"><span style="color:var(--muted)">⌕</span><input type="text" id="fundSearch" placeholder="Search fund or AMC…" value=""></div>
+    <select class="fld" id="fCat"><option>All categories</option><option>Aggressive Hybrid Fund</option><option>Index Funds</option><option>Thematic</option><option>Multi Asset Allocation</option></select>
+    <select class="fld" id="fAmc"><option>All AMCs</option><option>WhiteOak Capital</option><option>Kotak</option><option>UTI</option><option>Axis</option></select>
+    <div class="chips" role="group" aria-label="Plan">
+      <button class="chip" aria-pressed="true">All</button><button class="chip" aria-pressed="false">Direct</button><button class="chip" aria-pressed="false">Regular</button>
+    </div>
+    <div class="chips" role="group" aria-label="Quartile">
+      <button class="chip" aria-pressed="false">Q1</button><button class="chip" aria-pressed="false">Q2</button><button class="chip" aria-pressed="false">Q3</button><button class="chip" aria-pressed="false">Q4</button>
+    </div>
+  </div>
+
+  <div class="twrap">
+    <table>
+      <thead><tr>
+        <th>Fund</th><th>Category</th><th class="num">Composite</th><th class="num">Rank</th>
+        <th>Quartile</th><th class="num">1Y roll</th><th class="num">3Y roll</th><th class="num">Bull</th><th class="num">Bear</th><th class="num">Δ rank</th>
+      </tr></thead>
+      <tbody>
+        <tr><td><div class="fname">WhiteOak Capital Aggressive Hybrid Fund</div><div class="fsub">Reg · Growth · WhiteOak Capital</div></td><td>Aggressive Hybrid</td><td class="num">84.2</td><td class="num">3</td><td><span class="qp sq1">Q1</span></td><td class="num">18.4%</td><td class="num">16.1%</td><td class="num">22.8</td><td class="num">6.35</td><td class="num up">▲ 4</td></tr>
+        <tr><td><div class="fname">Kotak Nifty Bank Index Fund</div><div class="fsub">Dir · Growth · Kotak</div></td><td>Index Funds</td><td class="num">81.7</td><td class="num">7</td><td><span class="qp sq1">Q1</span></td><td class="num">21.0%</td><td class="num">17.3%</td><td class="num">24.1</td><td class="num">4.90</td><td class="num up">▲ 23</td></tr>
+        <tr><td><div class="fname">WhiteOak Capital Balanced Advantage Fund</div><div class="fsub">Dir · Growth · WhiteOak Capital</div></td><td>Dynamic Asset Alloc.</td><td class="num">78.9</td><td class="num">12</td><td><span class="qp sq1">Q1</span></td><td class="num">15.2%</td><td class="num">14.6%</td><td class="num">19.4</td><td class="num">7.80</td><td class="num up">▲ 18</td></tr>
+        <tr><td><div class="fname">UTI Nifty 500 Index Fund</div><div class="fsub">Reg · Growth · UTI</div></td><td>Index Funds</td><td class="num">71.4</td><td class="num">31</td><td><span class="qp sq2">Q2</span></td><td class="num">16.8%</td><td class="num">13.9%</td><td class="num">20.2</td><td class="num">5.11</td><td class="num up">▲ 11</td></tr>
+        <tr><td><div class="fname">Edelweiss Nifty REITs &amp; Realty Index Fund</div><div class="fsub">Dir · Growth · Edelweiss</div></td><td>Thematic</td><td class="num">66.0</td><td class="num">44</td><td><span class="qp sq2">Q2</span></td><td class="num">12.1%</td><td class="num">11.4%</td><td class="num">17.6</td><td class="num">3.02</td><td class="num down">▼ 16</td></tr>
+        <tr><td><div class="fname">Axis Nifty Energy Index Fund</div><div class="fsub">Reg · Growth · Axis</div></td><td>Sectoral - Energy</td><td class="num">58.3</td><td class="num">58</td><td><span class="qp sq3">Q3</span></td><td class="num">9.4%</td><td class="num">10.2%</td><td class="num">15.9</td><td class="num">2.44</td><td class="num down">▼ 27</td></tr>
+        <tr><td><div class="fname">Navi Nifty REITs &amp; Realty Index Fund</div><div class="fsub">Dir · Growth · Navi</div></td><td>Thematic</td><td class="num">54.7</td><td class="num">67</td><td><span class="qp sq3">Q3</span></td><td class="num">8.8%</td><td class="num">9.7%</td><td class="num">14.2</td><td class="num">2.90</td><td class="num">—</td></tr>
+        <tr><td><div class="fname">UTI BSE India Sector Leaders Index Fund</div><div class="fsub">Reg · Growth · UTI</div></td><td>Thematic</td><td class="num">47.1</td><td class="num">84</td><td><span class="qp sq4">Q4</span></td><td class="num">6.2%</td><td class="num">7.8%</td><td class="num">12.0</td><td class="num">1.85</td><td class="num down">▼ 6</td></tr>
+        <tr><td><div class="fname">Alphagrep Multi Asset Allocation Fund</div><div class="fsub">Dir · Growth · Alphagrep</div></td><td>Multi Asset Allocation</td><td class="num">—</td><td class="num">—</td><td><span class="qp n">--</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="cs" style="margin:12px 2px 0">Showing 1–9 of 3,249 · <button class="lnk">Next 100</button></p>
+</section>
+
+<!-- ================= FUND DETAIL ================= -->
+<section id="s-fund" hidden>
+  <div class="phead">
+    <div>
+      <button class="lnk" data-goto="funds" style="margin-bottom:6px">← All funds</button>
+      <h1>WhiteOak Capital Aggressive Hybrid Fund</h1>
+      <div class="sub">Regular · Growth · WhiteOak Capital Asset Management</div>
+      <div class="tags"><span class="tag">Aggressive Hybrid Fund</span><span class="tag">Regular plan</span><span class="tag">Rated since Feb 2016</span><span class="tag">Report row 412</span></div>
+    </div>
+    <div class="acts"><button class="btn">Compare</button><button class="btn">Export</button></div>
+  </div>
+
+  <div class="fhero" style="margin-bottom:18px">
+    <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:14px">
+      <div class="card st"><div class="l">Composite score</div><div class="v tnum">84.2</div><div class="d up">▲ 2.6 vs 31 Aug</div></div>
+      <div class="card st"><div class="l">Bull final score</div><div class="v tnum">22.8</div><div class="d" style="color:var(--muted)">rank 12 in category</div></div>
+      <div class="card st"><div class="l">Bear final score</div><div class="v tnum">6.35</div><div class="d" style="color:var(--muted)">rank 14 in category</div></div>
+      <div class="card st"><div class="l">1Y rolling</div><div class="v tnum">18.4%</div><div class="d up">▲ 1.2 pts</div></div>
+      <div class="card st"><div class="l">3Y rolling</div><div class="v tnum">16.1%</div><div class="d up">▲ 0.4 pts</div></div>
+      <div class="card st"><div class="l">Category average</div><div class="v tnum">14.1%</div><div class="d" style="color:var(--muted)">42 funds rated</div></div>
+    </div>
+    <div class="hero">
+      <div>
+        <div class="hl">Composite rank</div>
+        <div class="big tnum">3<span style="font-size:20px;color:var(--hero-muted);font-weight:500"> / 42</span></div>
+        <div class="bsub">within Regular-Aggressive Hybrid Fund</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="qp sq1" style="font-size:12.5px;padding:5px 12px">Q1 · top quartile</span>
+        <span style="font-size:12.5px;color:#7BE0A8;font-weight:600">▲ 4 places</span>
+      </div>
+      <div style="border-top:1px solid var(--hero-line);padding-top:13px">
+        <div style="font-size:11.5px;color:var(--hero-muted);line-height:1.6">
+          Rated <b style="color:var(--hero-ink)">Q1</b> because rank 3 is within the top 25% of the 42 rated funds in its category (threshold 10.5).
+        </div>
+        <button class="lnk" style="color:#93AEFF;margin-top:9px" data-goto="wb">Trace this number →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid c12">
+    <div class="card" style="grid-column:span 7">
+      <div class="chead">
+        <div><h3>Bull and bear phase returns</h3><p class="cs">Fund vs category average · ten phases defined in the workbook</p></div>
+      </div>
+      <div class="lgd">
+        <div class="i"><span class="sw" style="background:var(--q2)"></span>This fund</div>
+        <div class="i"><span class="sw" style="background:var(--muted);opacity:.55"></span>Category average</div>
+      </div>
+      <div id="bbChart"></div>
+    </div>
+
+    <div class="card" style="grid-column:span 5">
+      <div class="chead"><div><h3>Peers in category</h3><p class="cs">Regular-Aggressive Hybrid Fund · by composite rank</p></div></div>
+      <div class="mv">
+        <div class="mvr"><div class="rk tnum" style="min-width:22px;color:var(--muted)">1</div><div class="nmw"><div class="nm">HDFC Hybrid Equity Fund - Reg</div></div><span class="qp sq1">Q1</span><div class="dl tnum">88.1</div></div>
+        <div class="mvr"><div class="rk tnum" style="min-width:22px;color:var(--muted)">2</div><div class="nmw"><div class="nm">ICICI Pru Equity &amp; Debt Fund - Reg</div></div><span class="qp sq1">Q1</span><div class="dl tnum">85.9</div></div>
+        <div class="mvr" style="background:var(--accent-soft);border-radius:8px;padding-inline:8px"><div class="rk tnum" style="min-width:22px;color:var(--accent)">3</div><div class="nmw"><div class="nm" style="color:var(--accent)">WhiteOak Capital Aggressive Hybrid</div></div><span class="qp sq1">Q1</span><div class="dl tnum" style="color:var(--accent)">84.2</div></div>
+        <div class="mvr"><div class="rk tnum" style="min-width:22px;color:var(--muted)">4</div><div class="nmw"><div class="nm">SBI Equity Hybrid Fund - Reg</div></div><span class="qp sq1">Q1</span><div class="dl tnum">82.4</div></div>
+        <div class="mvr"><div class="rk tnum" style="min-width:22px;color:var(--muted)">5</div><div class="nmw"><div class="nm">Canara Robeco Equity Hybrid - Reg</div></div><span class="qp sq2">Q2</span><div class="dl tnum">79.8</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CATEGORIES ================= -->
+<section id="s-cats" hidden>
+  <div class="phead">
+    <div><h1>Categories</h1><div class="sub">42 categories · quartile spread and averages from the Averages sheet</div></div>
+    <div class="acts"><button class="btn">Export view</button></div>
+  </div>
+  <div class="grid c12" id="catGrid"></div>
+</section>
+
+<!-- ================= MOVEMENT ================= -->
+<section id="s-move" hidden>
+  <div class="phead">
+    <div><h1>Movement</h1><div class="sub">master.xlsx · 11 Sept 2026 compared with 31 Aug 2026</div></div>
+    <div class="acts"><button class="btn">Export view</button><button class="btn">Open version diff</button></div>
+  </div>
+
+  <div class="grid c12" style="margin-bottom:18px">
+    <div class="card st" style="grid-column:span 3"><div class="l">Funds that moved</div><div class="v tnum">86</div><div class="d" style="color:var(--muted)">of 3,249 rated</div></div>
+    <div class="card st" style="grid-column:span 3"><div class="l">Moved up</div><div class="v tnum up">51</div><div class="d" style="color:var(--muted)">avg ▲ 8 places</div></div>
+    <div class="card st" style="grid-column:span 3"><div class="l">Moved down</div><div class="v tnum down">35</div><div class="d" style="color:var(--muted)">avg ▼ 11 places</div></div>
+    <div class="card st" style="grid-column:span 3"><div class="l">Quartile changes</div><div class="v tnum">23</div><div class="d" style="color:var(--muted)">9 into Q1, 6 out of Q1</div></div>
+  </div>
+
+  <div class="wbnote" style="margin-bottom:18px">
+    <span>◆</span>
+    <div><b>Two of these moves are the data repairs, not market change.</b> WhiteOak Capital Aggressive Hybrid Fund and WhiteOak Capital Arbitrage Fund were carrying index rows until the 11 Sept master fixed them. Their movement is a correction.</div>
+  </div>
+
+  <div class="grid c12">
+    <div class="card" style="grid-column:span 6">
+      <div class="chead"><div><h3>Moved up</h3><p class="cs">Largest gains in composite rank</p></div></div>
+      <div class="mv">
+        <div class="mvr"><div class="nmw"><div class="nm">Kotak Nifty Bank Index Fund - Dir</div><div class="ct">Index Funds · 30 → 7</div></div><span class="qp sq1">Q1</span><div class="dl up">▲ 23</div></div>
+        <div class="mvr"><div class="nmw"><div class="nm">WhiteOak Capital Balanced Advantage - Dir</div><div class="ct">Dynamic Asset Alloc. · 30 → 12</div></div><span class="qp sq1">Q1</span><div class="dl up">▲ 18</div></div>
+        <div class="mvr"><div class="nmw"><div class="nm">WhiteOak Capital Aggressive Hybrid - Reg</div><div class="ct">Aggressive Hybrid · 7 → 3 · repaired row</div></div><span class="qp sq1">Q1</span><div class="dl up">▲ 4</div></div>
+        <div class="mvr"><div class="nmw"><div class="nm">UTI Nifty 500 Index Fund - Reg</div><div class="ct">Index Funds · 42 → 31</div></div><span class="qp sq2">Q2</span><div class="dl up">▲ 11</div></div>
+      </div>
+    </div>
+    <div class="card" style="grid-column:span 6">
+      <div class="chead"><div><h3>Moved down</h3><p class="cs">Largest falls in composite rank</p></div></div>
+      <div class="mv">
+        <div class="mvr"><div class="nmw"><div class="nm">Axis Nifty Energy Index Fund - Reg</div><div class="ct">Sectoral - Energy · 31 → 58</div></div><span class="qp sq3">Q3</span><div class="dl down">▼ 27</div></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Edelweiss Nifty REITs &amp; Realty - Dir</div><div class="ct">Thematic · 28 → 44</div></div><span class="qp sq2">Q2</span><div class="dl down">▼ 16</div></div>
+        <div class="mvr"><div class="nmw"><div class="nm">UTI BSE India Sector Leaders - Reg</div><div class="ct">Thematic · 78 → 84</div></div><span class="qp sq4">Q4</span><div class="dl down">▼ 6</div></div>
+        <div class="mvr"><div class="nmw"><div class="nm">WhiteOak Capital Arbitrage Fund - Reg</div><div class="ct">Arbitrage · 14 → 19 · repaired row</div></div><span class="qp sq2">Q2</span><div class="dl down">▼ 5</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= WORKBOOK ================= -->
+<section id="s-wb" hidden>
+  <div class="phead">
+    <div><h1>Report</h1><div class="sub">Output sheet · 1,500 fund rows + 40 category averages · computed from the active version</div></div>
+    <div class="acts"><button class="btn">Export sheet</button><button class="btn">Open in Outputs</button></div>
+  </div>
+
+  <div class="wbnote">
+    <span>◆</span>
+    <div><b>Workbook view.</b> This is the engine room — the sheets exactly as the master computes them, with every cell traceable to its formula. The research views are built on top of the same numbers.</div>
+  </div>
+
+  <div class="grid c12">
+    <div class="card" style="grid-column:span 8;padding:0;overflow:hidden">
+      <div class="twrap" style="border:0;border-radius:0">
+        <table style="min-width:560px">
+          <thead><tr><th style="width:44px">Row</th><th>Scheme name</th><th class="num">P2P 1Y</th><th class="num">P2P 3Y</th><th class="num">Rank</th><th>Qrtl</th></tr></thead>
+          <tbody>
+            <tr><td class="gridcell" style="color:var(--muted)">410</td><td>SBI Equity Hybrid Fund - Reg - Growth</td><td class="num">17.9</td><td class="num">15.4</td><td class="num">4</td><td><span class="fcell">1</span></td></tr>
+            <tr><td class="gridcell" style="color:var(--muted)">411</td><td>Canara Robeco Equity Hybrid - Reg</td><td class="num">16.2</td><td class="num">14.8</td><td class="num">5</td><td><span class="fcell">2</span></td></tr>
+            <tr style="background:var(--accent-soft)"><td class="gridcell" style="color:var(--accent)">412</td><td><b>WhiteOak Capital Aggressive Hybrid Fund - Reg</b></td><td class="num">18.4</td><td class="num">16.1</td><td class="num">3</td><td><span class="fcell" id="traceCell">1</span></td></tr>
+            <tr><td class="gridcell" style="color:var(--muted)">413</td><td>Kotak Equity Hybrid Fund - Reg - Growth</td><td class="num">15.1</td><td class="num">13.9</td><td class="num">8</td><td><span class="fcell">2</span></td></tr>
+            <tr><td class="gridcell" style="color:var(--muted)">414</td><td>Mirae Asset Hybrid Equity - Reg</td><td class="num">14.6</td><td class="num">13.2</td><td class="num">11</td><td><span class="fcell">2</span></td></tr>
+            <tr><td class="gridcell" style="color:var(--muted)">1510</td><td><i>Average-Direct-Aggressive Hybrid Fund</i></td><td class="num">17.1</td><td class="num">16.1</td><td class="num">—</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card lin" style="grid-column:span 4">
+      <div class="chead"><div><h3>Report!U412</h3><p class="cs">Quartile · value 1</p></div><button class="lnk">Close</button></div>
+      <div class="fx">=IF(OR(T412=0,T412="--"),"--",<br>&nbsp;&nbsp;IF(COUNTIFS($I:$I,$I412,$T:$T,"&gt;0")&lt;4,"--",<br>&nbsp;&nbsp;IF(T412&lt;=COUNTIFS(…)*0.25,1,…)))</div>
+      <div style="margin-top:13px">
+        <div class="lstep"><span class="ok">✓</span><div>T412 is 3, not 0 or “--” → continue</div></div>
+        <div class="lstep"><span class="ok">✓</span><div>42 rated funds in category, not fewer than 4 → continue</div></div>
+        <div class="lstep"><span class="ok">✓</span><div>3 ≤ 42 × 0.25 (10.5) → <b>quartile 1</b></div></div>
+      </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)">
+        Rule extracted from template 87 · used by 1,500 cells on this sheet
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= UPLOAD ================= -->
+<section id="s-upload" hidden>
+  <div class="phead"><div><h1>Upload version</h1><div class="sub">Drop a new master workbook — the system reads its logic, recalculates and shows you what changed</div></div></div>
+  <div class="grid c12">
+    <div class="card" style="grid-column:span 7;text-align:center;padding:40px 22px;border-style:dashed">
+      <div style="font-size:30px;margin-bottom:8px">⤒</div>
+      <h3 style="font-size:16px">Drop master.xlsx here</h3>
+      <p class="cs" style="margin-bottom:16px">or choose a file · up to 50 MB · .xlsx only</p>
+      <button class="btn pri">Choose file</button>
+      <p class="cs" style="margin-top:18px">Close the workbook in Excel first, and save a copy rather than uploading the live file.</p>
+    </div>
+    <div class="card" style="grid-column:span 5">
+      <div class="chead"><div><h3>What happens next</h3><p class="cs">Nothing goes live until you approve it</p></div></div>
+      <div class="mv">
+        <div class="mvr"><div class="rk" style="min-width:20px;color:var(--muted)">1</div><div class="nmw"><div class="nm">Read and interpret</div><div class="ct">Sheets, formulas, dependencies, rules</div></div></div>
+        <div class="mvr"><div class="rk" style="min-width:20px;color:var(--muted)">2</div><div class="nmw"><div class="nm">Recalculate and check against Excel</div><div class="ct">Every formula cell reconciled</div></div></div>
+        <div class="mvr"><div class="rk" style="min-width:20px;color:var(--muted)">3</div><div class="nmw"><div class="nm">Show what changed</div><div class="ct">Data rows, logic edits, structure</div></div></div>
+        <div class="mvr"><div class="rk" style="min-width:20px;color:var(--muted)">4</div><div class="nmw"><div class="nm">You activate it</div><div class="ct">Or roll back to any earlier version</div></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ADMIN ================= -->
+<section id="s-admin" hidden>
+  <div class="phead"><div><h1>Admin</h1><div class="sub">Versions, validation, data findings and the column map</div></div></div>
+  <div class="grid c12" style="margin-bottom:18px">
+    <div class="card st" style="grid-column:span 3"><div class="l">Active version</div><div class="v" style="font-size:18px">11 Sept 2026</div><div class="d" style="color:var(--muted)">3 versions stored</div></div>
+    <div class="card st" style="grid-column:span 3"><div class="l">Reconciliation</div><div class="v tnum">100.00%</div><div class="d up">no mismatches</div></div>
+    <div class="card st" style="grid-column:span 3"><div class="l">Structural warnings</div><div class="v tnum">5</div><div class="d" style="color:var(--warn)">duplicate lookup keys</div></div>
+    <div class="card st" style="grid-column:span 3"><div class="l">Data findings</div><div class="v tnum">4</div><div class="d" style="color:var(--muted)">3 fixed · 1 open</div></div>
+  </div>
+  <div class="grid c12">
+    <div class="card" style="grid-column:span 7">
+      <div class="chead"><div><h3>Data findings in the master</h3><p class="cs">Defects this platform found that Excel was not showing</p></div></div>
+      <div class="mv">
+        <div class="mvr"><div class="nmw"><div class="nm">Roll Perf row 3181 read another fund's row</div><div class="ct">WhiteOak Aggressive Hybrid showed a smallcap index</div></div><span class="chip" style="color:var(--up)">Fixed</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Bull-Bear row 3182 read another fund's row</div><div class="ct">37 cells · WhiteOak Arbitrage</div></div><span class="chip" style="color:var(--up)">Fixed</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Averages read Report's own average rows</div><div class="ct">Circular reference Excel was tolerating</div></div><span class="chip" style="color:var(--up)">Fixed</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Alphagrep Multi Asset absent from CY Returns</div><div class="ct">Two category averages read “--”</div></div><span class="chip" style="color:var(--warn)">Open</span></div>
+      </div>
+    </div>
+    <div class="card" style="grid-column:span 5">
+      <div class="chead"><div><h3>Column map</h3><p class="cs">What the research views read · edited in config, not code</p></div></div>
+      <div class="mv" style="font-size:12.5px">
+        <div class="mvr"><div class="nmw"><div class="nm">Fund name</div></div><span style="color:var(--muted)">Report!A</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Category</div></div><span style="color:var(--muted)">Report!AC</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Plan · Direct/Regular</div></div><span style="color:var(--muted)">Report!E</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Composite rank</div></div><span style="color:var(--muted)">Report!T</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Quartile</div></div><span style="color:var(--muted)">Report!U</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Bull / bear scores</div></div><span style="color:var(--muted)">Bull-Bear!AI, AX</span></div>
+      </div>
+      <button class="lnk" style="margin-top:12px">Edit column map →</button>
+    </div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  var PHASES=[
+    {k:'BULL',p:'11 Feb 16 – 28 Aug 18',f:22.8,c:19.1},
+    {k:'BEAR',p:'28 Aug 18 – 26 Oct 18',f:-6.4,c:-8.2},
+    {k:'BULL',p:'26 Oct 18 – 14 Jan 20',f:11.7,c:10.4},
+    {k:'BEAR',p:'14 Jan 20 – 23 Mar 20',f:-28.9,c:-31.5},
+    {k:'BULL',p:'23 Mar 20 – 18 Oct 21',f:117.1,c:104.3},
+    {k:'BEAR',p:'18 Oct 21 – 17 Jun 22',f:-14.2,c:-16.8},
+    {k:'BULL',p:'17 Jun 22 – 26 Sep 24',f:46.2,c:41.7},
+    {k:'BEAR',p:'26 Sep 24 – 04 Mar 25',f:-9.8,c:-11.4},
+    {k:'BULL',p:'04 Mar 25 – 02 Jan 26',f:21.3,c:18.9},
+    {k:'BEAR',p:'02 Jan 26 – 30 Mar 26',f:-5.1,c:-6.3}
+  ];
+  var max=0; PHASES.forEach(function(d){max=Math.max(max,Math.abs(d.f),Math.abs(d.c));});
+  var host=document.getElementById('bbChart'); var html='';
+  PHASES.forEach(function(d){
+    var wf=Math.abs(d.f)/max*100, wc=Math.abs(d.c)/max*100;
+    html+='<div class="bbrow" data-f="'+d.f+'" data-c="'+d.c+'" data-p="'+d.p+'" data-k="'+d.k+'">'
+      +'<div class="pl"><b>'+d.k+'</b>'+d.p+'</div>'
+      +'<div><div class="bbt"><span class="bbseg" style="width:'+wf+'%;background:var(--q2)"></span>'
+      +'<span class="bbv">'+(d.f>0?'+':'')+d.f.toFixed(1)+'%</span></div>'
+      +'<div class="bbt" style="height:14px"><span class="bbseg" style="width:'+wc+'%;background:var(--muted);opacity:.45;height:6px"></span>'
+      +'<span class="bbv" style="color:var(--muted);font-weight:500">'+(d.c>0?'+':'')+d.c.toFixed(1)+'%</span></div></div></div>';
+  });
+  host.innerHTML=html;
+
+  var tip=null;
+  host.addEventListener('mousemove',function(e){
+    var row=e.target.closest('.bbrow'); if(!row){hide();return;}
+    if(!tip){tip=document.createElement('div');tip.className='tip';document.body.appendChild(tip);}
+    tip.innerHTML='<b>'+row.dataset.k+'</b> '+row.dataset.p+'<br>Fund '+row.dataset.f+'% · category '+row.dataset.c+'%';
+    tip.style.left=Math.min(e.clientX+14,window.innerWidth-230)+'px';
+    tip.style.top=(e.clientY+16)+'px';
+  });
+  host.addEventListener('mouseleave',hide);
+  function hide(){if(tip){tip.remove();tip=null;}}
+
+  var CATS=[
+    {n:'Direct-Thematic',c:184,a:22.4,q:[46,46,46,46]},
+    {n:'Regular-Thematic',c:181,a:20.1,q:[45,45,45,46]},
+    {n:'Direct-Aggressive Hybrid Fund',c:42,a:16.1,q:[11,10,11,10]},
+    {n:'Regular-Aggressive Hybrid Fund',c:42,a:14.1,q:[11,10,11,10]},
+    {n:'Direct-Multi Asset Allocation',c:35,a:18.9,q:[9,9,9,8]},
+    {n:'Regular-Multi Asset Allocation',c:35,a:18.0,q:[9,9,9,8]},
+    {n:'Direct-Index Funds',c:128,a:15.7,q:[32,32,32,32]},
+    {n:'Direct-Arbitrage Fund',c:3,a:6.4,q:null}
+  ];
+  var g=document.getElementById('catGrid'); var ch='';
+  CATS.forEach(function(d){
+    ch+='<div class="card" style="grid-column:span 3"><div class="chead"><div><h3 style="font-size:13.5px">'+d.n+'</h3>'
+      +'<p class="cs" style="margin:2px 0 0">'+d.c+' funds rated</p></div></div>'
+      +'<div class="st" style="margin-bottom:12px"><div class="l">3Y rolling average</div><div class="v tnum" style="font-size:23px">'+d.a.toFixed(1)+'%</div></div>';
+    if(d.q){
+      ch+='<div class="qbar" style="height:22px">'
+        +'<span class="sq1" style="flex:'+d.q[0]+'">'+d.q[0]+'</span>'
+        +'<span class="sq2" style="flex:'+d.q[1]+'">'+d.q[1]+'</span>'
+        +'<span class="sq3" style="flex:'+d.q[2]+'">'+d.q[2]+'</span>'
+        +'<span class="sq4" style="flex:'+d.q[3]+'">'+d.q[3]+'</span></div>';
+    } else {
+      ch+='<div style="background:var(--card-2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:11.5px;color:var(--muted);margin:4px 0 12px">Fewer than 4 funds — left unranked by the workbook rule</div>';
+    }
+    ch+='<button class="lnk">Open category →</button></div>';
+  });
+  g.innerHTML=ch;
+
+  var SCREENS=['dash','insights','funds','fund','cats','move','wb','upload','admin'];
+  function show(id){
+    SCREENS.forEach(function(s){
+      var el=document.getElementById('s-'+s); if(el) el.hidden=(s!==id);
+    });
+    document.querySelectorAll('.nav').forEach(function(b){
+      if(b.dataset.screen===id) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+    });
+    window.scrollTo({top:0,behavior:'instant'});
+  }
+  document.querySelectorAll('.nav[data-screen]').forEach(function(b){
+    b.addEventListener('click',function(){show(b.dataset.screen);});
+  });
+  document.querySelectorAll('[data-goto]').forEach(function(b){
+    b.addEventListener('click',function(){show(b.dataset.goto);});
+  });
+  document.querySelectorAll('#s-funds tbody tr').forEach(function(tr){
+    tr.style.cursor='pointer';
+    tr.addEventListener('click',function(){show('fund');});
+  });
+  var tc=document.getElementById('traceCell');
+
+  var R=document.getElementById('vwResearch'), W=document.getElementById('vwWorkbook');
+  R.addEventListener('click',function(){
+    R.setAttribute('aria-pressed','true');W.setAttribute('aria-pressed','false');
+    document.getElementById('navResearch').hidden=false;document.getElementById('navWorkbook').hidden=true;show('dash');
+  });
+  W.addEventListener('click',function(){
+    W.setAttribute('aria-pressed','true');R.setAttribute('aria-pressed','false');
+    document.getElementById('navWorkbook').hidden=false;document.getElementById('navResearch').hidden=true;show('wb');
+  });
+
+  var tb=document.getElementById('themeBtn');
+  tb.addEventListener('click',function(){
+    var dark=document.documentElement.getAttribute('data-theme')==='dark';
+    document.documentElement.setAttribute('data-theme',dark?'light':'dark');
+    tb.textContent=dark?'Dark theme':'Light theme';
+  });
+
+  document.querySelectorAll('.pivot').forEach(function(grp){
+    grp.addEventListener('click',function(e){
+      var b=e.target.closest('.chip'); if(!b)return;
+      grp.querySelectorAll('.chip').forEach(function(x){x.setAttribute('aria-pressed','false');});
+      b.setAttribute('aria-pressed','true');
+    });
+  });
+  document.querySelectorAll('.chips').forEach(function(grp){
+    grp.addEventListener('click',function(e){
+      var b=e.target.closest('.chip'); if(!b)return;
+      if(grp.getAttribute('aria-label')==='Plan'){
+        grp.querySelectorAll('.chip').forEach(function(x){x.setAttribute('aria-pressed','false');});
+        b.setAttribute('aria-pressed','true');
+      } else {
+        b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true');
+      }
+    });
+  });
+})();
+</script>

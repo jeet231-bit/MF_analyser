@@ -136,6 +136,22 @@ The **Export** menu on Outputs, Calculations and Versions offers, per view: Exce
 
 PDF rendering needs WeasyPrint: `cd backend && uv sync --extra pdf`. On Windows WeasyPrint also needs the GTK3 runtime, see Prerequisites; without it the PDF export answers 501 and the same report is available as HTML at `/api/runs/{run_id}/report.html`.
 
+## Research views and the semantic map
+
+The research API (`/api/research/*`) presents the same numbers entity by entity: which funds are top quartile, who moved between versions, how a fund compares with its category peers, and a set of computed insights. What a row *means* is declared in the `research` section of `dashboard.config.json`, never in code:
+
+- `entity`: the sheet, row range, identity column and label column of the unit of analysis (a fund).
+- `dimensions`: category, AMC, plan, manager and any other grouping column.
+- `measures`: an ordered list of `{key, label, role, sheet, column, keyColumn, format, unit, higherIsBetter, primary}`; roles are `score`, `rank`, `quartile`, `return`, `factor`. Measures on other sheets join on `keyColumn`.
+- `phases` and `periods`: the bull/bear windows and the point-to-point periods, with labels read from a header row.
+- `categoryStats`: where category averages live and which column keys them.
+- `insights`: declarative questions with a computed sentence each (`where` predicates with `eq ne lt lte gt gte in top bottom notnull`, `sort`, `limit`, and modes `filter`, `groupBy`, `acrossVersions`, `aggregate`). Sentence placeholders are validated at load: `{count} {total} {pct} {sum} {versions} {top.label} {top.value} {group.label} {group.value} {group.count} {group.total} {hit.label} {hit.value} {hit.count} {hit.total} {measure.label}`.
+- `narratives`: the computed sentences on the dashboard, movement, categories and fund pages; `footer`; `findings` for the research team's data findings.
+
+`GET /api/research/config` shows how every reference resolved against the active version and lists problems in plain words ("measures[7] 'roll1y': sheet 'Summary-Perf' is not in scope; did you mean 'Summary-Performance'?"). An absent or broken section never breaks the app: every research endpoint answers `configured: false` with the problems. `MFA_DASHBOARD_CONFIG_PATH` points the backend at another config file (tests and deployments).
+
+Endpoints: `/research/summary`, `/research/entities` (search, category, AMC, plan, quartile filters; sort; paging; `groupBy=<dimension>` or `<measure>_band` for pivots), `/research/entities/{key}`, `/research/categories`, `/research/movement?from=&to=`, `/research/insights?section=`, and `/research/{entities|categories|movement|insights}/export?format=csv|xlsx` through the same export view descriptor as every other export. The PDF analysis report carries an "Insights brief" section.
+
 ## Deployment notes
 
 - **One backend process.** Run uvicorn with a single worker (the default; never `--workers 2+`). The engine state cache, the sheet cache, the run limiter and background jobs are all in-process; a second process would double memory and split the caches.

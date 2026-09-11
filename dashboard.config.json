@@ -63,5 +63,750 @@
   "numberFormat": {
     "grouping": "indian",
     "decimals": 2
+  },
+  "research": {
+    "entity": {
+      "sheet": "Composite Ranks",
+      "rows": [
+        10,
+        3241
+      ],
+      "keyColumn": "B",
+      "labelColumn": "F",
+      "asOf": "CY Returns!A4"
+    },
+    "dimensions": {
+      "category": {
+        "column": "L",
+        "label": "Category"
+      },
+      "subNature": {
+        "column": "K",
+        "label": "Scheme sub-nature"
+      },
+      "amc": {
+        "column": "C",
+        "label": "AMC"
+      },
+      "plan": {
+        "column": "E",
+        "label": "Plan"
+      },
+      "manager": {
+        "column": "AC",
+        "label": "Fund manager"
+      },
+      "universe": {
+        "column": "A",
+        "label": "In universe"
+      }
+    },
+    "measures": [
+      {
+        "key": "score",
+        "label": "Composite score",
+        "role": "score",
+        "column": "T",
+        "format": "number",
+        "higherIsBetter": true,
+        "primary": true
+      },
+      {
+        "key": "rank",
+        "label": "Composite rank",
+        "role": "rank",
+        "column": "U",
+        "format": "integer",
+        "higherIsBetter": false,
+        "primary": true
+      },
+      {
+        "key": "quartile",
+        "label": "Composite quartile",
+        "role": "quartile",
+        "column": "Z",
+        "format": "integer",
+        "higherIsBetter": false,
+        "primary": true
+      },
+      {
+        "key": "score_nobb",
+        "label": "Score without bull-bear",
+        "role": "score",
+        "column": "V",
+        "format": "number",
+        "higherIsBetter": true
+      },
+      {
+        "key": "rank_nobb",
+        "label": "Rank without bull-bear",
+        "role": "rank",
+        "column": "W",
+        "format": "integer",
+        "higherIsBetter": false
+      },
+      {
+        "key": "rank_bull",
+        "label": "Bull rank",
+        "role": "rank",
+        "column": "M",
+        "format": "integer",
+        "higherIsBetter": false
+      },
+      {
+        "key": "rank_bear",
+        "label": "Bear rank",
+        "role": "rank",
+        "column": "N",
+        "format": "integer",
+        "higherIsBetter": false
+      },
+      {
+        "key": "rank_lt",
+        "label": "Long-term rank",
+        "role": "rank",
+        "column": "O",
+        "format": "integer",
+        "higherIsBetter": false
+      },
+      {
+        "key": "rank_roll",
+        "label": "Rolling rank",
+        "role": "rank",
+        "column": "P",
+        "format": "integer",
+        "higherIsBetter": false
+      },
+      {
+        "key": "rank_st",
+        "label": "Short-term rank",
+        "role": "rank",
+        "column": "Q",
+        "format": "integer",
+        "higherIsBetter": false
+      },
+      {
+        "key": "rank_stddev",
+        "label": "Std-dev rank",
+        "role": "rank",
+        "column": "R",
+        "format": "integer",
+        "higherIsBetter": false
+      },
+      {
+        "key": "rank_rar",
+        "label": "Risk-adjusted rank",
+        "role": "rank",
+        "column": "S",
+        "format": "integer",
+        "higherIsBetter": false
+      },
+      {
+        "key": "qrtl_roll",
+        "label": "Rolling quartile",
+        "role": "quartile",
+        "column": "X",
+        "format": "integer",
+        "higherIsBetter": false
+      },
+      {
+        "key": "qrtl_st",
+        "label": "Short-term quartile",
+        "role": "quartile",
+        "column": "Y",
+        "format": "integer",
+        "higherIsBetter": false
+      },
+      {
+        "key": "rank_expense",
+        "label": "Expense rank",
+        "role": "rank",
+        "column": "AA",
+        "format": "integer",
+        "higherIsBetter": false
+      },
+      {
+        "key": "qrtl_expense",
+        "label": "Expense quartile",
+        "role": "quartile",
+        "column": "AB",
+        "format": "integer",
+        "higherIsBetter": false
+      },
+      {
+        "key": "corpus",
+        "label": "Corpus",
+        "role": "factor",
+        "column": "H",
+        "format": "number",
+        "higherIsBetter": true,
+        "unit": " Cr",
+        "decimals": 0
+      },
+      {
+        "key": "expense",
+        "label": "Expense ratio",
+        "role": "factor",
+        "column": "I",
+        "format": "number",
+        "higherIsBetter": false,
+        "unit": "%"
+      },
+      {
+        "key": "bull",
+        "label": "Bull final score",
+        "role": "score",
+        "column": "AI",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Bull-Bear Returns",
+        "keyColumn": "P"
+      },
+      {
+        "key": "bear",
+        "label": "Bear final score",
+        "role": "score",
+        "column": "AW",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Bull-Bear Returns",
+        "keyColumn": "P"
+      },
+      {
+        "key": "qrtl_bull",
+        "label": "Bull quartile",
+        "role": "quartile",
+        "column": "AZ",
+        "format": "integer",
+        "higherIsBetter": false,
+        "sheet": "Bull-Bear Returns",
+        "keyColumn": "P"
+      },
+      {
+        "key": "qrtl_bear",
+        "label": "Bear quartile",
+        "role": "quartile",
+        "column": "BA",
+        "format": "integer",
+        "higherIsBetter": false,
+        "sheet": "Bull-Bear Returns",
+        "keyColumn": "P"
+      },
+      {
+        "key": "roll1y",
+        "label": "1Y rolling",
+        "role": "return",
+        "column": "X",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Summary-Performance",
+        "keyColumn": "C",
+        "unit": "%"
+      },
+      {
+        "key": "roll3y",
+        "label": "3Y rolling",
+        "role": "return",
+        "column": "Y",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Summary-Performance",
+        "keyColumn": "C",
+        "unit": "%"
+      },
+      {
+        "key": "ret_3m",
+        "label": "3 months",
+        "role": "return",
+        "column": "N",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Summary-Performance",
+        "keyColumn": "C",
+        "unit": "%"
+      },
+      {
+        "key": "ret_6m",
+        "label": "6 months",
+        "role": "return",
+        "column": "O",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Summary-Performance",
+        "keyColumn": "C",
+        "unit": "%"
+      },
+      {
+        "key": "ret_1y",
+        "label": "1 year",
+        "role": "return",
+        "column": "P",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Summary-Performance",
+        "keyColumn": "C",
+        "unit": "%"
+      },
+      {
+        "key": "ret_2y",
+        "label": "2 years",
+        "role": "return",
+        "column": "Q",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Summary-Performance",
+        "keyColumn": "C",
+        "unit": "%"
+      },
+      {
+        "key": "ret_3y",
+        "label": "3 years",
+        "role": "return",
+        "column": "R",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Summary-Performance",
+        "keyColumn": "C",
+        "unit": "%"
+      },
+      {
+        "key": "ret_5y",
+        "label": "5 years",
+        "role": "return",
+        "column": "S",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Summary-Performance",
+        "keyColumn": "C",
+        "unit": "%"
+      },
+      {
+        "key": "cy23",
+        "label": "CY23",
+        "role": "return",
+        "column": "T",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Summary-Performance",
+        "keyColumn": "C",
+        "unit": "%"
+      },
+      {
+        "key": "cy24",
+        "label": "CY24",
+        "role": "return",
+        "column": "U",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Summary-Performance",
+        "keyColumn": "C",
+        "unit": "%"
+      },
+      {
+        "key": "cy25",
+        "label": "CY25",
+        "role": "return",
+        "column": "V",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Summary-Performance",
+        "keyColumn": "C",
+        "unit": "%"
+      },
+      {
+        "key": "cy26",
+        "label": "CY26",
+        "role": "return",
+        "column": "W",
+        "format": "number",
+        "higherIsBetter": true,
+        "sheet": "Summary-Performance",
+        "keyColumn": "C",
+        "unit": "%"
+      }
+    ],
+    "phases": {
+      "sheet": "Bull-Bear Returns",
+      "keyColumn": "P",
+      "headerRow": 9,
+      "unit": "%",
+      "groups": [
+        {
+          "key": "bull",
+          "label": "Bull",
+          "columns": [
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "AA"
+          ]
+        },
+        {
+          "key": "bear",
+          "label": "Bear",
+          "columns": [
+            "AK",
+            "AL",
+            "AM",
+            "AN",
+            "AO"
+          ]
+        }
+      ]
+    },
+    "periods": {
+      "sheet": "Summary-Performance",
+      "keyColumn": "C",
+      "headerRow": 9,
+      "columns": [
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+        "S"
+      ],
+      "unit": "%"
+    },
+    "categoryStats": {
+      "sheet": "Averages",
+      "keyColumn": "C",
+      "rows": [
+        8,
+        49
+      ],
+      "headerRow": 7,
+      "columns": [
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L"
+      ],
+      "unit": "%"
+    },
+    "quartileRule": {
+      "unrankedBelow": 4,
+      "unrankedValue": "--"
+    },
+    "insights": [
+      {
+        "key": "best_long_term",
+        "section": "winning",
+        "eyebrow": "Long term",
+        "title": "Best over the long term",
+        "where": [
+          {
+            "measure": "rank_lt",
+            "op": "eq",
+            "value": 1
+          }
+        ],
+        "sort": {
+          "measure": "ret_5y",
+          "dir": "desc"
+        },
+        "limit": 5,
+        "show": [
+          "measure:ret_5y"
+        ],
+        "sentence": "{count} funds lead their category on {measure.label}. {top.label} tops the list at {top.value} over five years.",
+        "drill": {
+          "sort": "rank_lt",
+          "dir": "asc"
+        }
+      },
+      {
+        "key": "held_q1",
+        "section": "winning",
+        "eyebrow": "Consistency",
+        "title": "Held Q1 every version",
+        "mode": "acrossVersions",
+        "across": {
+          "where": [
+            {
+              "measure": "quartile",
+              "op": "eq",
+              "value": 1
+            }
+          ]
+        },
+        "limit": 5,
+        "sentence": "{count} of {total} current Q1 funds have been Q1 in all {versions} stored versions. Consistency is the signal a single month cannot show."
+      },
+      {
+        "key": "risk_adjusted",
+        "section": "winning",
+        "eyebrow": "Risk adjusted",
+        "title": "Best return per unit of risk",
+        "where": [
+          {
+            "measure": "rank_rar",
+            "op": "top"
+          },
+          {
+            "measure": "rank_stddev",
+            "op": "top"
+          }
+        ],
+        "sort": {
+          "measure": "rank_rar",
+          "dir": "asc"
+        },
+        "limit": 5,
+        "show": [
+          "measure:rank_rar"
+        ],
+        "sentence": "{count} funds sit in the top quarter of {measure.label} with a standard-deviation rank in the top quarter too, so the return did not come from volatility alone.",
+        "drill": {
+          "sort": "rank_rar",
+          "dir": "asc"
+        }
+      },
+      {
+        "key": "all_weather",
+        "section": "behaviour",
+        "eyebrow": "All weather",
+        "title": "Q1 in bull and bear",
+        "where": [
+          {
+            "measure": "qrtl_bull",
+            "op": "eq",
+            "value": 1
+          },
+          {
+            "measure": "qrtl_bear",
+            "op": "eq",
+            "value": 1
+          }
+        ],
+        "sort": {
+          "measure": "rank",
+          "dir": "asc"
+        },
+        "limit": 5,
+        "show": [
+          "quartile_pair"
+        ],
+        "sentence": "{count} funds sit in the top quartile on both phases. They captured the upside and held the downside."
+      },
+      {
+        "key": "downside",
+        "section": "behaviour",
+        "eyebrow": "Downside protection",
+        "title": "Held up best when markets fell",
+        "where": [
+          {
+            "measure": "bear",
+            "op": "notnull"
+          }
+        ],
+        "sort": {
+          "measure": "bear",
+          "dir": "desc"
+        },
+        "limit": 5,
+        "show": [
+          "measure:bear"
+        ],
+        "sentence": "Top {measure.label} across the bear phases. {top.label} leads at {top.value}; useful for conservative allocations even where the bull rank is mid-table.",
+        "drill": {
+          "sort": "bear",
+          "dir": "desc"
+        }
+      },
+      {
+        "key": "high_vol",
+        "section": "behaviour",
+        "eyebrow": "Caution",
+        "title": "High return, high volatility",
+        "where": [
+          {
+            "measure": "roll3y",
+            "op": "top"
+          },
+          {
+            "measure": "rank_stddev",
+            "op": "bottom"
+          }
+        ],
+        "sort": {
+          "measure": "roll3y",
+          "dir": "desc"
+        },
+        "limit": 5,
+        "show": [
+          "measure:roll3y"
+        ],
+        "sentence": "{count} funds rank top-quartile on {measure.label} but bottom-quartile on standard deviation. The return came with the ride."
+      },
+      {
+        "key": "amc_league",
+        "section": "houses",
+        "eyebrow": "AMC league table",
+        "title": "Q1 funds by house",
+        "mode": "groupBy",
+        "groupBy": {
+          "dimension": "amc",
+          "aggregate": "count_where",
+          "where": [
+            {
+              "measure": "quartile",
+              "op": "eq",
+              "value": 1
+            }
+          ],
+          "minMembers": 2
+        },
+        "limit": 6,
+        "sentence": "{group.label} has the most top-quartile funds ({group.count} of {group.total} rated); {hit.label} has the highest hit rate, with {hit.count} of its {hit.total} rated funds in Q1."
+      },
+      {
+        "key": "manager_league",
+        "section": "houses",
+        "eyebrow": "Fund managers",
+        "title": "Most Q1 funds managed",
+        "mode": "groupBy",
+        "groupBy": {
+          "dimension": "manager",
+          "aggregate": "count_where",
+          "where": [
+            {
+              "measure": "quartile",
+              "op": "eq",
+              "value": 1
+            }
+          ],
+          "minMembers": 2
+        },
+        "limit": 6,
+        "sentence": "From the manager column on the master. {group.label} runs {group.count} top-quartile funds out of {group.total} rated."
+      },
+      {
+        "key": "dispersion",
+        "section": "houses",
+        "eyebrow": "Selection matters",
+        "title": "Widest dispersion",
+        "mode": "groupBy",
+        "groupBy": {
+          "dimension": "category",
+          "aggregate": "dispersion",
+          "measure": "roll3y",
+          "minMembers": 4
+        },
+        "limit": 6,
+        "sentence": "Categories where the gap between the best and worst fund on {measure.label} is largest are where picking well pays most; {group.label} spans {group.value}.",
+        "sort": {
+          "measure": "roll3y",
+          "dir": "desc"
+        }
+      },
+      {
+        "key": "best_value",
+        "section": "cost",
+        "eyebrow": "Best value",
+        "title": "Q1 performance at Q1 cost",
+        "where": [
+          {
+            "measure": "quartile",
+            "op": "eq",
+            "value": 1
+          },
+          {
+            "measure": "qrtl_expense",
+            "op": "eq",
+            "value": 1
+          }
+        ],
+        "sort": {
+          "measure": "expense",
+          "dir": "asc"
+        },
+        "limit": 5,
+        "show": [
+          "measure:expense"
+        ],
+        "sentence": "{count} funds are top quartile on composite rank and top quartile on expense: performance that is not being paid for twice."
+      },
+      {
+        "key": "expensive_laggards",
+        "section": "cost",
+        "eyebrow": "Review",
+        "title": "Expensive and lagging",
+        "where": [
+          {
+            "measure": "quartile",
+            "op": "eq",
+            "value": 4
+          },
+          {
+            "measure": "qrtl_expense",
+            "op": "eq",
+            "value": 4
+          }
+        ],
+        "sort": {
+          "measure": "expense",
+          "dir": "desc"
+        },
+        "limit": 5,
+        "show": [
+          "measure:expense"
+        ],
+        "sentence": "{count} funds sit in Q4 on both composite rank and expense. These are the exit conversations."
+      },
+      {
+        "key": "corpus_at_risk",
+        "section": "cost",
+        "eyebrow": "Investor impact",
+        "title": "Large funds in the bottom half",
+        "mode": "aggregate",
+        "aggregate": {
+          "measure": "corpus",
+          "fn": "sum"
+        },
+        "where": [
+          {
+            "measure": "quartile",
+            "op": "gte",
+            "value": 3
+          }
+        ],
+        "limit": 5,
+        "sentence": "Weighted by corpus: {sum} sits in {count} funds ranked Q3 or Q4, and a small number of large funds carries most of it."
+      }
+    ],
+    "narratives": {
+      "dashboard": "{moved} funds changed rank since {previous}: {up} up, {down} down. {repairs} of those moves are data repairs, not market movement. {held_q1} funds have held Q1 across all {versions} stored versions.",
+      "movement": "{moved} funds changed composite rank between {previous} and {current}: {up} up and {down} down; {into_q1} entered Q1 and {out_of_q1} left it. {repairs} of the moves are data repairs rather than market movement.",
+      "categories": "{categories} categories, {unranked} left unranked by the workbook rule. {widest.label} has the widest spread in {measure.label} ({widest.value}); {best.label} has the highest average at {best.value}.",
+      "fund": "{label} ranks {rank} of {category_count} rated funds in {category}, quartile {quartile}, {delta} since {previous}."
+    },
+    "footer": "Pantomath Group — Equity MF Research Engine · Private & Confidential",
+    "findings": [
+      {
+        "title": "Roll Perf row 3181 read another fund's row",
+        "detail": "9 cells pointed at row 3258; the fund showed a different scheme's rolling returns.",
+        "status": "fixed"
+      },
+      {
+        "title": "Bull-Bear row 3182 read another fund's row",
+        "detail": "37 cells pointed at row 3259; bull and bear scores belonged to another fund.",
+        "status": "fixed"
+      },
+      {
+        "title": "Averages read Report's own average rows",
+        "detail": "A circular reference Excel tolerated; AVERAGEIF ranges are now bounded to the fund rows.",
+        "status": "fixed"
+      },
+      {
+        "title": "Alphagrep Multi Asset Allocation absent from CY Returns",
+        "detail": "Both plans show #N/A on Report, so the two Multi Asset category averages read \"--\".",
+        "status": "open"
+      }
+    ]
   }
 }

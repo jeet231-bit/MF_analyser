@@ -1,0 +1,1251 @@
+"""Research endpoints: entity-shaped views over the active version's baseline run (or a what-if
+run), driven by the semantic map in dashboard.config.json. Every response says whether the map
+is configured; an incomplete map yields a 200 with problems, never a 500."""
+
+from __future__ import annotations
+
+import math
+import re
+import statistics
+from datetime import UTC, datetime
+from typing import Annotated, Any, Literal
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy.orm import Session
+
+from app.dashboard_config import load_dashboard_config
+from app.exports.csv_export import write_csv
+from app.exports.xlsx import write_workbook
+from app.research import export as rexport
+from app.research import insights as engine
+from app.research.insights import entity_sub, fmt_count, fmt_measure, render_sentence
+from app.research.semantic import Predicate, parse_map
+from app.research.table import (
+    Entity,
+    NotConfigured,
+    ResearchTable,
+    baseline_tables,
+    get_table,
+    resolve_for_version,
+)
+from app.storage import diffs, validation, workbooks
+from app.storage import runs as run_store
+from app.storage import views as view_store
+from app.storage.db import get_session
+from app.storage.models import Run, WorkbookVersion
+
+router = APIRouter(prefix="/research")
+SessionDep = Annotated[Session, Depends(get_session)]
+PAGE_SIZE = 100
+MAX_PAGE = 500
+
+
+# ---- context ----------------------------------------------------------------------------
+
+
+def _iso(d: datetime | None) -> str | None:
+    if d is None:
+        return None
+    return (d if d.tzinfo else d.replace(tzinfo=UTC)).isoformat()
+
+
+def _not_configured(problems: list[str], version: WorkbookVersion | None = None) -> dict[str, Any]:
+    return {
+        "configured": False,
+        "problems": problems,
+        "version_id": version.id if version else None,
+        "run_id": None,
+    }
+
+
+def _pick_version(session: Session, version_id: str | None) -> WorkbookVersion | None:
+    if version_id:
+        try:
+            return workbooks.get_version(session, version_id)
+        except workbooks.WorkbookNotFoundError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Workbook version not found.") from exc
+    versions = workbooks.list_versions(session)
+    active = next((v for v in versions if v.status == "active"), None)
+    if active is not None:
+        return active
+    for v in versions:  # newest first
+        if run_store.baseline_run(session, v.id) is not None:
+            return v
+    return None
+
+
+def _context(
+    session: Session, version_id: str | None, run_id: str | None
+) -> tuple[WorkbookVersion, Run, ResearchTable] | dict[str, Any]:
+    version = _pick_version(session, version_id)
+    if version is None:
+        return _not_configured(
+            ["no version with a baseline run yet; upload and validate a master first"]
+        )
+    if run_id:
+        try:
+            run = run_store.get_run(session, run_id)
+        except run_store.RunNotFoundError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Run not found.") from exc
+        if run.status != "ok":
+            return _not_configured([f"run {run_id[:8]} is {run.status}"], version)
+        version = workbooks.get_version(session, run.version_id)
+    else:
+        run = run_store.baseline_run(session, version.id)
+        if run is None:
+            return _not_configured(
+                [f"version {version.id[:8]} has no baseline run yet; validate it first"], version
+            )
+    try:
+        table = get_table(session, version, run)
+    except NotConfigured as exc:
+        return _not_configured(exc.problems, version)
+    return version, run, table
+
+
+def _status(version: WorkbookVersion, run: Run, table: ResearchTable) -> dict[str, Any]:
+    return {
+        "configured": True,
+        "problems": table.resolved.problems,
+        "version_id": version.id,
+        "run_id": run.id,
+        "version": {
+            "id": version.id,
+            "filename": version.filename,
+            "uploaded_at": _iso(version.uploaded_at),
+            "status": version.status,
+        },
+        "run": {"id": run.id, "kind": run.kind, "created_at": _iso(run.created_at)},
+    }
+
+
+def _previous_version(session: Session, current: WorkbookVersion) -> WorkbookVersion | None:
+    """The version activated before the current one (falls back to the previous baseline)."""
+    candidates = [
+        v
+        for v in workbooks.list_versions(session)
+        if v.id != current.id and run_store.baseline_run(session, v.id) is not None
+    ]
+    activated = [v for v in candidates if v.activated_at is not None]
+    pool = activated or candidates
+    pool = [v for v in pool if v.uploaded_at < current.uploaded_at] or pool
+    return max(pool, key=lambda v: v.activated_at or v.uploaded_at) if pool else None
+
+
+def _entity_dict(table: ResearchTable, e: Entity) -> dict[str, Any]:
+    return {
+        "key": e.key,
+        "label": e.label,
+        "sub": entity_sub(e),
+        "dims": e.dims,
+        "measures": e.measures,
+        "raw": {k: v for k, v in e.raw.items() if e.measures.get(k) is None and v is not None},
+        "rated": table.rated(e),
+    }
+
+
+def _measure_meta(table: ResearchTable) -> list[dict[str, Any]]:
+    out = []
+    for m in table.resolved.measure_specs():
+        out.append(
+            {
+                "key": m.key,
+                "label": m.label,
+                "role": m.role,
+                "format": m.format,
+                "unit": m.unit,
+                "higherIsBetter": m.higherIsBetter,
+                "primary": m.primary,
+                "decimals": m.decimals,
+            }
+        )
+    return out
+
+
+def _fmt_delta(delta: int | None) -> str | None:
+    if delta is None:
+        return None
+    if delta > 0:
+        return f"up {delta} place{'s' if delta != 1 else ''}"
+    if delta < 0:
+        return f"down {-delta} place{'s' if delta != -1 else ''}"
+    return "unchanged"
+
+
+# ---- movement ---------------------------------------------------------------------------
+
+
+def _repair_keys(
+    session: Session, base: WorkbookVersion, target: WorkbookVersion, table: ResearchTable
+) -> dict[str, str]:
+    """Entity keys whose rows were repaired between base and target, with the change title."""
+    try:
+        report = diffs.get_diff(session, base.id, target.id)
+    except Exception:  # noqa: BLE001 - a missing or failing diff must not break movement
+        return {}
+    rmap = table.map
+    key_cols: dict[str, str] = {rmap.entity.sheet: rmap.entity.keyColumn}
+    for m in rmap.measures:
+        if m.sheet and m.keyColumn:
+            key_cols.setdefault(m.sheet, m.keyColumn)
+    if rmap.phases:
+        key_cols.setdefault(rmap.phases.sheet, rmap.phases.keyColumn)
+    if rmap.periods:
+        key_cols.setdefault(rmap.periods.sheet, rmap.periods.keyColumn)
+    from openpyxl.utils import column_index_from_string as ci
+
+    out: dict[str, str] = {}
+    for change in report.logic:
+        if not change.detail.get("repair"):
+            continue
+        col_letter = key_cols.get(change.sheet)
+        if not col_letter:
+            continue
+        rows = {int(r) for r in re.findall(r"[A-Z]+(\d+)", change.location)}
+        idx = view_store.sheet_cache.get(session, target.id, change.sheet)
+        for row in rows:
+            key = idx.any_text(row, ci(col_letter))
+            if key and key in table.by_key:
+                out[key] = change.title
+    return out
+
+
+def compute_movement(
+    session: Session, base: WorkbookVersion, target: WorkbookVersion, table_to: ResearchTable
+) -> dict[str, Any]:
+    run_from = run_store.baseline_run(session, base.id)
+    if run_from is None:
+        return {"available": False, "reason": f"version {base.id[:8]} has no baseline run"}
+    try:
+        table_from = get_table(session, base, run_from)
+    except NotConfigured as exc:
+        return {"available": False, "reason": "; ".join(exc.problems)}
+    rank_key = table_to.primary_key("rank")
+    q_key = table_to.primary_key("quartile")
+    if rank_key is None or rank_key not in table_from.resolved.measures:
+        return {
+            "available": False,
+            "reason": "the primary rank measure does not resolve on both versions",
+        }
+    repairs = _repair_keys(session, base, target, table_to)
+    movers: list[dict[str, Any]] = []
+    entries: list[dict[str, Any]] = []
+    exits: list[dict[str, Any]] = []
+    into_q1 = out_q1 = q_changes = 0
+    for e in table_to.entities:
+        before = table_from.by_key.get(e.key)
+        if before is None:
+            entries.append({"key": e.key, "label": e.label, "category": e.category})
+            continue
+        r_from, r_to = before.measures.get(rank_key), e.measures.get(rank_key)
+        q_from = before.measures.get(q_key) if q_key else None
+        q_to = e.measures.get(q_key) if q_key else None
+        if q_from != q_to and (q_from is not None or q_to is not None):
+            q_changes += 1
+            if q_to == 1 and q_from != 1:
+                into_q1 += 1
+            if q_from == 1 and q_to != 1:
+                out_q1 += 1
+        if r_from is None or r_to is None or r_from == r_to:
+            continue
+        delta = int(r_from - r_to)  # positive = moved up (a smaller rank)
+        movers.append(
+            {
+                "key": e.key,
+                "label": e.label,
+                "sub": entity_sub(e),
+                "category": e.category,
+                "rankFrom": int(r_from),
+                "rankTo": int(r_to),
+                "delta": delta,
+                "quartileFrom": int(q_from) if q_from is not None else None,
+                "quartileTo": int(q_to) if q_to is not None else None,
+                "cause": "repair" if e.key in repairs else "market",
+                "note": repairs.get(e.key),
+            }
+        )
+    for k, before in table_from.by_key.items():
+        if k not in table_to.by_key:
+            exits.append({"key": k, "label": before.label, "category": before.category})
+    up = [m for m in movers if m["delta"] > 0]
+    down = [m for m in movers if m["delta"] < 0]
+    up.sort(key=lambda m: -m["delta"])
+    down.sort(key=lambda m: m["delta"])
+    return {
+        "available": True,
+        "from": {"id": base.id, "filename": base.filename, "uploaded_at": _iso(base.uploaded_at)},
+        "to": {
+            "id": target.id,
+            "filename": target.filename,
+            "uploaded_at": _iso(target.uploaded_at),
+        },
+        "rated": table_to.summary["rated"],
+        "moved": len(movers),
+        "up": len(up),
+        "down": len(down),
+        "avg_up": round(statistics.mean(m["delta"] for m in up), 1) if up else None,
+        "avg_down": round(statistics.mean(-m["delta"] for m in down), 1) if down else None,
+        "quartileChanges": {"total": q_changes, "into_q1": into_q1, "out_of_q1": out_q1},
+        "risers": up,
+        "fallers": down,
+        "entries": entries,
+        "exits": exits,
+        "repairs": [
+            {"key": k, "label": table_to.by_key[k].label, "note": note}
+            for k, note in repairs.items()
+        ],
+    }
+
+
+def _held_q1(session: Session, table: ResearchTable) -> dict[str, Any] | None:
+    q_key = table.primary_key("quartile")
+    if q_key is None:
+        return None
+    tables = baseline_tables(session)
+    if len(tables) < 2:
+        return None
+    pred = [Predicate(measure=q_key, op="eq", value=1)]
+    tallies: dict[str, int] = {}
+    for _v, _r, t in tables:
+        for e in t.entities:
+            if all(engine.matches(t, e, p) for p in pred):
+                tallies[e.key] = tallies.get(e.key, 0) + 1
+    held = [k for k, c in tallies.items() if c == len(tables) and k in table.by_key]
+    return {"count": len(held), "versions": len(tables)}
+
+
+# ---- endpoints --------------------------------------------------------------------------
+
+
+@router.get("/config")
+def research_config(
+    session: SessionDep,
+    version_id: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    cfg = load_dashboard_config()
+    rmap, problems = parse_map(cfg.research)
+    base: dict[str, Any] = {"configured": rmap is not None, "problems": problems}
+    if rmap is None:
+        return base
+    version = _pick_version(session, version_id)
+    resolved = None
+    if version is not None:
+        try:
+            resolved = resolve_for_version(session, version.id)
+            base["problems"] = resolved.problems
+            base["version_id"] = version.id
+        except NotConfigured as exc:
+            base["configured"] = False
+            base["problems"] = exc.problems
+            base["version_id"] = version.id
+    ent = rmap.entity
+    base.update(
+        {
+            "entity": {
+                "sheet": ent.sheet,
+                "rows": list(resolved.entity_rows)
+                if resolved
+                else (list(ent.rows) if ent.rows else None),
+                "key": f"{ent.sheet}!{ent.keyColumn}",
+                "label": f"{ent.sheet}!{ent.labelColumn}" if ent.labelColumn else None,
+            },
+            "dimensions": [
+                {
+                    "key": k,
+                    "label": d.label,
+                    "ref": f"{d.sheet or ent.sheet}!{d.column}",
+                    "resolved": bool(resolved and k in resolved.dimensions),
+                }
+                for k, d in rmap.dimensions.items()
+            ],
+            "measures": [
+                {
+                    "key": m.key,
+                    "label": m.label,
+                    "role": m.role,
+                    "ref": f"{m.sheet or ent.sheet}!{m.column}",
+                    "format": m.format,
+                    "unit": m.unit,
+                    "higherIsBetter": m.higherIsBetter,
+                    "primary": m.primary,
+                    "resolved": bool(resolved and m.key in resolved.measures),
+                }
+                for m in rmap.measures
+            ],
+            "phases": [
+                {
+                    "key": g.key,
+                    "label": g.label,
+                    "columns": [
+                        {
+                            "col": c.upper(),
+                            "label": (resolved.phase_labels.get(g.key, {}) if resolved else {}).get(
+                                c.upper()
+                            ),
+                        }
+                        for c in g.columns
+                    ],
+                }
+                for g in (rmap.phases.groups if rmap.phases else [])
+            ],
+            "periods": [
+                {
+                    "col": c.upper(),
+                    "label": (resolved.period_labels if resolved else {}).get(c.upper()),
+                }
+                for c in (rmap.periods.columns if rmap.periods else [])
+            ],
+            "categoryStats": [
+                {
+                    "col": c.upper(),
+                    "label": (resolved.category_stat_labels if resolved else {}).get(c.upper()),
+                }
+                for c in (rmap.categoryStats.columns if rmap.categoryStats else [])
+            ],
+            "insights": [
+                {
+                    "key": i.key,
+                    "section": i.section,
+                    "eyebrow": i.eyebrow,
+                    "title": i.title,
+                    "mode": i.mode,
+                }
+                for i in rmap.insights
+            ],
+            "narratives": rmap.narratives,
+            "footer": rmap.footer,
+            "findings": [f.model_dump() for f in rmap.findings],
+            "quartileRule": rmap.quartileRule.model_dump(),
+        }
+    )
+    return base
+
+
+@router.get("/summary")
+def research_summary(
+    session: SessionDep,
+    version_id: Annotated[str | None, Query()] = None,
+    run_id: Annotated[str | None, Query()] = None,
+    measure: Annotated[
+        str | None, Query(description="return measure for the category averages")
+    ] = None,
+) -> dict[str, Any]:
+    ctx = _context(session, version_id, run_id)
+    if isinstance(ctx, dict):
+        return ctx
+    version, run, table = ctx
+    out = _status(version, run, table)
+    out["as_of"] = table.as_of
+    out["universe"] = table.summary
+    out["quartiles"] = {str(k): v for k, v in table.summary["quartiles"].items()}
+    returns = [m for m in table.resolved.measure_specs() if m.role == "return"]
+    chosen = next((m for m in returns if m.key == measure), returns[0] if returns else None)
+    if chosen is not None:
+        rows = [
+            {
+                "key": c.key,
+                "value": c.means.get(chosen.key),
+                "label": fmt_measure(c.means.get(chosen.key), chosen),
+                "count": c.rated,
+            }
+            for c in table.categories.values()
+            if c.means.get(chosen.key) is not None and not c.unranked
+        ]
+        rows.sort(key=lambda r: -r["value"])
+        out["category_averages"] = {
+            "measure": chosen.key,
+            "label": chosen.label,
+            "rows": rows[:8],
+            "total": len(rows),
+        }
+    else:
+        out["category_averages"] = None
+    out["measures"] = _measure_meta(table)
+    # Validation and findings.
+    try:
+        report = validation.latest_validation(session, version.id)
+        out["validation"] = {
+            "status": report.status,
+            "checked": report.totals.checked,
+            "matched": report.totals.matched,
+            "anomalies": sum(report.anomaly_counts.values()),
+        }
+    except validation.ValidationNotFoundError:
+        out["validation"] = None
+    findings = table.map.findings
+    out["findings"] = {
+        "open": sum(1 for f in findings if f.status == "open"),
+        "fixed": sum(1 for f in findings if f.status == "fixed"),
+    }
+    # Movement headline vs the previous activated version.
+    previous = _previous_version(session, version)
+    movement = compute_movement(session, previous, version, table) if previous else None
+    out["movement"] = (
+        {
+            "previous": movement["from"],
+            "moved": movement["moved"],
+            "up": movement["up"],
+            "down": movement["down"],
+            "repairs": len(movement["repairs"]),
+            "entries": len(movement["entries"]),
+            "exits": len(movement["exits"]),
+            "top": (movement["risers"][:3] + movement["fallers"][:2]),
+        }
+        if movement and movement.get("available")
+        else None
+    )
+    held = _held_q1(session, table)
+    out["held_q1"] = held
+    template = table.map.narratives.get("dashboard")
+    narrative_ctx = {
+        "moved": fmt_count(movement["moved"]) if movement and movement.get("available") else None,
+        "up": fmt_count(movement["up"]) if movement and movement.get("available") else None,
+        "down": fmt_count(movement["down"]) if movement and movement.get("available") else None,
+        "repairs": fmt_count(len(movement["repairs"]))
+        if movement and movement.get("available")
+        else None,
+        "previous": previous.filename if previous else None,
+        "held_q1": fmt_count(held["count"]) if held else None,
+        "versions": held["versions"] if held else None,
+        "rated": fmt_count(table.summary["rated"]),
+        "categories": fmt_count(table.summary["categories"]),
+    }
+    out["narrative"] = render_sentence(template, narrative_ctx) if template else None
+    out["footer"] = table.map.footer
+    return out
+
+
+def _filter_entities(
+    table: ResearchTable,
+    q: str | None,
+    category: str | None,
+    amc: str | None,
+    plan: str | None,
+    quartile: list[int] | None,
+    keys: list[str] | None,
+) -> list[Entity]:
+    q_key = table.primary_key("quartile")
+    needle = q.casefold().strip() if q else None
+    key_set = set(keys) if keys else None
+    out = []
+    for e in table.entities:
+        if key_set is not None and e.key not in key_set:
+            continue
+        if (
+            needle
+            and needle not in e.label.casefold()
+            and needle not in e.key.casefold()
+            and needle not in (e.dims.get("amc") or "").casefold()
+        ):
+            continue
+        if category and e.dims.get("category") != category:
+            continue
+        if amc and e.dims.get("amc") != amc:
+            continue
+        if plan and e.dims.get("plan") != plan:
+            continue
+        if quartile:
+            qv = e.measures.get(q_key) if q_key else None
+            if qv is None or int(qv) not in quartile:
+                continue
+        out.append(e)
+    return out
+
+
+def _band(table: ResearchTable, measure_key: str) -> tuple[dict[str, str], list[tuple[str, str]]]:
+    """Quartile bands of a measure over rated rows: entity key -> band label, plus band order."""
+    spec = table.map.measure(measure_key)
+    vals = sorted(v for e in table.entities if (v := e.measures.get(measure_key)) is not None)
+    if len(vals) < 4:
+        return {}, []
+    q = statistics.quantiles(vals, n=4)
+    labels = [
+        (f"Up to {fmt_measure(q[0], spec)}", "b1"),
+        (f"{fmt_measure(q[0], spec)} to {fmt_measure(q[1], spec)}", "b2"),
+        (f"{fmt_measure(q[1], spec)} to {fmt_measure(q[2], spec)}", "b3"),
+        (f"Above {fmt_measure(q[2], spec)}", "b4"),
+    ]
+    out: dict[str, str] = {}
+    for e in table.entities:
+        v = e.measures.get(measure_key)
+        if v is None:
+            continue
+        band = 0 if v <= q[0] else 1 if v <= q[1] else 2 if v <= q[2] else 3
+        out[e.key] = labels[band][0]
+    return out, [(lbl, code) for lbl, code in labels]
+
+
+@router.get("/entities")
+def research_entities(
+    session: SessionDep,
+    version_id: Annotated[str | None, Query()] = None,
+    run_id: Annotated[str | None, Query()] = None,
+    q: Annotated[str | None, Query()] = None,
+    category: Annotated[str | None, Query()] = None,
+    amc: Annotated[str | None, Query()] = None,
+    plan: Annotated[str | None, Query()] = None,
+    quartile: Annotated[list[int] | None, Query()] = None,
+    keys: Annotated[
+        list[str] | None, Query(description="restrict to these identities (drill-through)")
+    ] = None,
+    sort: Annotated[str | None, Query()] = None,
+    dir: Annotated[Literal["asc", "desc"] | None, Query()] = None,  # noqa: A002
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=MAX_PAGE)] = PAGE_SIZE,
+    group_by: Annotated[
+        str | None, Query(alias="groupBy", description="dimension key, or <measure>_band")
+    ] = None,
+) -> dict[str, Any]:
+    ctx = _context(session, version_id, run_id)
+    if isinstance(ctx, dict):
+        return ctx
+    version, run, table = ctx
+    out = _status(version, run, table)
+    rank_key = table.primary_key("rank")
+    rows = _filter_entities(table, q, category, amc, plan, quartile, keys)
+    sort_key = sort if sort and sort in table.resolved.measures else rank_key
+    if sort_key:
+        spec = table.map.measure(sort_key)
+        direction = dir or ("asc" if spec and spec.role in ("rank", "quartile") else "desc")
+        if sort_key == rank_key and dir is None:
+            direction = "asc"
+        rows = engine.sort_entities(table, rows, sort_key, direction)
+    else:
+        direction = "asc"
+    # Deltas vs the previous activated version.
+    previous = _previous_version(session, version)
+    deltas: dict[str, dict[str, Any]] = {}
+    if previous is not None and rank_key:
+        prev_run = run_store.baseline_run(session, previous.id)
+        if prev_run is not None:
+            try:
+                prev_table = get_table(session, previous, prev_run)
+                q_key = table.primary_key("quartile")
+                for e in rows:
+                    b = prev_table.by_key.get(e.key)
+                    if b is None:
+                        deltas[e.key] = {"rank": None, "new": True}
+                        continue
+                    rf, rt = b.measures.get(rank_key), e.measures.get(rank_key)
+                    deltas[e.key] = {
+                        "rank": int(rf - rt) if rf is not None and rt is not None else None,
+                        "quartileFrom": int(b.measures[q_key])
+                        if q_key and b.measures.get(q_key) is not None
+                        else None,
+                        "new": False,
+                    }
+            except NotConfigured:
+                pass
+    # Grouping (a pivot, not a filter).
+    groups: list[dict[str, Any]] | None = None
+    group_of: dict[str, str] = {}
+    if group_by:
+        if group_by.endswith("_band") and group_by[:-5] in table.resolved.measures:
+            group_of, order = _band(table, group_by[:-5])
+            order_labels = [lbl for lbl, _c in order]
+        elif group_by in table.resolved.dimensions:
+            group_of = {e.key: (e.dims.get(group_by) or "—") for e in rows}
+            order_labels = sorted({v for v in group_of.values()})
+        else:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, f"unknown group_by {group_by!r}"
+            )
+        members: dict[str, list[Entity]] = {}
+        for e in rows:
+            g = group_of.get(e.key, "—")
+            members.setdefault(g, []).append(e)
+        numeric = [
+            m for m in table.resolved.measure_specs() if m.role in ("score", "return", "factor")
+        ]
+        q_key = table.primary_key("quartile")
+        groups = []
+        for label in order_labels + [g for g in members if g not in order_labels]:
+            grp = members.get(label)
+            if not grp:
+                continue
+            subtotal: dict[str, Any] = {"count": len(grp)}
+            if q_key:
+                subtotal["q1"] = sum(1 for e in grp if e.measures.get(q_key) == 1)
+            for m in numeric:
+                vals = [v for e in grp if (v := e.measures.get(m.key)) is not None]
+                subtotal[m.key] = (sum(vals) / len(vals)) if vals else None
+            groups.append({"key": label, "label": label, "count": len(grp), "subtotals": subtotal})
+        rows = [e for label in [g["key"] for g in groups] for e in members[label]]
+    total = len(rows)
+    start = (page - 1) * size
+    page_rows = rows[start : start + size]
+    out.update(
+        {
+            "total": total,
+            "page": page,
+            "size": size,
+            "sort": sort_key,
+            "dir": direction,
+            "measures": _measure_meta(table),
+            "dimensions": [
+                {"key": k, "label": table.map.dimensions[k].label}
+                for k in table.resolved.dimensions
+            ],
+            "facets": {
+                d: sorted({v for e in table.entities if (v := e.dims.get(d))})
+                for d in ("category", "amc", "plan")
+                if d in table.resolved.dimensions
+            },
+            "previous": {"id": previous.id, "filename": previous.filename} if previous else None,
+            "groups": groups,
+            "rows": [
+                {**_entity_dict(table, e), "delta": deltas.get(e.key), "group": group_of.get(e.key)}
+                for e in page_rows
+            ],
+        }
+    )
+    return out
+
+
+def _category_rows(
+    table: ResearchTable, measure: str | None
+) -> tuple[list[dict[str, Any]], str | None]:
+    returns = [m for m in table.resolved.measure_specs() if m.role == "return"]
+    chosen = next((m for m in returns if m.key == measure), returns[0] if returns else None)
+    rows = []
+    for c in table.categories.values():
+        if c.count == 0 and not c.stats:
+            continue
+        rows.append(
+            {
+                "key": c.key,
+                "count": c.count,
+                "rated": c.rated,
+                "quartiles": {str(k): v for k, v in c.quartiles.items()},
+                "means": c.means,
+                "spreads": c.spreads,
+                "stats": {col: c.stats.get(col) for col in c.stats},
+                "statLabels": table.resolved.category_stat_labels,
+                "unranked": c.unranked,
+                "value": c.means.get(chosen.key) if chosen else None,
+                "valueLabel": fmt_measure(c.means.get(chosen.key), chosen) if chosen else "",
+            }
+        )
+    rows.sort(key=lambda r: (r["value"] is None, -(r["value"] or 0)))
+    return rows, chosen.key if chosen else None
+
+
+@router.get("/categories")
+def research_categories(
+    session: SessionDep,
+    version_id: Annotated[str | None, Query()] = None,
+    run_id: Annotated[str | None, Query()] = None,
+    measure: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    ctx = _context(session, version_id, run_id)
+    if isinstance(ctx, dict):
+        return ctx
+    version, run, table = ctx
+    out = _status(version, run, table)
+    rows, chosen = _category_rows(table, measure)
+    spec = table.map.measure(chosen) if chosen else None
+    widest = (
+        max(
+            (r for r in rows if r["spreads"].get(chosen) is not None),
+            key=lambda r: r["spreads"][chosen],
+            default=None,
+        )
+        if chosen
+        else None
+    )
+    best = next((r for r in rows if r["value"] is not None), None)
+    template = table.map.narratives.get("categories")
+    narrative_ctx = {
+        "categories": fmt_count(len(rows)),
+        "unranked": fmt_count(sum(1 for r in rows if r["unranked"])),
+        "widest": {
+            "label": widest["key"],
+            "value": fmt_measure(widest["spreads"][chosen], spec)
+            + (" pts" if spec and not spec.unit else ""),
+        }
+        if widest
+        else None,
+        "best": {"label": best["key"], "value": best["valueLabel"]} if best else None,
+        "measure": {"label": spec.label} if spec else None,
+    }
+    out.update(
+        {
+            "measure": chosen,
+            "measures": [
+                {"key": m.key, "label": m.label}
+                for m in table.resolved.measure_specs()
+                if m.role == "return"
+            ],
+            "unrankedBelow": table.map.quartileRule.unrankedBelow,
+            "rows": rows,
+            "narrative": render_sentence(template, narrative_ctx) if template else None,
+        }
+    )
+    return out
+
+
+@router.get("/movement")
+def research_movement(
+    session: SessionDep,
+    version_id: Annotated[str | None, Query(alias="to")] = None,
+    from_id: Annotated[str | None, Query(alias="from")] = None,
+) -> dict[str, Any]:
+    ctx = _context(session, version_id, None)
+    if isinstance(ctx, dict):
+        return ctx
+    version, run, table = ctx
+    out = _status(version, run, table)
+    base = _pick_version(session, from_id) if from_id else _previous_version(session, version)
+    if base is None or base.id == version.id:
+        out.update(
+            {"available": False, "reason": "no earlier version with a baseline run to compare with"}
+        )
+        return out
+    movement = compute_movement(session, base, version, table)
+    out.update(movement)
+    out["versions"] = [
+        {
+            "id": v.id,
+            "filename": v.filename,
+            "uploaded_at": _iso(v.uploaded_at),
+            "status": v.status,
+            "activated_at": _iso(v.activated_at),
+        }
+        for v in workbooks.list_versions(session)
+        if run_store.baseline_run(session, v.id) is not None
+    ]
+    if movement.get("available"):
+        template = table.map.narratives.get("movement")
+        narrative_ctx = {
+            "moved": fmt_count(movement["moved"]),
+            "up": fmt_count(movement["up"]),
+            "down": fmt_count(movement["down"]),
+            "repairs": fmt_count(len(movement["repairs"])),
+            "into_q1": fmt_count(movement["quartileChanges"]["into_q1"]),
+            "out_of_q1": fmt_count(movement["quartileChanges"]["out_of_q1"]),
+            "entries": fmt_count(len(movement["entries"])),
+            "exits": fmt_count(len(movement["exits"])),
+            "previous": base.filename,
+            "current": version.filename,
+        }
+        out["narrative"] = render_sentence(template, narrative_ctx) if template else None
+    return out
+
+
+def _versions_for_insights(
+    session: Session, table: ResearchTable
+) -> list[tuple[str, ResearchTable]]:
+    if not any(i.mode == "acrossVersions" for i in table.map.insights):
+        return []
+    return [(v.filename, t) for v, _r, t in baseline_tables(session)]
+
+
+def _insight_dict(ins: engine.ComputedInsight) -> dict[str, Any]:
+    return {
+        "key": ins.key,
+        "section": ins.section,
+        "eyebrow": ins.eyebrow,
+        "title": ins.title,
+        "sentence": ins.sentence,
+        "count": ins.count,
+        "total": ins.total,
+        "measure": ins.measure,
+        "drill": ins.drill,
+        "problems": ins.problems,
+        "rows": [
+            {
+                "key": r.key,
+                "label": r.label,
+                "sub": r.sub,
+                "value": r.value,
+                "valueLabel": r.value_label,
+                "extra": r.extra,
+            }
+            for r in ins.rows
+        ],
+    }
+
+
+@router.get("/insights")
+def research_insights(
+    session: SessionDep,
+    version_id: Annotated[str | None, Query()] = None,
+    run_id: Annotated[str | None, Query()] = None,
+    section: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    ctx = _context(session, version_id, run_id)
+    if isinstance(ctx, dict):
+        return ctx
+    version, run, table = ctx
+    out = _status(version, run, table)
+    versions = _versions_for_insights(session, table)
+    computed = engine.compute_all(table, versions, section)
+    sections: list[str] = []
+    for i in table.map.insights:
+        if i.section not in sections:
+            sections.append(i.section)
+    out.update(
+        {
+            "sections": sections,
+            "insights": [_insight_dict(c) for c in computed],
+            "footer": table.map.footer,
+        }
+    )
+    return out
+
+
+# ---- exports ------------------------------------------------------------------------------
+
+
+def _send(view, fmt: str, filename: str) -> Response:
+    if fmt == "csv":
+        content, media = write_csv(view).encode("utf-8-sig"), "text/csv; charset=utf-8"
+        name = filename + ".csv"
+    else:
+        import io
+
+        buf = io.BytesIO()
+        write_workbook([view], view.provenance, buf)
+        content = buf.getvalue()
+        media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        name = filename + ".xlsx"
+    return Response(
+        content=content,
+        media_type=media,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}"},
+    )
+
+
+@router.get("/entities/export")
+def export_entities(
+    session: SessionDep,
+    format: Annotated[Literal["csv", "xlsx"], Query()],  # noqa: A002
+    version_id: Annotated[str | None, Query()] = None,
+    run_id: Annotated[str | None, Query()] = None,
+    q: Annotated[str | None, Query()] = None,
+    category: Annotated[str | None, Query()] = None,
+    amc: Annotated[str | None, Query()] = None,
+    plan: Annotated[str | None, Query()] = None,
+    quartile: Annotated[list[int] | None, Query()] = None,
+    keys: Annotated[list[str] | None, Query()] = None,
+    sort: Annotated[str | None, Query()] = None,
+    dir: Annotated[Literal["asc", "desc"] | None, Query()] = None,  # noqa: A002
+):
+    ctx = _context(session, version_id, run_id)
+    if isinstance(ctx, dict):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"message": "research views are not configured", "problems": ctx["problems"]},
+        )
+    version, run, table = ctx
+    rows = _filter_entities(table, q, category, amc, plan, quartile, keys)
+    rank_key = table.primary_key("rank")
+    sort_key = sort if sort in table.resolved.measures else rank_key
+    if sort_key:
+        rows = engine.sort_entities(table, rows, sort_key, dir or "asc")
+    scope = (
+        ", ".join(
+            f"{k}={v}"
+            for k, v in (
+                ("search", q),
+                ("category", category),
+                ("amc", amc),
+                ("plan", plan),
+                ("quartile", quartile),
+            )
+            if v
+        )
+        or "all funds"
+    )
+    view = rexport.entities_view(session, version, run, load_dashboard_config(), table, rows, scope)
+    return _send(view, format, f"funds-{version.id[:8]}")
+
+
+@router.get("/categories/export")
+def export_categories(
+    session: SessionDep,
+    format: Annotated[Literal["csv", "xlsx"], Query()],  # noqa: A002
+    version_id: Annotated[str | None, Query()] = None,
+    run_id: Annotated[str | None, Query()] = None,
+    measure: Annotated[str | None, Query()] = None,
+):
+    ctx = _context(session, version_id, run_id)
+    if isinstance(ctx, dict):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"message": "research views are not configured", "problems": ctx["problems"]},
+        )
+    version, run, table = ctx
+    rows, _chosen = _category_rows(table, measure)
+    view = rexport.categories_view(session, version, run, load_dashboard_config(), table, rows)
+    return _send(view, format, f"categories-{version.id[:8]}")
+
+
+@router.get("/movement/export")
+def export_movement(
+    session: SessionDep,
+    format: Annotated[Literal["csv", "xlsx"], Query()],  # noqa: A002
+    version_id: Annotated[str | None, Query(alias="to")] = None,
+    from_id: Annotated[str | None, Query(alias="from")] = None,
+):
+    ctx = _context(session, version_id, None)
+    if isinstance(ctx, dict):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"message": "research views are not configured", "problems": ctx["problems"]},
+        )
+    version, run, table = ctx
+    base = _pick_version(session, from_id) if from_id else _previous_version(session, version)
+    if base is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "no earlier version to compare with")
+    movement = compute_movement(session, base, version, table)
+    if not movement.get("available"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, movement.get("reason", "movement unavailable")
+        )
+    movers = movement["risers"] + movement["fallers"]
+    view = rexport.movement_view(
+        session,
+        version,
+        run,
+        load_dashboard_config(),
+        movers,
+        f"{base.filename} → {version.filename}",
+    )
+    return _send(view, format, f"movement-{base.id[:8]}-{version.id[:8]}")
+
+
+@router.get("/insights/export")
+def export_insights(
+    session: SessionDep,
+    format: Annotated[Literal["csv", "xlsx"], Query()],  # noqa: A002
+    version_id: Annotated[str | None, Query()] = None,
+    run_id: Annotated[str | None, Query()] = None,
+):
+    ctx = _context(session, version_id, run_id)
+    if isinstance(ctx, dict):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"message": "research views are not configured", "problems": ctx["problems"]},
+        )
+    version, run, table = ctx
+    computed = engine.compute_all(table, _versions_for_insights(session, table))
+    view = rexport.insights_view(session, version, run, load_dashboard_config(), computed)
+    return _send(view, format, f"insights-{version.id[:8]}")
+
+
+@router.get("/entities/{key:path}")
+def research_entity(
+    key: str,
+    session: SessionDep,
+    version_id: Annotated[str | None, Query()] = None,
+    run_id: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    ctx = _context(session, version_id, run_id)
+    if isinstance(ctx, dict):
+        return ctx
+    version, run, table = ctx
+    e = table.by_key.get(key)
+    if e is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entity not found in this version.")
+    out = _status(version, run, table)
+    rank_key, q_key, score_key = (
+        table.primary_key("rank"),
+        table.primary_key("quartile"),
+        table.primary_key("score"),
+    )
+    cat = e.category
+    peers_all = [p for p in table.entities if cat and p.category == cat]
+    info = table.categories.get(cat) if cat else None
+
+    def cat_rank(mkey: str) -> int | None:
+        spec = table.map.measure(mkey)
+        v = e.measures.get(mkey)
+        if v is None or spec is None:
+            return None
+        better = [
+            p
+            for p in peers_all
+            if (pv := p.measures.get(mkey)) is not None
+            and ((pv > v) if spec.higherIsBetter else (pv < v))
+        ]
+        return len(better) + 1
+
+    measures = []
+    for m in table.resolved.measure_specs():
+        v = e.measures.get(m.key)
+        measures.append(
+            {
+                "key": m.key,
+                "label": m.label,
+                "role": m.role,
+                "value": v,
+                "display": fmt_measure(v if v is not None else e.raw.get(m.key), m),
+                "unit": m.unit,
+                "categoryRank": cat_rank(m.key),
+                "categoryCount": sum(1 for p in peers_all if p.measures.get(m.key) is not None),
+                "cell": e.cells.get(m.key),
+            }
+        )
+    # Phases: fund vs category mean.
+    phases = []
+    if table.map.phases and table.resolved.phases_ok:
+        for g in table.map.phases.groups:
+            for letter in g.columns:
+                k = f"{g.key}:{letter.upper()}"
+                vals = [v for p in peers_all if (v := p.phases.get(k)) is not None]
+                phases.append(
+                    {
+                        "group": g.key,
+                        "groupLabel": g.label,
+                        "label": table.resolved.phase_labels.get(g.key, {}).get(
+                            letter.upper(), letter
+                        ),
+                        "value": e.phases.get(k),
+                        "categoryMean": (sum(vals) / len(vals)) if vals else None,
+                        "unit": table.map.phases.unit,
+                    }
+                )
+    periods = []
+    if table.map.periods and table.resolved.periods_ok:
+        for letter in table.map.periods.columns:
+            periods.append(
+                {
+                    "label": table.resolved.period_labels.get(letter.upper(), letter),
+                    "value": e.periods.get(letter.upper()),
+                    "unit": table.map.periods.unit,
+                }
+            )
+    # Peers by primary rank.
+    peers_sorted = (
+        engine.sort_entities(table, peers_all, rank_key, "asc") if rank_key else peers_all
+    )
+    my_pos = next((i for i, p in enumerate(peers_sorted) if p.key == e.key), None)
+    window: list[Entity] = peers_sorted[:5]
+    if my_pos is not None:
+        for p in peers_sorted[max(0, my_pos - 2) : my_pos + 3]:
+            if p not in window:
+                window.append(p)
+    peers = [
+        {
+            "key": p.key,
+            "label": p.label,
+            "rank": p.measures.get(rank_key) if rank_key else None,
+            "quartile": p.measures.get(q_key) if q_key else None,
+            "score": p.measures.get(score_key) if score_key else None,
+            "scoreLabel": fmt_measure(p.measures.get(score_key), table.map.measure(score_key))
+            if score_key
+            else "",
+            "me": p.key == e.key,
+        }
+        for p in window
+    ]
+    # History across stored versions.
+    history = []
+    for v, _r, t in baseline_tables(session):
+        h = t.by_key.get(e.key)
+        if h is None:
+            continue
+        history.append(
+            {
+                "version_id": v.id,
+                "filename": v.filename,
+                "uploaded_at": _iso(v.uploaded_at),
+                "rank": h.measures.get(t.primary_key("rank") or "")
+                if t.primary_key("rank")
+                else None,
+                "quartile": h.measures.get(t.primary_key("quartile") or "")
+                if t.primary_key("quartile")
+                else None,
+                "score": h.measures.get(t.primary_key("score") or "")
+                if t.primary_key("score")
+                else None,
+            }
+        )
+    # Movement vs previous and the narrative.
+    previous = _previous_version(session, version)
+    delta = None
+    if previous is not None:
+        prev_run = run_store.baseline_run(session, previous.id)
+        if prev_run is not None and rank_key:
+            try:
+                b = get_table(session, previous, prev_run).by_key.get(e.key)
+                if (
+                    b is not None
+                    and b.measures.get(rank_key) is not None
+                    and e.measures.get(rank_key) is not None
+                ):
+                    delta = int(b.measures[rank_key] - e.measures[rank_key])  # type: ignore[operator]
+            except NotConfigured:
+                delta = None
+    # The quartile rule in words: re-evaluate the quartile cell with tracing.
+    explanation: list[str] | None = None
+    q_cell = e.cells.get(q_key) if q_key else None
+    if q_cell:
+        try:
+            from app.engine.lineage import narrate
+            from app.model.formula.refs import parse_a1_cell
+
+            sheet_name, addr = q_cell.rsplit("!", 1)
+            eng, _model, _meta, _v = run_store.load_engine(session, version.id)
+            state = run_store.state_for(session, run)
+            traced = eng.evaluate_cell(sheet_name, *parse_a1_cell(addr), state)
+            if traced is not None:
+                explanation = narrate(traced[1], traced[0]) or None
+        except Exception:  # noqa: BLE001 - explanation is optional
+            explanation = None
+    rank_v = e.measures.get(rank_key) if rank_key else None
+    q_v = e.measures.get(q_key) if q_key else None
+    narrative_ctx = {
+        "label": e.label,
+        "rank": fmt_count(rank_v) if rank_v is not None else None,
+        "category_count": fmt_count(info.rated) if info else None,
+        "category": cat,
+        "quartile": f"Q{int(q_v)}" if q_v is not None else None,
+        "delta": _fmt_delta(delta),
+        "previous": previous.filename if previous else None,
+        "score": fmt_measure(e.measures.get(score_key), table.map.measure(score_key))
+        if score_key
+        else None,
+    }
+    template = table.map.narratives.get("fund")
+    out.update(
+        {
+            "entity": _entity_dict(table, e),
+            "row": e.row,
+            "measures": measures,
+            "phases": phases,
+            "periods": periods,
+            "category": {
+                "key": cat,
+                "count": info.count if info else 0,
+                "rated": info.rated if info else 0,
+                "quartiles": {str(k): v for k, v in (info.quartiles if info else {}).items()},
+                "means": info.means if info else {},
+            },
+            "peers": peers,
+            "history": history,
+            "delta": delta,
+            "deltaLabel": _fmt_delta(delta),
+            "previous": {"id": previous.id, "filename": previous.filename} if previous else None,
+            "quartileExplanation": explanation,
+            "narrative": render_sentence(template, narrative_ctx) if template else None,
+            "cells": e.cells,
+        }
+    )
+    return out
+
+
+def compute_insights_for_report(
+    session: Session, version: WorkbookVersion, run: Run
+) -> list[engine.ComputedInsight] | None:
+    """Used by the PDF report: None when the research map is not configured."""
+    try:
+        table = get_table(session, version, run)
+    except NotConfigured:
+        return None
+    return engine.compute_all(table, _versions_for_insights(session, table))
+
+
+__all__ = ["router", "compute_movement", "compute_insights_for_report", "math"]

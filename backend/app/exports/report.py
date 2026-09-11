@@ -69,6 +69,7 @@ class ReportContext:
     sections: list[dict[str, Any]] = field(default_factory=list)
     changelog: DiffReport | None = None
     changelog_base: str | None = None
+    insights: list[Any] | None = None
 
 
 def _esc(v: Any) -> str:
@@ -305,6 +306,19 @@ def build_context(
                 rules_by_kind[r.kind].append(r)
         section["rules"] = dict(rules_by_kind)
         ctx.sections.append(section)
+    try:
+        from app.research import insights as rinsights
+        from app.research import table as rtable
+
+        rt = rtable.get_table(session, version, run)
+        versions = (
+            [(v.filename, t) for v, _r, t in rtable.baseline_tables(session)]
+            if any(i.mode == "acrossVersions" for i in rt.map.insights)
+            else []
+        )
+        ctx.insights = [c for c in rinsights.compute_all(rt, versions) if c.sentence]
+    except Exception:  # noqa: BLE001 - the research map is optional for the report
+        ctx.insights = None
     if what_if or version.status in ("pending_review", "active", "validated"):
         row = diffs.latest_diff_for(session, version.id)
         if row is not None:
@@ -422,6 +436,29 @@ def render_html(ctx: ReportContext, cfg: DashboardConfig) -> str:
                 for r in items:
                     out.append(f"<li>{_esc(', '.join(r.cells[:2]))}: {_esc(r.description)}</li>")
                 out.append("</ul>")
+        out.append("</section>")
+
+    if ctx.insights:
+        out.append("<section class='section'><h2>Insights brief</h2>")
+        section = None
+        for ins in ctx.insights:
+            if ins.section != section:
+                section = ins.section
+                out.append(f"<h3>{_esc(section.replace('_', ' ').capitalize())}</h3>")
+            out.append(
+                f"<div class='muted' style='font-size:9px;letter-spacing:.08em;text-transform:uppercase'>{_esc(ins.eyebrow)}</div>"
+                f"<div style='font-weight:600'>{_esc(ins.title)}</div><p style='margin:2px 0 6px'>{_esc(ins.sentence)}</p>"
+            )
+            if ins.rows:
+                out.append(
+                    "<table><tr><th>#</th><th>Fund / group</th><th>Detail</th><th class='num'>Value</th></tr>"
+                )
+                for i, r in enumerate(ins.rows, start=1):
+                    out.append(
+                        f"<tr><td class='num'>{i}</td><td>{_esc(r.label)}</td><td class='muted'>{_esc(r.sub or '')}</td>"
+                        f"<td class='num'>{_esc(r.value_label)}</td></tr>"
+                    )
+                out.append("</table>")
         out.append("</section>")
 
     if ctx.changelog is not None:
