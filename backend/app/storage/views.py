@@ -158,6 +158,10 @@ def _body_start(idx: SheetIndex, fblocks: list[FormulaBlock], iblocks: list[Inpu
     tall = [b.rect.r1 for b in [*fblocks, *iblocks] if b.rect.rect().rows >= BODY_MIN_ROWS]
     if tall:
         return min(tall)
+    # Small sheets: the body starts where the first block does, so header text above it labels.
+    starts = [b.rect.r1 for b in [*fblocks, *iblocks]]
+    if starts:
+        return min(starts)
     return idx.used.r1 if idx.used else 1
 
 

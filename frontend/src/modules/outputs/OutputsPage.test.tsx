@@ -16,6 +16,7 @@ const idle: RunSession = {
   job: null,
   error: null,
   running: false,
+  waiting: null,
   runAnalysis: async () => {},
   runFull: async () => {},
   backToBaseline: () => {},

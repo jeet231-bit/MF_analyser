@@ -105,6 +105,16 @@ def create_run(
         ) from exc
     except OverrideError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    except store.RunBusyError as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {
+                "message": "Another run is in progress on this backend.",
+                "busy": True,
+                "retry_after_s": exc.retry_after_s,
+            },
+            headers={"Retry-After": str(exc.retry_after_s)},
+        ) from exc
     return RunOut.from_row(run)
 
 

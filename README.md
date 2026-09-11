@@ -27,6 +27,7 @@ Master Excel ──► Parser / Logic Layer ──► Analytical Engine ──�
 | uv | ≥ 0.8 | `irm https://astral.sh/uv/install.ps1 \| iex` (Windows) or `curl -LsSf https://astral.sh/uv/install.sh \| sh`. uv installs Python 3.12 itself: `uv python install 3.12`. |
 | Node.js | ≥ 20 | with npm |
 | GNU make | optional | every target has an `npm run` equivalent |
+| GTK3 runtime (Windows, PDF export only) | 3.24 | WeasyPrint needs Pango and GObject. Install the [GTK for Windows Runtime Environment Installer](https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases) (`gtk3-runtime-3.24.31-2022-01-04-ts-win64.exe`, default options, which adds `C:\Program Files\GTK3-Runtime Win64\bin` to PATH), then restart the terminal that runs the backend. Linux: `apt install libpango-1.0-0 libpangoft2-1.0-0`; macOS: `brew install pango`. |
 
 ## Setup
 
@@ -111,7 +112,7 @@ The system is built one phase per session; each phase is committed separately an
 | 6 | Dashboard shell, design system, overview page (pulled forward; module views wait for the engine) | done |
 | 7 | Stage A: scope extension to the Report layer (upstream-closed, 15 sheets). Stage B: Inputs, Calculations, Outputs modules with what-if runs and lineage | done |
 | 8 | Exports: xlsx (in place, cover sheet, background jobs), csv (grid windows), PDF analysis report, changelog export, one Export menu | done |
-| 9 | Hardening and real-workbook QA; runbook | |
+| 9 | Hardening: run limiter and bounded caches for two users, robustness and end-to-end tests, QA.md timings, master findings for the research team | done |
 
 ## Runbook: a new master version
 
@@ -133,7 +134,14 @@ The system is built one phase per session; each phase is committed separately an
 
 The **Export** menu on Outputs, Calculations and Versions offers, per view: Excel of the output sheets (cover sheet with version, run, overrides and validation status; computed values in place at their original addresses with the original number formats; errors as Excel errors), Excel of every in-scope sheet (runs as a background job; optionally with a formulas tab-set for audit), CSV of exactly the grid window on screen, the PDF analysis report, and the version changelog as CSV or Excel. Every export is built from one view descriptor (rows, columns, labels, title, provenance), so a new kind of view exports through the same writers.
 
-PDF rendering needs WeasyPrint: `cd backend && uv sync --extra pdf`. On Windows WeasyPrint also needs the GTK runtime (Pango, GObject); without it the PDF export answers 501 and the same report is available as HTML at `/api/runs/{run_id}/report.html`.
+PDF rendering needs WeasyPrint: `cd backend && uv sync --extra pdf`. On Windows WeasyPrint also needs the GTK3 runtime, see Prerequisites; without it the PDF export answers 501 and the same report is available as HTML at `/api/runs/{run_id}/report.html`.
+
+## Deployment notes
+
+- **One backend process.** Run uvicorn with a single worker (the default; never `--workers 2+`). The engine state cache, the sheet cache, the run limiter and background jobs are all in-process; a second process would double memory and split the caches.
+- **Sizing.** On the 15-sheet master each live engine state is about 300 MB. `MFA_STATE_CACHE_ENTRIES` (default 3) bounds how many stay cached: the baseline plus the two most recent what-ifs. `MFA_MAX_CONCURRENT_RUNS` (default 1) serialises engine runs: a second user's run answers 409 with `Retry-After` and the dashboard waits and retries by itself ("another run is in progress"). Budget 2 GB of RAM for two concurrent users plus interpretation headroom, and 500 MB of disk per uploaded version (raw sheets, run values, exports).
+- **Concurrency behaviour.** Two users may run what-ifs against the same version; runs execute one at a time and each is persisted with its own overrides. Uploading and activating a new version while another user is mid-session is safe: versions are immutable, the other user's runs and views keep reading their own version, and the version list simply shows which one is active.
+- **Settings** come from `MFA_*` environment variables (`backend/.env.example`): data directory, database URL (SQLite by default; Postgres via SQLAlchemy), upload limit, validation thresholds, run concurrency and cache sizes.
 
 Keep the master free of circular references: the analyser reports a cycle readably and refuses to evaluate it rather than iterating around it. After fixing formulas in the master, force a full recalculation in Excel (Ctrl+Alt+F9) before saving the copy, so the cached values the validator compares against are current.
 

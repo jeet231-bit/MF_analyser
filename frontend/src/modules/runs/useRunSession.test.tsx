@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { mockApi } from "@/test/mockApi";
 import { version } from "@/test/fixtures";
 import { baselineRun, whatIfRun } from "@/test/runFixtures";
-import { useRunSession } from "./useRunSession";
+import { busyRetry, useRunSession } from "./useRunSession";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -31,6 +31,29 @@ describe("useRunSession", () => {
 
     act(() => result.current.backToBaseline());
     expect(result.current.activeRun).toBeNull();
+  });
+
+  it("waits and retries while another run is in progress", async () => {
+    busyRetry.fallbackDelayMs = 5;
+    let attempts = 0;
+    const calls = mockApi({
+      [`POST /api/workbooks/${version.id}/runs`]: () => {
+        attempts += 1;
+        return attempts < 3
+          ? new Response(JSON.stringify({ detail: { message: "Another run is in progress on this backend.", busy: true, retry_after_s: 0.005 } }), { status: 409 })
+          : whatIfRun;
+      },
+    });
+    const { result } = renderHook(() => useRunSession(version.id, () => {}));
+    act(() => result.current.setDraft("Inputs!B3", { value: 200, type: "number", label: "Units", sheet: "Inputs", address: "B3" }));
+    await act(async () => {
+      await result.current.runAnalysis();
+    });
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(3);
+    expect(result.current.activeRun?.id).toBe(whatIfRun.id);
+    expect(result.current.waiting).toBeNull();
+    expect(result.current.error).toBeNull();
+    busyRetry.fallbackDelayMs = 3000;
   });
 
   it("reports a failed run without losing the draft", async () => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ApiError } from "@/api/client";
 import { createRun, getRun, type CellValue, type RunOut } from "@/api/runs";
 import { describeError } from "@/lib/useAsync";
 
@@ -21,6 +22,8 @@ export interface RunSession {
   job: RunOut | null;
   error: string | null;
   running: boolean;
+  /** Set while the backend reports another run in progress and this one waits its turn. */
+  waiting: string | null;
   runAnalysis: () => Promise<void>;
   runFull: () => Promise<void>;
   backToBaseline: () => void;
@@ -28,6 +31,15 @@ export interface RunSession {
 }
 
 const POLL_MS = 1000;
+/** How long to keep retrying when the backend says another run is in progress. */
+export const busyRetry = { maxAttempts: 40, fallbackDelayMs: 3000 };
+
+function busyDelay(err: unknown): number | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null;
+  const body = err.body as { detail?: { busy?: boolean; retry_after_s?: number } } | undefined;
+  if (!body?.detail?.busy) return null;
+  return (body.detail.retry_after_s ?? busyRetry.fallbackDelayMs / 1000) * 1000;
+}
 
 /**
  * Overrides draft and the active what-if run for one workbook version. Incremental what-ifs run
@@ -44,6 +56,7 @@ export function useRunSession(
   const [job, setJob] = useState<RunOut | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [waiting, setWaiting] = useState<string | null>(null);
   const versionRef = useRef(versionId);
 
   useEffect(() => {
@@ -76,11 +89,23 @@ export function useRunSession(
     setError(null);
     onBusy(true, `Running analysis with ${Object.keys(overrides).length} override(s)`);
     try {
-      const run = await createRun(versionId, overrides, { mode: "auto" });
+      let run: RunOut | null = null;
+      for (let attempt = 1; run === null; attempt += 1) {
+        try {
+          run = await createRun(versionId, overrides, { mode: "auto" });
+        } catch (err) {
+          const delay = busyDelay(err);
+          if (delay === null || attempt >= busyRetry.maxAttempts) throw err;
+          setWaiting(`Another run is in progress; retrying in ${Math.round(delay / 1000)} s (attempt ${attempt})`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+      setWaiting(null);
       setActiveRun(run);
       setDraftState(new Map());
       onSettled?.();
     } catch (err) {
+      setWaiting(null);
       setError(describeError(err));
     } finally {
       setRunning(false);
@@ -138,6 +163,7 @@ export function useRunSession(
     job,
     error,
     running,
+    waiting,
     runAnalysis,
     runFull,
     backToBaseline,

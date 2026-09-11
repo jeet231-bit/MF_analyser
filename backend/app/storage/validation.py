@@ -91,7 +91,11 @@ def validate_version(
     anomaly_loader = lambda name: raw_sheets.get(name) or load_raw(name)  # noqa: E731
 
     try:
-        result = engine.run({}, mode="full", skip_unsupported=True)
+        runs.run_limiter.acquire(wait_s=600)  # validation waits for a running what-if
+        try:
+            result = engine.run({}, mode="full", skip_unsupported=True)
+        finally:
+            runs.run_limiter.release()
     except ModelHasCyclesError as exc:
         # The structural report still stands; reconciliation cannot, so the version fails
         # validation until the circular reference is fixed in the master.

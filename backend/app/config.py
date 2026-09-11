@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     database_url: str = ""
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     max_upload_mb: int = 50
+    # Engine concurrency on this (single-process) backend: each live engine state is ~300 MB
+    # on the real master, so runs are serialised and only a few states stay cached.
+    max_concurrent_runs: int = 1
+    run_busy_retry_after_s: int = 3
+    state_cache_entries: int = 3
     # Validation gate thresholds (fractions of checked formula cells).
     validation_max_mismatch_ratio: float = 0.0
     validation_max_precision_ratio: float = 0.001

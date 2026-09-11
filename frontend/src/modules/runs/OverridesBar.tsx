@@ -7,7 +7,7 @@ import type { RunSession } from "./useRunSession";
  * caption once a run is active. Hidden when there is nothing to say.
  */
 export function OverridesBar({ session }: { session: RunSession }) {
-  const { draft, activeRun, running, error } = session;
+  const { draft, activeRun, running, error, waiting } = session;
   const overrideCount = activeRun ? Object.keys(activeRun.overrides).length : 0;
   if (draft.size === 0 && !activeRun && !error) return null;
   return (
@@ -29,6 +29,11 @@ export function OverridesBar({ session }: { session: RunSession }) {
             <Button variant="ghost" size="sm" onClick={session.resetDraft} disabled={running}>
               Reset
             </Button>
+            {waiting && (
+              <span role="status" className="text-xs text-warning">
+                {waiting}
+              </span>
+            )}
           </>
         ) : activeRun ? (
           <>

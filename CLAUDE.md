@@ -1,6 +1,14 @@
 # mf-analyser — standing context for every session
 
-Internal "Excel-driven research analytics platform". Monorepo: `backend/` (Python 3.12, FastAPI, Pydantic v2, uv) and `frontend/` (React 18, TypeScript, Vite, Tailwind, Recharts). The build proceeds in numbered phases 0–9, specified with acceptance criteria in `docs/BUILD_KIT.md`; one phase per session, one commit per phase. Phases 0–8 are done. Next: **Phase 9** (hardening, real-workbook QA, runbook).
+Internal "Excel-driven research analytics platform". Monorepo: `backend/` (Python 3.12, FastAPI, Pydantic v2, uv) and `frontend/` (React 18, TypeScript, Vite, Tailwind, Recharts). The build proceeds in numbered phases 0–9, specified with acceptance criteria in `docs/BUILD_KIT.md`; one phase per session, one commit per phase. Phases 0–9 are done; the next phase is the research-views layer (do not polish the sheet-shaped module views in the meantime).
+
+## Hardening (Phase 9, binding)
+
+- **Single backend process.** Every cache (`storage/runs.state_cache`, `storage/views.sheet_cache`, the `lru_cache`d settings and config) and every background job (runs, exports) is in-process. Deploy with one uvicorn worker; document, never assume, anything else.
+- **Runs are serialised.** `storage/runs.run_limiter` (a `BoundedSemaphore` sized by `MFA_MAX_CONCURRENT_RUNS`, default 1) wraps every engine run: synchronous what-ifs, validation, background runs. A what-if that cannot start within 0.25 s raises `RunBusyError` → HTTP 409 `{busy: true, retry_after_s}` + `Retry-After`; the frontend's `useRunSession` waits and retries (bounded) and shows "another run is in progress". Background jobs wait for the limiter instead. `state_for` rebuilds under a lock so two callers never rebuild the same 300 MB state twice.
+- **Memory is bounded.** `state_cache` is an LRU of `MFA_STATE_CACHE_ENTRIES` (default 3) engine states, each ~300 MB on the master; the sheet cache holds 20 raw sheets. Sizing guidance lives in README "Deployment notes"; measured timings in QA.md.
+- **PDF portability.** WeasyPrint needs GTK (Pango/GObject) on Windows; the GTK3 runtime installer step is in README Prerequisites. If a deployment machine cannot take GTK, the fallback is headless Chromium print-to-PDF of `/api/runs/{id}/report.html` (the report is self-contained HTML with inline CSS and SVG); nothing in the report depends on WeasyPrint-specific CSS beyond `@page` margins and page numbers.
+- **Robustness contract** (tests/test_robustness.py, test_end_to_end.py): oversized / corrupt / .xls uploads are refused with a message and leave no version behind; empty sheets, merged headers, cycles, unknown scoped sheets and unrelated workbooks flow through the pipeline to `pending_review` and never touch the active version; two users can run what-ifs concurrently and one can upload and activate a new version mid-session without disturbing the other.
 
 ## Exports design (Phase 8, binding)
 

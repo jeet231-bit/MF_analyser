@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.engine.runner import Engine, RunResult, RunSummary, resolve_override
 from app.engine.values import StringTable, Values
 from app.model.formula.refs import Rect, parse_a1_cell
@@ -23,6 +24,46 @@ from app.storage.models import Run, RunSheetValues, WorkbookVersion
 
 class RunNotFoundError(LookupError):
     pass
+
+
+class RunBusyError(RuntimeError):
+    """Another engine run holds the limiter; the caller should retry shortly."""
+
+    def __init__(self, retry_after_s: int) -> None:
+        super().__init__("another run is in progress")
+        self.retry_after_s = retry_after_s
+
+
+class _RunLimiter:
+    """At most ``max_concurrent_runs`` engine runs at a time (each holds ~300 MB of grids on
+    the real master). A run that cannot start at once is refused with RunBusyError rather
+    than queued invisibly, so the UI can show "another run is in progress" and retry."""
+
+    def __init__(self) -> None:
+        self._sem: threading.BoundedSemaphore | None = None
+        self._size = 0
+        self._guard = threading.Lock()
+
+    def _semaphore(self) -> threading.BoundedSemaphore:
+        size = max(1, get_settings().max_concurrent_runs)
+        with self._guard:
+            if self._sem is None or self._size != size:
+                self._sem = threading.BoundedSemaphore(size)
+                self._size = size
+            return self._sem
+
+    def acquire(self, wait_s: float = 0.25) -> None:
+        if not self._semaphore().acquire(timeout=wait_s):
+            raise RunBusyError(get_settings().run_busy_retry_after_s)
+
+    def release(self) -> None:
+        try:
+            self._semaphore().release()
+        except ValueError:  # released more than acquired; never fatal
+            pass
+
+
+run_limiter = _RunLimiter()
 
 
 def _pack(columns: dict[str, list]) -> bytes:
@@ -71,20 +112,35 @@ class _StateCache:
     """In-process cache of runs' final grids: baselines seed incremental runs without
     reloading, and any cached run can explain its cells (lineage traces)."""
 
-    def __init__(self, capacity: int = 4) -> None:
-        self.capacity = capacity
+    def __init__(self, capacity: int | None = None) -> None:
+        self._capacity = capacity
         self._items: dict[tuple[str, str], tuple[dict, Any]] = {}
+        self._lock = threading.Lock()
+
+    @property
+    def capacity(self) -> int:
+        if self._capacity is not None:
+            return self._capacity
+        return max(1, get_settings().state_cache_entries)
 
     def get(self, key: tuple[str, str]):
-        return self._items.get(key)
+        with self._lock:
+            item = self._items.get(key)
+            if item is not None:  # most recently used goes last
+                self._items.pop(key)
+                self._items[key] = item
+            return item
 
     def put(self, key: tuple[str, str], value) -> None:
-        self._items[key] = value
-        while len(self._items) > self.capacity:
-            self._items.pop(next(iter(self._items)))
+        with self._lock:
+            self._items.pop(key, None)
+            self._items[key] = value
+            while len(self._items) > self.capacity:
+                self._items.pop(next(iter(self._items)))
 
     def clear(self) -> None:
-        self._items.clear()
+        with self._lock:
+            self._items.clear()
 
 
 state_cache = _StateCache()
@@ -93,20 +149,28 @@ state_cache = _StateCache()
 def create_run(
     session: Session, version_id: str, overrides: dict[str, Any] | None, mode: str = "auto"
 ) -> Run:
-    """Execute and persist a run. The first override-free full run becomes the baseline."""
+    """Execute and persist a run. The first override-free full run becomes the baseline.
+    Raises RunBusyError when the run limiter is held by another run."""
     engine, model, _meta, version = load_engine(session, version_id)
     overrides = overrides or {}
     parent = baseline_run(session, version_id) if overrides and mode != "full" else None
-    if parent is not None:
-        # The baseline's grids are rebuilt once after a restart and then cloned per what-if.
-        result = engine.run(overrides, mode=mode, state=state_for(session, parent))
-    else:
-        result = engine.run(overrides, mode=mode)
-    run = save_run(
-        session, version, result, parent_run_id=parent.id if parent is not None else None
-    )
-    state_cache.put((version_id, run.id), (result.grids, result.table))
+    run_limiter.acquire()
+    try:
+        if parent is not None:
+            # The baseline's grids are rebuilt once after a restart and then cloned per what-if.
+            result = engine.run(overrides, mode=mode, state=state_for(session, parent))
+        else:
+            result = engine.run(overrides, mode=mode)
+        run = save_run(
+            session, version, result, parent_run_id=parent.id if parent is not None else None
+        )
+        state_cache.put((version_id, run.id), (result.grids, result.table))
+    finally:
+        run_limiter.release()
     return run
+
+
+_rebuild_lock = threading.Lock()
 
 
 def state_for(session: Session, run: Run) -> tuple[dict, Any]:
@@ -115,6 +179,14 @@ def state_for(session: Session, run: Run) -> tuple[dict, Any]:
     cached = state_cache.get((run.version_id, run.id))
     if cached is not None:
         return cached
+    with _rebuild_lock:  # two callers must not rebuild the same 300 MB state side by side
+        cached = state_cache.get((run.version_id, run.id))
+        if cached is not None:
+            return cached
+        return _rebuild_state(session, run)
+
+
+def _rebuild_state(session: Session, run: Run) -> tuple[dict, Any]:
     engine, _model, _meta, _version = load_engine(session, run.version_id)
     chain: list[Run] = []
     current: Run | None = run
@@ -187,6 +259,14 @@ def start_background_run(
         with factory() as s:
             row = s.get(Run, run_id)
             try:
+                run_limiter.acquire(wait_s=3600)  # background jobs wait their turn
+            except RunBusyError as exc:
+                if row is not None:
+                    row.status = "failed"
+                    row.error = f"RunBusyError: {exc}"
+                    s.commit()
+                return
+            try:
                 engine, _model, _meta, version = load_engine(s, version_id)
                 ov = overrides or {}
                 parent = baseline_run(s, version_id) if ov and mode != "full" else None
@@ -203,6 +283,8 @@ def start_background_run(
                     row.status = "failed"
                     row.error = f"{type(exc).__name__}: {exc}"
                     s.commit()
+            finally:
+                run_limiter.release()
 
     threading.Thread(target=work, name=f"run-{run_id[:8]}", daemon=True).start()
     return run
