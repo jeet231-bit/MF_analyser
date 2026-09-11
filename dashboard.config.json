@@ -1,10 +1,22 @@
 {
   "$schema": "./dashboard.config.schema.json",
   "version": 1,
-  "description": "Workbook-specific display overlay. This is the ONLY place workbook-specific names or preferences may live (CLAUDE.md rule 3). Keys are filled in once a workbook is active.",
+  "description": "Workbook-specific display overlay. This is the ONLY place workbook-specific names or preferences may live (CLAUDE.md rule 3).",
   "workbook": {
-    "displayName": null
+    "displayName": "Equity MF Analyser"
   },
+  "sheetScope": [
+    "MF Master",
+    "Domain",
+    "Composite Ranks",
+    "P2P Perf",
+    "Roll Perf",
+    "1Y Roll-2Y",
+    "3Y Roll-2Y",
+    "Stat Comp",
+    "Bull-Bear Returns",
+    "First NAV"
+  ],
   "sheetRoleOverrides": {},
   "outputSheets": [],
   "labelOverrides": {},

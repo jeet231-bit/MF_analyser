@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, LargeBinary, String, Text
+from sqlalchemy import (
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.storage.db import Base
@@ -30,6 +39,9 @@ class WorkbookVersion(Base):
     sheets: Mapped[list[RawSheetBlob]] = relationship(
         back_populates="version", cascade="all, delete-orphan", order_by="RawSheetBlob.sheet_index"
     )
+    logic_models: Mapped[list[LogicModelRow]] = relationship(
+        back_populates="version", cascade="all, delete-orphan", order_by="LogicModelRow.created_at"
+    )
 
 
 class RawSheetBlob(Base):
@@ -48,3 +60,38 @@ class RawSheetBlob(Base):
     payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
     version: Mapped[WorkbookVersion] = relationship(back_populates="sheets")
+
+
+class LogicModelRow(Base):
+    """A WorkbookLogicModel derived from a version (gzipped JSON). Re-interpreting replaces it."""
+
+    __tablename__ = "logic_models"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    version_id: Mapped[str] = mapped_column(
+        ForeignKey("workbook_versions.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    scope_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    summary_json: Mapped[str] = mapped_column(Text, nullable=False)
+    seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    peak_mb: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+    version: Mapped[WorkbookVersion] = relationship(back_populates="logic_models")
+
+
+class SheetRoleOverride(Base):
+    """User-set sheet role for one version; applied on top of heuristics and config."""
+
+    __tablename__ = "sheet_role_overrides"
+    __table_args__ = (UniqueConstraint("version_id", "sheet_name", name="uq_role_override"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    version_id: Mapped[str] = mapped_column(
+        ForeignKey("workbook_versions.id", ondelete="CASCADE"), index=True
+    )
+    sheet_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

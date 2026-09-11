@@ -10,6 +10,11 @@
       "type": "object",
       "properties": { "displayName": { "type": ["string", "null"] } }
     },
+    "sheetScope": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Sheets to interpret when POST /interpret gives no explicit list. Names absent from the uploaded workbook are ignored; an empty list (or no match) means every sheet."
+    },
     "sheetRoleOverrides": {
       "type": "object",
       "description": "sheet name -> input | transformation | calculation | reference | output",

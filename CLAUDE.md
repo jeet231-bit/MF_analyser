@@ -1,6 +1,6 @@
 # mf-analyser — standing context for every session
 
-Internal "Excel-driven research analytics platform". Monorepo: `backend/` (Python 3.12, FastAPI, Pydantic v2, uv) and `frontend/` (React 18, TypeScript, Vite, Tailwind, Recharts). The build proceeds in numbered phases 0–9, specified with acceptance criteria in `docs/BUILD_KIT.md`; one phase per session, one commit per phase. Phase 0 is done. Use plan mode for Phases 2, 3 and 7.
+Internal "Excel-driven research analytics platform". Monorepo: `backend/` (Python 3.12, FastAPI, Pydantic v2, uv) and `frontend/` (React 18, TypeScript, Vite, Tailwind, Recharts). The build proceeds in numbered phases 0–9, specified with acceptance criteria in `docs/BUILD_KIT.md`; one phase per session, one commit per phase. Phases 0, 1 and 2 are done. Agreed order from here: **6 (shell + design system + overview page only) → 3 → 4 → 5 → 7 → 8 → 9**. Use plan mode for Phases 3 and 7. Phase 3 must evaluate template-by-template over ranges (vectorised where possible), never cell by cell.
 
 ## Standing rules
 
@@ -40,8 +40,23 @@ The real master workbook (in `samples/`, git-ignored) has 39 sheets, ~1.57 milli
 - Cells live in a columnar `CellColumns` (parallel lists), never one object per cell. Sheets are persisted one at a time as gzipped JSON blobs (`raw_sheets` table) so peak memory is one sheet.
 - Dates are stored as Excel serial numbers with `value_type="date"`; the number format says how to display them.
 - The function inventory strips string literals and `_xlfn.` prefixes; it is the contract for engine coverage. Real workbook inventory: IF, VLOOKUP, HLOOKUP, COUNTIFS, IFERROR, AND, OR, SEARCH, ISNUMBER, CONCATENATE, COUNTIF, SUMPRODUCT, SUMIF, COUNT, AVERAGEIF, LEFT, DATE, YEAR, MONTH, DAY.
-- Phase 2 must not build 794k independent ASTs naively: parse each distinct formula text once (cache by text) and prefer R1C1-normalised patterns so a column of copied formulas shares one AST and one dependency template. Phase 3 needs the same reuse for evaluation.
 - Pivot tables are not recalculated; their cached outputs are treated as constants (inputs). Flagged in `RawWorkbook.warnings`.
+
+## Logic model design (Phase 2, binding for every later phase)
+
+- **Templates, not per-cell ASTs.** Every formula is normalised to R1C1 relative to its cell (`app/model/templates.py`: fast regex key, then one parse per group, merged by canonical AST text). The real workbook's 793,919 formulas collapse to 282 templates; the 10 in-scope sheets hold 145. A template count in the tens of thousands means a normalisation bug.
+- **Own formula grammar** in `app/model/formula/` (tokenizer + Pratt parser → Pydantic AST with `Axis(abs, v)` references). The `formulas` library is not used for parsing; it remains available as a reference for function semantics.
+- **Blocks and a two-level graph.** A `FormulaBlock` is a maximal rectangle of one template; its read footprints are rectangles computed by rectangle arithmetic (`ref_footprint`). `InputBlock`s are rectangles of constants covered by footprints (numpy masks in `app/model/blocks.py`). The networkx graph lives at block level only; cell-level dependencies are derived lazily from a block's template (`cell_dependencies`, `cell_dependents` in `app/model/interpreter.py`). Never materialise a cell-level graph.
+- Array formulas evaluate at their anchor: footprints and lazy dependencies use the anchor cell, not the block.
+- A block whose footprint overlaps itself is `self_dependent` with an evaluation order (`top_to_bottom`, `left_to_right`, `row_major`) or flagged `cycle`. Cross-block cycles are reported as SCCs with readable `cycle_descriptions`; they are unsupported for evaluation in v1.
+- Known real-workbook finding: one reference-level circularity on the Bull-Bear Returns sheet (two scratch COUNTIF cells parked in rows 3–4, which every `HLOOKUP(…, $3:$4, …)` scans, while those cells count a column derived from the lookups). Excel has no iterative calculation enabled, so this is a genuine circular reference that Excel tolerates by warning. Phase 3 must either seed such SCCs from cached values and iterate to a fixed point, or the researcher moves the scratch cells out of the header rows in the master. Never special-case the cells.
+- **Scope is data.** `dashboard.config.json` `sheetScope` lists the sheets to interpret; `POST /interpret {sheets}` overrides it. Out-of-scope sheets referenced by in-scope formulas become `external` input blocks (declared inputs with cached values).
+- Sheet roles and block classification are heuristics with a precedence chain: heuristic → `dashboard.config.json` (`sheetRoleOverrides`, `outputSheets`) → user override (`PATCH /model/sheets/{name}`, persisted per version).
+- Business rules are extracted per template (`app/model/rules.py`): condition bands from IF/IFS ladders, thresholds against literals or absolute labelled cells, lookups with small fixed tables materialised, IFERROR fallbacks.
+
+## Engine function contract (Phase 3)
+
+The real workbook's in-scope formulas use exactly these Excel functions (Phase 1 inventory, counts are formulas using the function): IF 417,915 · VLOOKUP 396,052 · HLOOKUP 329,221 · IFERROR 214,758 · COUNTIFS 196,613 · AND 116,504 · OR 78,867 · CONCATENATE 57,785 · COUNTIF 26,715 · SUMPRODUCT 25,945 · SEARCH 23,612 · ISNUMBER 23,560 · SUMIF 16,231 · COUNT 3,250 · AVERAGEIF 280 · LEFT 52 · DATE 2 · DAY 2 · MONTH 2 · YEAR 2. The engine must implement all twenty with Excel semantics and raise `UnsupportedFunctionError` for anything else.
 
 ## Environment notes (this machine)
 

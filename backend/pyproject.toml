@@ -14,6 +14,8 @@ dependencies = [
     "xlsxwriter>=3.2",
     "networkx>=3.3",
     "formulas>=1.2",
+    "numpy>=2.5.3",
+    "psutil>=7.2.2",
 ]
 
 [project.optional-dependencies]

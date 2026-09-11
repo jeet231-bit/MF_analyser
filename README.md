@@ -70,18 +70,23 @@ cd backend && uv run pytest -m real -s
 | GET | `/api/workbooks` | List versions |
 | GET | `/api/workbooks/{id}` | One version with its summary |
 | GET | `/api/workbooks/{id}/raw?sheet=` | The RawWorkbook extraction (all sheets, or one) |
+| POST | `/api/workbooks/{id}/interpret` | Build the logic model (`{"sheets": [...]}` or the config `sheetScope`) |
+| GET | `/api/workbooks/{id}/model?sheet=&include=ast` | Templates, blocks, sheet roles, edges, execution order |
+| GET | `/api/workbooks/{id}/graph?level=sheet\|block\|cell&cell=Sheet!A1&depth=` | Dependency graph at the chosen level |
+| GET | `/api/workbooks/{id}/rules?sheet=&kind=` | Extracted business rules |
+| PATCH | `/api/workbooks/{id}/model/sheets/{name}` | Override a sheet's role with a reason |
 
 Interactive docs: http://127.0.0.1:8000/api/docs
 
 ## Build phases
 
-The system is built one phase per session; each phase is committed separately and ends by running its tests and demonstrating its acceptance criteria. The full specification and per-phase prompts are in [docs/BUILD_KIT.md](docs/BUILD_KIT.md); the research methodology the workbook implements is in `docs/Mutual Fund Analytics/`.
+The system is built one phase per session; each phase is committed separately and ends by running its tests and demonstrating its acceptance criteria. After the Phase 1 scale findings the order was amended to 0 → 1 → 2 → 6 (shell and overview only) → 3 → 4 → 5 → 7 → 8 → 9. The full specification and per-phase prompts are in [docs/BUILD_KIT.md](docs/BUILD_KIT.md); the research methodology the workbook implements is in `docs/Mutual Fund Analytics/`.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 0 | Scaffold, tooling, CLAUDE.md, health-check loop | done |
 | 1 | Excel ingestion → RawWorkbook (formulas + cached values, function inventory) | done |
-| 2 | Logic interpretation: ASTs, dependency DAG, cell/sheet classification, business rules | |
+| 2 | Logic interpretation: formula templates, block-level dependency DAG, classification, business rules | done |
 | 3 | Analytical engine: full and incremental runs, lineage | |
 | 4 | Validation and reconciliation; activation gate | |
 | 5 | Versioning and logic diff with impact analysis | |
