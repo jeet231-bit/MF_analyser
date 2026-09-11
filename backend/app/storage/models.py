@@ -129,6 +129,24 @@ class Run(Base):
     )
 
 
+class ExportJob(Base):
+    """A background export: running -> ok (file on disk) | failed (error)."""
+
+    __tablename__ = "export_jobs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(32), index=True)
+    format: Mapped[str] = mapped_column(String(8), nullable=False)
+    params_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="running")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    filename: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ValidationRow(Base):
     """A ValidationReport for one version (gzipped JSON); the latest one gates activation."""
 

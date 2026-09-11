@@ -1,6 +1,14 @@
 # mf-analyser — standing context for every session
 
-Internal "Excel-driven research analytics platform". Monorepo: `backend/` (Python 3.12, FastAPI, Pydantic v2, uv) and `frontend/` (React 18, TypeScript, Vite, Tailwind, Recharts). The build proceeds in numbered phases 0–9, specified with acceptance criteria in `docs/BUILD_KIT.md`; one phase per session, one commit per phase. Phases 0–7 are done (Phase 7 = Stage A scope extension to the Report layer, Stage B Inputs / Calculations / Outputs modules). Agreed order from here: **8 → 9**.
+Internal "Excel-driven research analytics platform". Monorepo: `backend/` (Python 3.12, FastAPI, Pydantic v2, uv) and `frontend/` (React 18, TypeScript, Vite, Tailwind, Recharts). The build proceeds in numbered phases 0–9, specified with acceptance criteria in `docs/BUILD_KIT.md`; one phase per session, one commit per phase. Phases 0–8 are done. Next: **Phase 9** (hardening, real-workbook QA, runbook).
+
+## Exports design (Phase 8, binding)
+
+- Every export is built from an `ExportView` (`app/exports/descriptor.py`: title, columns with label / format / kind, row labels, rows, per-cell types and Excel number formats, optional deltas, provenance). `sheet_view` produces one from a run and a sheet (whole sheet in place, a window, or the formulas tab-set); `diff_view` produces one from a DiffReport. Writers (`xlsx.py`, `csv_export.py`, `report.py`) never touch sheets or the model directly, so a new view exports through the same path.
+- xlsx: openpyxl write-only; a Cover sheet from `Provenance.lines()`, then one sheet per view. In-place views pad to the original row/column so addresses match the source; numbers keep their number formats; errors are written as Excel error cells. openpyxl writes 16 significant digits, so the round-trip test compares at 15 (the platform's comparison rule). Default scope = the output sheets; `scope=all` (or > 250k projected cells, or `background=true`) becomes an `ExportJob` (thread, poll `GET /api/exports/{id}`, then `/file`), files under `data/exports/`.
+- csv: exactly one grid window, header row of labels, values typed as Excel would show them.
+- PDF: `report.py` builds HTML from the outputs summary and sheet views (headline tiles with deltas, an inline-SVG chart when a series exists, a category-level summary grouped by the text column with the fewest distinct values, a top-N table by the first numeric output column, largest moves under a what-if, rules per kind, the changelog), then WeasyPrint renders it. Never a data dump. WeasyPrint is the `pdf` extra and needs GTK on Windows; without it the endpoint answers 501 and `/report.html` serves the same report.
+- Frontend: `components/ExportMenu` + `api/exports.ts` (`downloadExport` handles 200 downloads and 202 job polling). Outputs, Calculations and Versions each mount it with view-specific items; CSV items always describe the window on screen.
 
 ## Dashboard views design (Phase 7B, binding)
 

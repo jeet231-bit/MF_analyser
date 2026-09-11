@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api import config, diffs, health, models, runs, validation, views, workbooks
+from app.api import config, diffs, exports, health, models, runs, validation, views, workbooks
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
@@ -11,3 +11,4 @@ api_router.include_router(runs.router, tags=["engine"])
 api_router.include_router(validation.router, tags=["validation"])
 api_router.include_router(diffs.router, tags=["versions"])
 api_router.include_router(views.router, tags=["dashboard views"])
+api_router.include_router(exports.router, tags=["exports"])

@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { runExportUrl } from "@/api/exports";
 import { getGrid } from "@/api/runs";
 import { getOutputs, type OutputSheet } from "@/api/views";
 import type { WorkbookVersion } from "@/api/workbooks";
-import { Button, Card, EmptyState, GridTable, Pill, SeriesChart, StatTile } from "@/components";
+import { Button, Card, EmptyState, ExportMenu, GridTable, Pill, SeriesChart, StatTile } from "@/components";
 import { formatCell, formatCount, formatDelta } from "@/lib/format";
 import { useFormat } from "@/lib/FormatContext";
 import { useAsync } from "@/lib/useAsync";
@@ -56,7 +57,8 @@ export function OutputsPage({ version, session, runId }: OutputsPageProps) {
 
   return (
     <div className="space-y-4 pb-16">
-      <header>
+      <header className="flex flex-wrap items-start justify-between gap-2">
+        <div>
         <h1 className="font-heading text-xl font-semibold text-ink">Outputs</h1>
         <p className="text-sm text-muted">
           {whatIf ? (
@@ -68,6 +70,15 @@ export function OutputsPage({ version, session, runId }: OutputsPageProps) {
             <>Baseline results of the active version. Change an input and run the analysis to see deltas here.</>
           )}
         </p>
+        </div>
+        <ExportMenu
+          items={[
+            { label: "Excel — output sheets", hint: "Cover sheet + every output sheet, values in place", url: runExportUrl(runId, "xlsx") },
+            { label: "Excel — all sheets", hint: "Every in-scope sheet; runs in the background", url: runExportUrl(runId, "xlsx", { scope: "all" }) },
+            { label: "Excel — all sheets with formulas", hint: "Adds a formulas tab-set for audit", url: runExportUrl(runId, "xlsx", { scope: "all", formulas: true }) },
+            { label: "PDF report", hint: "Cover, metrics, summaries, rules, changelog", url: runExportUrl(runId, "pdf") },
+          ]}
+        />
       </header>
       {data.sheets.length === 0 && <EmptyState title="No output sheets" description="Mark a sheet as output on the overview, or list it in dashboard.config.json." />}
       {data.sheets.map((sheet) => (
@@ -143,12 +154,27 @@ function OutputSection({
         <Card
           title="Results"
           action={
-            whatIf ? (
-              <label className="flex items-center gap-1 text-xs text-muted">
-                <input type="checkbox" checked={changedOnly} onChange={(e) => setChangedOnly(e.target.checked)} />
-                changed rows only
-              </label>
-            ) : undefined
+            <span className="flex items-center gap-3">
+              {whatIf && (
+                <label className="flex items-center gap-1 text-xs text-muted">
+                  <input type="checkbox" checked={changedOnly} onChange={(e) => setChangedOnly(e.target.checked)} />
+                  changed rows only
+                </label>
+              )}
+              {grid.data && (
+                <ExportMenu
+                  label="Export table"
+                  items={[
+                    {
+                      label: "CSV — this window",
+                      hint: `rows ${grid.data.r1}–${grid.data.r2}, as shown`,
+                      url: runExportUrl(runId, "csv", { sheet: sheet.sheet, window: windowA1(grid.data) }),
+                    },
+                    { label: "Excel — this sheet", hint: "Whole sheet, values in place", url: runExportUrl(runId, "xlsx", { scope: "sheet", sheet: sheet.sheet }) },
+                  ]}
+                />
+              )}
+            </span>
           }
         >
           {grid.status === "error" ? (
@@ -173,4 +199,10 @@ function OutputSection({
       )}
     </section>
   );
+}
+
+function windowA1(g: { r1: number; r2: number; c1: number; c2: number; columns: { letter: string }[] }): string {
+  const first = g.columns[0]?.letter ?? "A";
+  const last = g.columns[g.columns.length - 1]?.letter ?? first;
+  return `${first}${g.r1}:${last}${g.r2}`;
 }

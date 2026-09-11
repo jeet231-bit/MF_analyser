@@ -2,6 +2,7 @@ export { Button } from "./Button";
 export { Card } from "./Card";
 export { DataTable, type Column } from "./DataTable";
 export { EmptyState } from "./EmptyState";
+export { ExportMenu, type ExportItem } from "./ExportMenu";
 export { GridTable } from "./GridTable";
 export { JobChip } from "./JobChip";
 export { SeriesChart } from "./SeriesChart";

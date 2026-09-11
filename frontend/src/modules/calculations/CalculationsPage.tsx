@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { runExportUrl } from "@/api/exports";
 import { getGrid } from "@/api/runs";
 import type { LogicModel, WorkbookVersion } from "@/api/workbooks";
-import { Button, Card, EmptyState, GridTable, Pill, Select } from "@/components";
+import { Button, Card, EmptyState, ExportMenu, GridTable, Pill, Select } from "@/components";
 import { formatCount } from "@/lib/format";
 import { useFormat } from "@/lib/FormatContext";
 import { useAsync } from "@/lib/useAsync";
@@ -81,6 +82,24 @@ export function CalculationsPage({ version, model, sheets, title, session, runId
               changed rows only
             </label>
           )}
+          <ExportMenu
+            items={[
+              ...(grid.data
+                ? [
+                    {
+                      label: "CSV — this window",
+                      hint: `${current} rows ${grid.data.r1}–${grid.data.r2}, as shown`,
+                      url: runExportUrl(runId, "csv", {
+                        sheet: current,
+                        window: `${grid.data.columns[0]?.letter ?? "A"}${grid.data.r1}:${grid.data.columns[grid.data.columns.length - 1]?.letter ?? "A"}${grid.data.r2}`,
+                      }),
+                    },
+                  ]
+                : []),
+              { label: "Excel — this sheet", hint: "Whole sheet, values in place", url: runExportUrl(runId, "xlsx", { scope: "sheet", sheet: current }) },
+              { label: "Excel — all sheets", hint: "Every in-scope sheet; runs in the background", url: runExportUrl(runId, "xlsx", { scope: "all" }) },
+            ]}
+          />
         </div>
       </header>
       <Card

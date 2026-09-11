@@ -89,6 +89,10 @@ cd backend && uv run pytest -m real -s
 | GET | `/api/workbooks/{id}/outputs?run_id=` | Output sheets in display order: headline metrics with deltas vs the baseline, business rules, a series descriptor when the sheet is a dated time series |
 | POST | `/api/workbooks/{id}/runs` with `background: true` | 202: the run executes on a worker thread; poll `GET /api/runs/{run_id}` until `status` is `ok` or `failed` |
 | GET | `/api/workbooks/{id}/lineage/{Sheet!A1}?explanation=` | Lineage now carries `explanation` (which IF / IFERROR branches fired, with the compared values) and `rule` (the template's business rule) |
+| GET | `/api/runs/{run_id}/export?format=xlsx\|csv\|pdf&scope=outputs\|all\|sheet&sheet=&window=&formulas=&background=` | Download a run's results: xlsx with a cover sheet and values in place (output sheets by default; `scope=all` and large exports become 202 jobs), csv of exactly one grid window, the PDF analysis report |
+| GET | `/api/runs/{run_id}/report.html` | The analysis report as HTML (what the PDF renders) |
+| GET | `/api/exports/{job_id}`, `/api/exports/{job_id}/file` | Poll a background export, then download its file |
+| GET | `/api/workbooks/{a}/diff/{b}/export?format=csv\|xlsx` | The version changelog as a table |
 
 Interactive docs: http://127.0.0.1:8000/api/docs
 
@@ -106,7 +110,7 @@ The system is built one phase per session; each phase is committed separately an
 | 5 | Versioning, upload pipeline, logic diff (data / logic / structural) with impact, Versions module | done |
 | 6 | Dashboard shell, design system, overview page (pulled forward; module views wait for the engine) | done |
 | 7 | Stage A: scope extension to the Report layer (upstream-closed, 15 sheets). Stage B: Inputs, Calculations, Outputs modules with what-if runs and lineage | done |
-| 8 | Exports: xlsx, csv, pdf | |
+| 8 | Exports: xlsx (in place, cover sheet, background jobs), csv (grid windows), PDF analysis report, changelog export, one Export menu | done |
 | 9 | Hardening and real-workbook QA; runbook | |
 
 ## Runbook: a new master version
@@ -124,6 +128,12 @@ The system is built one phase per session; each phase is committed separately an
 3. Open **Outputs**. The Report layer comes first: headline metrics as tiles with signed deltas against the baseline, then the ranked table (tick "changed rows only" to see what moved), then the rules that produced the classifications. **Calculations** shows every intermediate sheet the same way.
 4. Click any computed cell to open **explain this number**: the formula at that cell, which IF / IFERROR branches fired with the compared values, the business rule, and every value it consumed. Consumed formula cells open in place; the trail leads back.
 5. "Back to baseline" in the bar drops the what-if; nothing is written to the workbook.
+
+## Exports
+
+The **Export** menu on Outputs, Calculations and Versions offers, per view: Excel of the output sheets (cover sheet with version, run, overrides and validation status; computed values in place at their original addresses with the original number formats; errors as Excel errors), Excel of every in-scope sheet (runs as a background job; optionally with a formulas tab-set for audit), CSV of exactly the grid window on screen, the PDF analysis report, and the version changelog as CSV or Excel. Every export is built from one view descriptor (rows, columns, labels, title, provenance), so a new kind of view exports through the same writers.
+
+PDF rendering needs WeasyPrint: `cd backend && uv sync --extra pdf`. On Windows WeasyPrint also needs the GTK runtime (Pango, GObject); without it the PDF export answers 501 and the same report is available as HTML at `/api/runs/{run_id}/report.html`.
 
 Keep the master free of circular references: the analyser reports a cycle readably and refuses to evaluate it rather than iterating around it. After fixing formulas in the master, force a full recalculation in Excel (Ctrl+Alt+F9) before saving the copy, so the cached values the validator compares against are current.
 

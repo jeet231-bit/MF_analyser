@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { diffExportUrl } from "@/api/exports";
 import { getDiff } from "@/api/versions";
 import type { WorkbookVersion } from "@/api/workbooks";
-import { Button, Card, DataTable, EmptyState, Pill, Select, type Column, type PillTone } from "@/components";
+import { Button, Card, DataTable, EmptyState, ExportMenu, Pill, Select, type Column, type PillTone } from "@/components";
 import { formatBytes, formatTimestamp } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
 import { validationPill } from "@/modules/shell/navigation";
@@ -118,6 +119,14 @@ export function VersionsPage({ versions, selectedId, onBusy, onVersionsChanged }
                 </option>
               ))}
             </Select>
+            {base && target && base !== target && (
+              <ExportMenu
+                items={[
+                  { label: "CSV changelog", hint: "One row per change", url: diffExportUrl(base, target, "csv") },
+                  { label: "Excel changelog", hint: "Cover sheet + changes", url: diffExportUrl(base, target, "xlsx") },
+                ]}
+              />
+            )}
           </div>
         }
       >
