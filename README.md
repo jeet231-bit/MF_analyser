@@ -84,6 +84,11 @@ cd backend && uv run pytest -m real -s
 | GET | `/api/workbooks/{id}/validation` | Latest validation report |
 | POST | `/api/workbooks/{id}/activate` | Activate the version (or roll back to it); a failed validation needs `{"override_reason": "..."}` |
 | GET | `/api/workbooks/{a}/diff/{b}?refresh=` | Logic diff from version a to b: LOGIC (itemised, with affected outputs), DATA (counts), STRUCTURAL |
+| GET | `/api/runs/{run_id}/grid?sheet=&r1=&r2=&c1=&c2=` | A window of a sheet as the run computed it: labelled columns and rows, formula / override / baseline-delta markers (≤ 200 × 120 cells) |
+| GET | `/api/workbooks/{id}/inputs?run_id=` | Input blocks grouped by sheet; small blocks carry labelled, typed cells (the what-if levers), tables page through `/grid` |
+| GET | `/api/workbooks/{id}/outputs?run_id=` | Output sheets in display order: headline metrics with deltas vs the baseline, business rules, a series descriptor when the sheet is a dated time series |
+| POST | `/api/workbooks/{id}/runs` with `background: true` | 202: the run executes on a worker thread; poll `GET /api/runs/{run_id}` until `status` is `ok` or `failed` |
+| GET | `/api/workbooks/{id}/lineage/{Sheet!A1}?explanation=` | Lineage now carries `explanation` (which IF / IFERROR branches fired, with the compared values) and `rule` (the template's business rule) |
 
 Interactive docs: http://127.0.0.1:8000/api/docs
 
@@ -100,7 +105,7 @@ The system is built one phase per session; each phase is committed separately an
 | 4 | Validation and reconciliation, structural anomaly report, activation gate, Validation module | done |
 | 5 | Versioning, upload pipeline, logic diff (data / logic / structural) with impact, Versions module | done |
 | 6 | Dashboard shell, design system, overview page (pulled forward; module views wait for the engine) | done |
-| 7 | Stage A: scope extension to the Report layer (upstream-closed, 15 sheets). Stage B: Inputs, Calculations, Outputs modules | A done |
+| 7 | Stage A: scope extension to the Report layer (upstream-closed, 15 sheets). Stage B: Inputs, Calculations, Outputs modules with what-if runs and lineage | done |
 | 8 | Exports: xlsx, csv, pdf | |
 | 9 | Hardening and real-workbook QA; runbook | |
 
@@ -111,6 +116,14 @@ The system is built one phase per session; each phase is committed separately an
 3. Upload it (the dashboard's upload control, or `POST /api/workbooks`). The upload pipeline parses the file, interprets it, validates it, and diffs it against the currently active version; the new version lands as **pending review**.
 4. Open the Versions module. Read the changelog: logic changes first (each with the outputs it affects), then data changes as counts, then structural changes including new or resolved anomalies. Open the Validation module for the mismatch table and anomaly detail; fix real defects in the master and re-upload rather than accepting them.
 5. Activate the version. A failed validation can only be activated with a written override reason, which is stored with the version. Rolling back is activating an older version.
+
+## Runbook: a what-if
+
+1. Open **Inputs**. Sheets with parameter blocks (weights, dates, thresholds) come first; tables page through the grid and any input cell can be edited in place. Every edit lands in the draft bar at the bottom: "n changes · Run analysis / Reset".
+2. **Run analysis.** Incremental runs are synchronous (typically 1–5 s on the master; a change to the master table's key column is closer to a full run). The quiet top bar shows progress. A full recalculation from the UI runs in the background with a status chip.
+3. Open **Outputs**. The Report layer comes first: headline metrics as tiles with signed deltas against the baseline, then the ranked table (tick "changed rows only" to see what moved), then the rules that produced the classifications. **Calculations** shows every intermediate sheet the same way.
+4. Click any computed cell to open **explain this number**: the formula at that cell, which IF / IFERROR branches fired with the compared values, the business rule, and every value it consumed. Consumed formula cells open in place; the trail leads back.
+5. "Back to baseline" in the bar drops the what-if; nothing is written to the workbook.
 
 Keep the master free of circular references: the analyser reports a cycle readably and refuses to evaluate it rather than iterating around it. After fixing formulas in the master, force a full recalculation in Excel (Ctrl+Alt+F9) before saving the copy, so the cached values the validator compares against are current.
 

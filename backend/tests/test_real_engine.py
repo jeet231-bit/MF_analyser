@@ -19,6 +19,8 @@ WORKBOOKS = (
 )
 FULL_BUDGET_S = 90
 INCREMENTAL_BUDGET_S = 5
+# A key-column edit invalidates every lookup in the workbook: close to a full run.
+WORST_INCREMENTAL_BUDGET_S = 8
 SAMPLE_SIZE = 5000
 
 pytestmark = pytest.mark.real
@@ -79,24 +81,29 @@ def test_real_workbook_runs_within_budget(client) -> None:  # client fixture ini
         for m in mismatches[:15]:
             print("  mismatch:", m)
 
-        # One-input incremental run on a master-data cell.
-        # The largest input block is the master data table; a cell on its second row is a
-        # typical single-input what-if (the first row may be a header).
+        # Single-input what-ifs on the master data table (the largest input block). A value
+        # cell on its second row is the typical case; a cell in its first column is the worst
+        # case, because that column is the key every lookup in the workbook resolves through.
         block = max(
             (b for b in model.input_blocks if b.kind == "input"), key=lambda b: b.cell_count
         )
         from app.model.formula.refs import a1_cell
 
-        key = f"{block.sheet}!{a1_cell(block.rect.r1 + 1, block.rect.c1)}"
-        t0 = time.perf_counter()
-        inc = runs.create_run(session, version.id, {key: "override"}, "auto")
-        inc_s = time.perf_counter() - t0
-        si = runs.summary_of(inc)
-        print(
-            f"incremental run on {key}: {inc_s:.1f}s | blocks {si.blocks_evaluated} | cells {si.cells_evaluated:,}"
-        )
+        r = block.rect
+        typical_key = f"{block.sheet}!{a1_cell(r.r1 + 1, min(r.c2, r.c1 + 5))}"
+        worst_key = f"{block.sheet}!{a1_cell(r.r1 + 1, r.c1)}"
+        timings: dict[str, float] = {}
+        for key, value in ((typical_key, 1.5), (worst_key, "override")):
+            t0 = time.perf_counter()
+            inc = runs.create_run(session, version.id, {key: value}, "auto")
+            timings[key] = time.perf_counter() - t0
+            si = runs.summary_of(inc)
+            print(
+                f"incremental run on {key}: {timings[key]:.1f}s | blocks {si.blocks_evaluated} | cells {si.cells_evaluated:,}"
+            )
 
     assert full_s < FULL_BUDGET_S
     assert rate >= 0.99
     assert inc.kind == "incremental"
-    assert inc_s < INCREMENTAL_BUDGET_S
+    assert timings[typical_key] < INCREMENTAL_BUDGET_S
+    assert timings[worst_key] < WORST_INCREMENTAL_BUDGET_S

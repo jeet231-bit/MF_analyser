@@ -116,8 +116,11 @@ class Run(Base):
     kind: Mapped[str] = mapped_column(String(16), nullable=False)  # full | incremental
     parent_run_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     overrides_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="ok")
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="ok"
+    )  # running | ok | failed
     summary_json: Mapped[str] = mapped_column(Text, nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     version: Mapped[WorkbookVersion] = relationship(back_populates="runs")

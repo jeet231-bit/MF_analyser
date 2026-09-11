@@ -216,6 +216,36 @@ class Engine:
         formula_ids = {b.id for b in self.model.formula_blocks}
         return [b for b in self.model.execution_order if b in targets and b in formula_ids]
 
+    # ---- single-cell explanation ----------------------------------------------------------
+    def evaluate_cell(
+        self, sheet: str, row: int, col: int, state: tuple[dict[str, Grid], StringTable]
+    ) -> tuple[Any, list[dict]] | None:
+        """Re-evaluate one formula cell over a run's final grids with IF / IFERROR tracing.
+
+        Nothing is written back: the grids already hold the value, this only records which
+        branches the formula took. Array-formula cells are not explained (None)."""
+        block = self.model.block_at(sheet, row, col)
+        if not isinstance(block, FormulaBlock):
+            return None
+        tpl = self.model.template(block.template_id)
+        if tpl.ast is None or tpl.array_ref:
+            return None
+        grids, table = state
+        if sheet not in grids:
+            return None
+        ctx = BlockContext(
+            sheet=sheet,
+            rect=Rect.cell(row, col),
+            grids=grids,
+            table=table,
+            indexes=IndexCache(),
+            names=self.names,
+        )
+        ctx.trace = []
+        out = ctx.value(tpl.ast).materialise((1, 1))
+        v = out.to_python(table)[0, 0]
+        return (v.item() if hasattr(v, "item") else v), ctx.trace
+
     # ---- runs -------------------------------------------------------------------------------
     def run(
         self,

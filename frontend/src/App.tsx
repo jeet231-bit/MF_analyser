@@ -1,14 +1,22 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getConfig } from "@/api/config";
 import { getModel } from "@/api/model";
+import { listRuns } from "@/api/runs";
 import { anomalyTotal, getValidation } from "@/api/validation";
 import { listWorkbooks } from "@/api/workbooks";
-import { Button, EmptyState, ProgressBar } from "@/components";
+import { Button, EmptyState, JobChip, ProgressBar } from "@/components";
+import { DEFAULT_FORMAT } from "@/lib/format";
+import { FormatContext } from "@/lib/FormatContext";
 import { useAsync } from "@/lib/useAsync";
+import { CalculationsPage } from "@/modules/calculations/CalculationsPage";
+import { InputsPage } from "@/modules/inputs/InputsPage";
+import { OutputsPage } from "@/modules/outputs/OutputsPage";
 import { OverviewPage } from "@/modules/overview/OverviewPage";
 import { UploadPanel } from "@/modules/overview/UploadPanel";
+import { OverridesBar } from "@/modules/runs/OverridesBar";
+import { useRunSession } from "@/modules/runs/useRunSession";
 import { AppShell } from "@/modules/shell/AppShell";
-import type { PageId } from "@/modules/shell/navigation";
+import { moduleSheets, type PageId } from "@/modules/shell/navigation";
 import { Sidebar } from "@/modules/shell/Sidebar";
 import { ValidationPage } from "@/modules/validation/ValidationPage";
 import { VersionsPage } from "@/modules/versions/VersionsPage";
@@ -34,14 +42,30 @@ export default function App() {
     () => (effectiveId ? getValidation(effectiveId) : Promise.reject(new Error("no version"))),
     [effectiveId],
   );
+  const runs = useAsync(
+    () => (effectiveId ? listRuns(effectiveId) : Promise.reject(new Error("no version"))),
+    [effectiveId],
+  );
 
   useEffect(() => {
     document.title = config.data?.display_name ? `${config.data.display_name} · MF Analyser` : "MF Analyser";
   }, [config.data?.display_name]);
 
-  const onBusy = (active: boolean, label?: string) => setBusy({ active, label });
+  const onBusy = useCallback((active: boolean, label?: string) => setBusy({ active, label }), []);
+  const session = useRunSession(effectiveId, onBusy, runs.reload);
+  const baselineId = useMemo(
+    () => runs.data?.find((r) => r.kind === "full" && r.status === "ok" && Object.keys(r.overrides).length === 0)?.id ?? null,
+    [runs.data],
+  );
+  const runId = session.activeRun?.id ?? baselineId;
+  const formatSettings = useMemo(
+    () =>
+      config.data ? { grouping: config.data.number_grouping, decimals: config.data.number_decimals } : DEFAULT_FORMAT,
+    [config.data],
+  );
   const displayName = config.data?.display_name ?? null;
   const validationReport = validation.status === "ready" ? validation.data : null;
+  const readyModel = model.status === "ready" ? model.data : null;
 
   const sidebar = (
     <div className="flex h-full flex-col">
@@ -122,8 +146,26 @@ export default function App() {
         onVersionChanged={() => {
           versions.reload();
           validation.reload();
+          runs.reload();
         }}
       />
+    );
+  } else if (page === "inputs") {
+    content = <InputsPage version={version} session={session} runId={runId} />;
+  } else if (page === "outputs") {
+    content = <OutputsPage version={version} session={session} runId={runId} />;
+  } else if (page === "calculations" || page === "analysis") {
+    content = readyModel ? (
+      <CalculationsPage
+        version={version}
+        model={readyModel}
+        sheets={moduleSheets(readyModel, page)}
+        title={page === "analysis" ? "Analysis" : "Calculations"}
+        session={session}
+        runId={runId}
+      />
+    ) : (
+      <EmptyState title="Loading the logic model" />
     );
   } else {
     content = (
@@ -138,9 +180,17 @@ export default function App() {
   }
 
   return (
-    <>
+    <FormatContext.Provider value={formatSettings}>
       <ProgressBar active={busy.active} label={busy.label} />
-      <AppShell sidebar={sidebar}>{content}</AppShell>
-    </>
+      <AppShell sidebar={sidebar}>
+        {session.job && (
+          <div className="mb-3">
+            <JobChip job={session.job} onDismiss={session.dismissJob} />
+          </div>
+        )}
+        {content}
+      </AppShell>
+      {version && <OverridesBar session={session} />}
+    </FormatContext.Provider>
   );
 }

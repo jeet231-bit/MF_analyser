@@ -13,8 +13,48 @@ from app.model.interpreter import cell_dependencies
 from app.model.schema import FormulaBlock, InputBlock, WorkbookLogicModel
 
 ValueLookup = Callable[[str, int, int], tuple[Any, str]]  # (sheet, row, col) -> (value, type)
+Explainer = Callable[[str, int, int], "tuple[Any, list[dict]] | None"]
 INLINE_LIMIT = 50
 SAMPLE = 8
+
+
+def _fmt(v: Any) -> str:
+    if v is None:
+        return "empty"
+    if isinstance(v, bool):
+        return "TRUE" if v else "FALSE"
+    if isinstance(v, float):
+        return f"{v:.15g}"
+    if isinstance(v, str):
+        return f'"{v}"'
+    return str(v)
+
+
+def narrate(trace: list[dict], result: Any) -> list[str]:
+    """Turn an IF / IFERROR trace into readable lines, innermost decision last."""
+    lines: list[str] = []
+    for entry in trace:
+        if entry.get("kind") == "if":
+            outcome = entry.get("result")
+            verdict = "TRUE" if outcome else ("FALSE" if outcome is False else "an error")
+            if "op" in entry:
+                lines.append(
+                    f"{entry['condition']}: {_fmt(entry.get('left'))} {entry['op']} "
+                    f"{_fmt(entry.get('right'))} is {verdict}"
+                )
+            else:
+                lines.append(f"{entry['condition']} is {verdict}")
+        elif entry.get("kind") == "iferror":
+            if entry.get("errored"):
+                lines.append(
+                    f"{entry['expression']} gave {entry.get('error')}; "
+                    f"fallback {_fmt(entry.get('fallback'))} used"
+                )
+            else:
+                lines.append(f"{entry['expression']} did not error")
+    if lines:
+        lines.append(f"Result: {_fmt(result)}")
+    return lines
 
 
 class LineageCell(BaseModel):
@@ -41,10 +81,24 @@ class LineageNode(BaseModel):
     value: Any = None
     type: str = "empty"
     reads: list[LineageRange] = Field(default_factory=list)
+    explanation: list[str] | None = Field(
+        default=None, description="Which IF / IFERROR branches the formula took, in words"
+    )
+    rule: str | None = Field(default=None, description="The business rule this template encodes")
 
 
 LineageRange.model_rebuild()
 LineageNode.model_rebuild()
+
+_RULE_PRIORITY = {"condition": 0, "threshold": 1, "lookup": 2, "error_fallback": 3}
+
+
+def rule_for(model: WorkbookLogicModel, template_id: int) -> str | None:
+    rules = sorted(
+        (r for r in model.rules if r.template_id == template_id),
+        key=lambda r: _RULE_PRIORITY.get(r.kind, 9),
+    )
+    return rules[0].description if rules else None
 
 
 def explain(
@@ -55,6 +109,7 @@ def explain(
     *,
     value_at: ValueLookup,
     depth: int = 1,
+    explainer: Explainer | None = None,
 ) -> LineageNode:
     block = model.block_at(sheet, row, col)
     value, vtype = value_at(sheet, row, col)
@@ -69,9 +124,14 @@ def explain(
             template_id=tpl.id,
             value=value,
             type=vtype,
+            rule=rule_for(model, tpl.id),
         )
+        if explainer is not None:
+            traced = explainer(sheet, row, col)
+            if traced is not None:
+                node.explanation = narrate(traced[1], traced[0]) or None
         for dep_sheet, rect in cell_dependencies(model, sheet, row, col):
-            node.reads.append(_range(model, dep_sheet, rect, value_at, depth))
+            node.reads.append(_range(model, dep_sheet, rect, value_at, depth, explainer))
         return node
     kind = (
         "input"
@@ -84,7 +144,12 @@ def explain(
 
 
 def _range(
-    model: WorkbookLogicModel, sheet: str, rect: Rect, value_at: ValueLookup, depth: int
+    model: WorkbookLogicModel,
+    sheet: str,
+    rect: Rect,
+    value_at: ValueLookup,
+    depth: int,
+    explainer: Explainer | None = None,
 ) -> LineageRange:
     out = LineageRange(sheet=sheet, range=rect.to_a1(), count=rect.cells)
     limit = INLINE_LIMIT if rect.cells <= INLINE_LIMIT else SAMPLE
@@ -104,5 +169,7 @@ def _range(
         and depth > 1
         and isinstance(model.block_at(sheet, rect.r1, rect.c1), FormulaBlock)
     ):
-        out.node = explain(model, sheet, rect.r1, rect.c1, value_at=value_at, depth=depth - 1)
+        out.node = explain(
+            model, sheet, rect.r1, rect.c1, value_at=value_at, depth=depth - 1, explainer=explainer
+        )
     return out

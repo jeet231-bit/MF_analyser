@@ -1,14 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { model, version } from "@/test/fixtures";
-import { buildNavigation, ENGINE_NOTE } from "./navigation";
+import { buildNavigation } from "./navigation";
 import { Sidebar } from "./Sidebar";
 
 describe("navigation", () => {
-  it("derives module entries from sheet roles; Overview, Versions and Validation are the live pages", () => {
+  it("derives module entries from sheet roles; every module is a live page", () => {
     const nav = buildNavigation(model, 3);
     expect(nav.map((n) => n.label)).toEqual(["Overview", "Inputs", "Calculations", "Outputs", "Versions", "Validation"]);
     expect(nav.find((n) => n.id === "inputs")?.sheets).toEqual(["Inputs", "Lookup"]);
-    expect(nav.filter((n) => n.enabled).map((n) => n.id)).toEqual(["overview", "versions", "validation"]);
+    expect(nav.filter((n) => n.enabled).map((n) => n.id)).toEqual(["overview", "inputs", "calculations", "outputs", "versions", "validation"]);
     expect(nav.find((n) => n.id === "validation")?.badge).toBe(3);
     expect(buildNavigation(null).map((n) => n.label)).toEqual(["Overview", "Versions", "Validation"]);
     expect(buildNavigation(null, 0).find((n) => n.id === "validation")?.badge).toBeUndefined();
@@ -37,14 +37,14 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> 
 }
 
 describe("Sidebar", () => {
-  it("renders the workbook name, version badge, disabled modules and a neutral validation pill", () => {
+  it("renders the workbook name, version badge, module entries and a neutral validation pill", () => {
     renderSidebar();
     expect(screen.getByText("Equity MF Analyser")).toBeInTheDocument();
     expect(screen.getByLabelText("Version")).toHaveValue(version.id);
     expect(screen.getByText("interpreted")).toBeInTheDocument();
     const outputs = screen.getByRole("button", { name: /Outputs/ });
-    expect(outputs).toBeDisabled();
-    expect(outputs).toHaveTextContent(ENGINE_NOTE);
+    expect(outputs).toBeEnabled();
+    expect(outputs).toHaveTextContent("2");
     expect(screen.getByRole("button", { name: /Overview/ })).toHaveAttribute("aria-current", "page");
     expect(screen.getByText("not yet validated")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Dark theme" })).toBeInTheDocument();

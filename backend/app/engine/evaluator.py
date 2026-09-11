@@ -78,6 +78,18 @@ class BlockContext:
         self.names = names
         self.shape = (rect.rows, rect.cols)
         self.current_function = ""
+        # When set (single-cell explanations only), IF / IFERROR append what they decided.
+        self.trace: list[dict] | None = None
+
+    def scalar(self, node: Node) -> object:
+        """Python value of a node at a 1x1 context (for traces); None when not scalar."""
+        if self.shape != (1, 1):
+            return None
+        out = self.value(node)
+        if out.shape not in ((1, 1), ()):
+            out = out.materialise((1, 1))
+        v = out.to_python(self.table)[0, 0]
+        return v.item() if hasattr(v, "item") else v
 
     # ---- helpers used by functions ---------------------------------------------------------
     def value(self, node: Node) -> Values:

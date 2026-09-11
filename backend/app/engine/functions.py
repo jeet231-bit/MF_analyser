@@ -493,6 +493,8 @@ def fn_average(ctx: BlockContext, args: list[Node]) -> Values:
 @register("IF")
 def fn_if(ctx: BlockContext, args: list[Node]) -> Values:
     cond = to_bool(ctx.value(args[0]), ctx.table)
+    if ctx.trace is not None and ctx.shape == (1, 1):
+        _trace_if(ctx, args[0], cond)
     then = ctx.value(args[1]) if len(args) > 1 else Values.boolean(True)
     other = ctx.value(args[2]) if len(args) > 2 else Values.boolean(False)
     out = select(cond.num != 0, then, other)
@@ -501,10 +503,39 @@ def fn_if(ctx: BlockContext, args: list[Node]) -> Values:
     )
 
 
+def _trace_if(ctx: BlockContext, cond_node: Node, cond: Values) -> None:
+    from app.model.formula.ast import Binary, a1_text
+
+    row, col = ctx.rect.r1, ctx.rect.c1
+    entry: dict = {
+        "kind": "if",
+        "condition": a1_text(cond_node, row, col),
+        "result": None if cond.kind[0, 0] == ERROR else bool(cond.num[0, 0] != 0),
+    }
+    if isinstance(cond_node, Binary) and cond_node.op in ("=", "<>", "<", "<=", ">", ">="):
+        entry["op"] = cond_node.op
+        entry["left"] = ctx.scalar(cond_node.left)
+        entry["right"] = ctx.scalar(cond_node.right)
+    ctx.trace.append(entry)  # type: ignore[union-attr]
+
+
 @register("IFERROR")
 def fn_iferror(ctx: BlockContext, args: list[Node]) -> Values:
     value = ctx.value(args[0])
     fallback = ctx.value(args[1]) if len(args) > 1 else Values.empty((1, 1))
+    if ctx.trace is not None and ctx.shape == (1, 1):
+        from app.model.formula.ast import a1_text
+
+        errored = bool(value.kind[0, 0] == ERROR)
+        ctx.trace.append(
+            {
+                "kind": "iferror",
+                "expression": a1_text(args[0], ctx.rect.r1, ctx.rect.c1),
+                "errored": errored,
+                "error": XlError(int(value.err[0, 0])).text if errored else None,
+                "fallback": ctx.scalar(args[1]) if errored and len(args) > 1 else None,
+            }
+        )
     return select(value.kind == ERROR, fallback, value)
 
 

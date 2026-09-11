@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,10 @@ class RunRequest(BaseModel):
         default_factory=dict, description="'Sheet!A1' or defined name -> value"
     )
     mode: Literal["auto", "full"] = "auto"
+    background: bool = Field(
+        default=False,
+        description="Return 202 at once and run on a worker thread; poll GET /runs/{id}",
+    )
 
 
 class RunOut(BaseModel):
@@ -35,7 +39,8 @@ class RunOut(BaseModel):
     kind: str
     parent_run_id: str | None
     overrides: dict[str, Any]
-    status: str
+    status: str  # running | ok | failed
+    error: str | None = None
     created_at: datetime
     summary: RunSummary
 
@@ -49,6 +54,7 @@ class RunOut(BaseModel):
             parent_run_id=row.parent_run_id,
             overrides=store.overrides_of(row),
             status=row.status,
+            error=row.error,
             created_at=created,
             summary=store.summary_of(row),
         )
@@ -72,11 +78,17 @@ def _version_or_404(session: Session, version_id: str) -> None:
 @router.post(
     "/workbooks/{version_id}/runs", response_model=RunOut, status_code=status.HTTP_201_CREATED
 )
-def create_run(version_id: str, session: SessionDep, body: RunRequest | None = None) -> RunOut:
+def create_run(
+    version_id: str, session: SessionDep, response: Response, body: RunRequest | None = None
+) -> RunOut:
     body = body or RunRequest()
     _version_or_404(session, version_id)
     try:
-        run = store.create_run(session, version_id, body.overrides, body.mode)
+        if body.background:
+            run = store.start_background_run(session, version_id, body.overrides, body.mode)
+            response.status_code = status.HTTP_202_ACCEPTED
+        else:
+            run = store.create_run(session, version_id, body.overrides, body.mode)
     except logic.ModelNotFoundError as exc:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, "No logic model for this version yet. POST /interpret first."
@@ -152,6 +164,9 @@ def get_lineage(
         str | None, Query(description="Run whose values to show; default: the baseline run")
     ] = None,
     depth: Annotated[int, Query(ge=1, le=6)] = 1,
+    explanation: Annotated[
+        bool, Query(description="Re-evaluate the cell with IF / IFERROR tracing")
+    ] = True,
 ) -> LineageNode:
     _version_or_404(session, version_id)
     try:
@@ -171,8 +186,24 @@ def get_lineage(
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     run = _run_or_404(session, run_id) if run_id else store.baseline_run(session, version_id)
-    if run is None:
+    if run is None or run.status != "ok":
         raise HTTPException(
-            status.HTTP_404_NOT_FOUND, "No run for this version yet. POST /runs first."
+            status.HTTP_404_NOT_FOUND, "No completed run for this version yet. POST /runs first."
         )
-    return explain(model, sheet, row, col, value_at=store.value_lookup(session, run), depth=depth)
+    explainer = None
+    if explanation:
+        engine, _model, _meta, _version = store.load_engine(session, version_id)
+        state = store.state_for(session, run)
+
+        def explainer(s: str, r: int, c: int):
+            return engine.evaluate_cell(s, r, c, state)
+
+    return explain(
+        model,
+        sheet,
+        row,
+        col,
+        value_at=store.value_lookup(session, run),
+        depth=depth,
+        explainer=explainer,
+    )

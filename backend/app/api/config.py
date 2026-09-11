@@ -11,6 +11,8 @@ router = APIRouter(prefix="/config")
 class DashboardConfigOut(BaseModel):
     display_name: str | None
     sheet_scope: list[str]
+    output_sheets: list[str]
+    label_overrides: dict[str, str]
     number_grouping: str
     number_decimals: int
 
@@ -21,6 +23,8 @@ def get_config() -> DashboardConfigOut:
     return DashboardConfigOut(
         display_name=cfg.workbook.display_name,
         sheet_scope=cfg.sheet_scope,
+        output_sheets=cfg.output_sheets,
+        label_overrides=cfg.label_overrides,
         number_grouping=cfg.number_format.grouping,
         number_decimals=cfg.number_format.decimals,
     )
