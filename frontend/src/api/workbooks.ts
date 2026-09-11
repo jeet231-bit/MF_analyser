@@ -24,6 +24,13 @@ export interface WorkbookVersion {
   size_bytes: number;
   parse_seconds: number | null;
   summary: WorkbookSummary | null;
+  activated_at?: string | null;
+  activation_reason?: string | null;
+  activation_override?: boolean;
+  validation_status?: "passed" | "passed_with_warnings" | "failed" | null;
+  diff_base_id?: string | null;
+  diff_headline?: string | null;
+  pipeline_notes?: string[];
 }
 
 export function listWorkbooks(): Promise<WorkbookVersion[]> {

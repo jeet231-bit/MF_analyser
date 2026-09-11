@@ -21,7 +21,7 @@ def uploaded(client: TestClient) -> dict:
 
 
 def test_upload_returns_version_and_summary(uploaded: dict) -> None:
-    assert uploaded["status"] == "uploaded"
+    assert uploaded["status"] == "pending_review"  # the upload pipeline interprets and validates
     assert uploaded["filename"] == "fixture.xlsx"
     assert uploaded["size_bytes"] > 0
     summary = uploaded["summary"]

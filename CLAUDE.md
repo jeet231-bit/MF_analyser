@@ -1,6 +1,12 @@
 # mf-analyser — standing context for every session
 
-Internal "Excel-driven research analytics platform". Monorepo: `backend/` (Python 3.12, FastAPI, Pydantic v2, uv) and `frontend/` (React 18, TypeScript, Vite, Tailwind, Recharts). The build proceeds in numbered phases 0–9, specified with acceptance criteria in `docs/BUILD_KIT.md`; one phase per session, one commit per phase. Phases 0, 1, 2, 6 (shell + design system + overview only), 3 and 4 are done. Agreed order from here: **5 → 7 → 8 → 9**. Use plan mode for Phase 7. The sheet scope is revisited before Phase 7 (the Report layer and calendar-year branch may join the scope).
+Internal "Excel-driven research analytics platform". Monorepo: `backend/` (Python 3.12, FastAPI, Pydantic v2, uv) and `frontend/` (React 18, TypeScript, Vite, Tailwind, Recharts). The build proceeds in numbered phases 0–9, specified with acceptance criteria in `docs/BUILD_KIT.md`; one phase per session, one commit per phase. Phases 0, 1, 2, 6 (shell + design system + overview only), 3, 4 and 5 are done. Agreed order from here: **7 → 8 → 9**. Use plan mode for Phase 7. The sheet scope is revisited before Phase 7 (the Report layer and calendar-year branch may join the scope).
+
+## Versioning and diff design (Phase 5, binding)
+
+- Every upload runs `app/storage/pipeline.process_upload`: interpret (config scope) → validate → diff against the active version → status `pending_review`. The pipeline never fails an upload; its notes ride on the response.
+- `app/model/diff.py` compares two models at template/block level. Per sheet and column it sweeps old and new template coverage: cells whose template key differs are **LOGIC** (`template_changed`, described by `describe_ast_change`, or added/removed), cells newly covered by a template that already existed are **DATA** growth (headline counts only), plus input value deltas from the raw sheets. **STRUCTURAL** covers sheets added/removed/renamed (renames matched by template-set Jaccard ≥ 0.6, keys normalised across the rename), role changes, block merges/splits, and anomaly deltas from the latest validation reports. Impact = block-DAG descendants ∩ output blocks, per logic change and aggregated for data.
+- Reports are stored per (base, target) pair in `diffs`; `GET /diff/{a}/{b}?refresh=true` recomputes.
 
 ## Validation design (Phase 4, binding)
 

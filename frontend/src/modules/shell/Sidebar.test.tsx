@@ -4,11 +4,11 @@ import { buildNavigation, ENGINE_NOTE } from "./navigation";
 import { Sidebar } from "./Sidebar";
 
 describe("navigation", () => {
-  it("derives module entries from sheet roles; Overview and Validation are the live pages", () => {
+  it("derives module entries from sheet roles; Overview, Versions and Validation are the live pages", () => {
     const nav = buildNavigation(model, 3);
     expect(nav.map((n) => n.label)).toEqual(["Overview", "Inputs", "Calculations", "Outputs", "Versions", "Validation"]);
     expect(nav.find((n) => n.id === "inputs")?.sheets).toEqual(["Inputs", "Lookup"]);
-    expect(nav.filter((n) => n.enabled).map((n) => n.id)).toEqual(["overview", "validation"]);
+    expect(nav.filter((n) => n.enabled).map((n) => n.id)).toEqual(["overview", "versions", "validation"]);
     expect(nav.find((n) => n.id === "validation")?.badge).toBe(3);
     expect(buildNavigation(null).map((n) => n.label)).toEqual(["Overview", "Versions", "Validation"]);
     expect(buildNavigation(null, 0).find((n) => n.id === "validation")?.badge).toBeUndefined();

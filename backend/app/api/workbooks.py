@@ -13,9 +13,12 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.parser.loader import SUPPORTED_SUFFIXES, UnsupportedFileError
 from app.parser.models import RawWorkbook, WorkbookSummary
+from app.storage import diffs as diffs_store
+from app.storage import validation as validation_store
 from app.storage import workbooks as store
 from app.storage.db import get_session
 from app.storage.models import WorkbookVersion
+from app.storage.pipeline import process_upload
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/workbooks")
@@ -35,15 +38,20 @@ class WorkbookVersionOut(BaseModel):
     activated_at: datetime | None = None
     activation_reason: str | None = None
     activation_override: bool = False
+    validation_status: str | None = None
+    diff_base_id: str | None = None
+    diff_headline: str | None = None
+    pipeline_notes: list[str] = []
 
     @classmethod
-    def from_row(cls, row: WorkbookVersion) -> "WorkbookVersionOut":
+    def from_row(cls, row: WorkbookVersion, session: Session | None = None) -> "WorkbookVersionOut":
         uploaded_at = row.uploaded_at
         if uploaded_at.tzinfo is None:  # SQLite stores naive timestamps; ours are always UTC
             uploaded_at = uploaded_at.replace(tzinfo=UTC)
         activated_at = row.activated_at
         if activated_at is not None and activated_at.tzinfo is None:
             activated_at = activated_at.replace(tzinfo=UTC)
+        diff_row = diffs_store.latest_diff_for(session, row.id) if session else None
         return cls(
             id=row.id,
             filename=row.filename,
@@ -55,6 +63,9 @@ class WorkbookVersionOut(BaseModel):
             activated_at=activated_at,
             activation_reason=row.activation_reason,
             activation_override=bool(row.activation_override),
+            validation_status=validation_store.latest_status(session, row.id) if session else None,
+            diff_base_id=diff_row.base_version_id if diff_row else None,
+            diff_headline=diff_row.headline if diff_row else None,
         )
 
 
@@ -115,18 +126,21 @@ def upload_workbook(session: SessionDep, file: Annotated[UploadFile, File()]) ->
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "The file could not be read as an Excel workbook. It may be corrupt or not an Office Open XML file.",
         ) from exc
-    return WorkbookVersionOut.from_row(version)
+    notes = process_upload(session, version)
+    out = WorkbookVersionOut.from_row(version, session)
+    out.pipeline_notes = notes
+    return out
 
 
 @router.get("", response_model=list[WorkbookVersionOut])
 def list_workbooks(session: SessionDep) -> list[WorkbookVersionOut]:
-    return [WorkbookVersionOut.from_row(v) for v in store.list_versions(session)]
+    return [WorkbookVersionOut.from_row(v, session) for v in store.list_versions(session)]
 
 
 @router.get("/{version_id}", response_model=WorkbookVersionOut)
 def get_workbook(version_id: str, session: SessionDep) -> WorkbookVersionOut:
     try:
-        return WorkbookVersionOut.from_row(store.get_version(session, version_id))
+        return WorkbookVersionOut.from_row(store.get_version(session, version_id), session)
     except store.WorkbookNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Workbook version not found.") from exc
 

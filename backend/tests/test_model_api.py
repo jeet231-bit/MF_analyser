@@ -23,8 +23,7 @@ def interpreted(client: TestClient, version_id: str) -> str:
 
 
 def test_interpret_returns_summary_and_roles(client: TestClient, version_id: str) -> None:
-    before = client.get(f"/api/workbooks/{version_id}/model")
-    assert before.status_code == 404
+    # The upload pipeline interprets automatically; an explicit interpret re-runs it.
     response = client.post(f"/api/workbooks/{version_id}/interpret")
     assert response.status_code == 200, response.text
     body = response.json()
@@ -35,7 +34,10 @@ def test_interpret_returns_summary_and_roles(client: TestClient, version_id: str
     roles = {s["name"]: s["role"] for s in body["sheets"]}
     assert roles["Outputs"] == "output"
     assert roles["Inputs"] == "input"
-    assert client.get(f"/api/workbooks/{version_id}").json()["status"] == "interpreted"
+    assert client.get(f"/api/workbooks/{version_id}").json()["status"] in (
+        "interpreted",
+        "pending_review",
+    )
 
 
 def test_interpret_with_explicit_scope(client: TestClient, version_id: str) -> None:

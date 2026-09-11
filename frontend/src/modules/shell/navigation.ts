@@ -2,7 +2,7 @@ import type { ValidationStatus } from "@/api/validation";
 import type { LogicModel, SheetRole } from "@/api/workbooks";
 import type { PillTone } from "@/components";
 
-export type PageId = "overview" | "validation";
+export type PageId = "overview" | "validation" | "versions";
 
 export interface NavItem {
   id: string;
@@ -36,7 +36,7 @@ export function buildNavigation(model: LogicModel | null, anomalyCount = 0): Nav
       }
     }
   }
-  items.push({ id: "versions", label: "Versions", enabled: false, sheets: [], note: ENGINE_NOTE });
+  items.push({ id: "versions", label: "Versions", enabled: true, sheets: [] });
   items.push({
     id: "validation",
     label: "Validation",

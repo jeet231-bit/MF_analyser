@@ -16,7 +16,7 @@ PASTED_ROW = 30
 DUP_ROW = 50  # Data!A50 repeats the key of row 6
 
 
-def build_anomaly_workbook() -> openpyxl.Workbook:
+def build_anomaly_workbook(*, fixed: bool = False) -> openpyxl.Workbook:
     wb = openpyxl.Workbook()
     data = wb.active
     data.title = "Data"
@@ -31,7 +31,8 @@ def build_anomaly_workbook() -> openpyxl.Workbook:
     for i in range(1, ROWS + 1):
         r = i + 1
         calc[f"A{r}"] = f"K{i}"
-        calc[f"B{r}"] = f"=Data!B{r + 30}*2" if r == PASTED_ROW else f"=Data!B{r}*2"
+        pasted = r == PASTED_ROW and not fixed
+        calc[f"B{r}"] = f"=Data!B{r + 30}*2" if pasted else f"=Data!B{r}*2"
         calc[f"C{r}"] = f"=VLOOKUP(A{r},Data!$A:$B,2,FALSE)"
 
     stale = wb.create_sheet("Stale")
@@ -40,13 +41,13 @@ def build_anomaly_workbook() -> openpyxl.Workbook:
     return wb
 
 
-def anomaly_cached_values() -> dict[tuple[str, str], object]:
+def anomaly_cached_values(*, fixed: bool = False) -> dict[tuple[str, str], object]:
     values: dict[tuple[str, str], object] = {}
     data_val = {i + 1: 100 + i for i in range(1, ROWS + 1)}  # row -> Data!B value
     for i in range(1, ROWS + 1):
         r = i + 1
         values[("Calc", f"B{r}")] = (
-            data_val.get(r + 30, 0) if r == PASTED_ROW else data_val[r]
+            data_val.get(r + 30, 0) if (r == PASTED_ROW and not fixed) else data_val[r]
         ) * 2
         # Data!A30 holds "K5" instead of "K29", so the lookup for K29 misses.
         values[("Calc", f"C{r}")] = "#N/A" if r == DUP_ROW else data_val[r]
@@ -54,8 +55,10 @@ def anomaly_cached_values() -> dict[tuple[str, str], object]:
     return values
 
 
-def anomaly_fixture_xlsx_bytes() -> bytes:
-    return inject_cached_values(workbook_bytes(build_anomaly_workbook()), anomaly_cached_values())
+def anomaly_fixture_xlsx_bytes(*, fixed: bool = False) -> bytes:
+    return inject_cached_values(
+        workbook_bytes(build_anomaly_workbook(fixed=fixed)), anomaly_cached_values(fixed=fixed)
+    )
 
 
 def perturbed_fixture_xlsx_bytes() -> bytes:

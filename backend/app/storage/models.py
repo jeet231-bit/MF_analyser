@@ -142,6 +142,22 @@ class ValidationRow(Base):
     payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
 
+class DiffRow(Base):
+    """A DiffReport between two versions (gzipped JSON), keyed by the pair."""
+
+    __tablename__ = "diffs"
+
+    base_version_id: Mapped[str] = mapped_column(
+        ForeignKey("workbook_versions.id", ondelete="CASCADE"), primary_key=True
+    )
+    target_version_id: Mapped[str] = mapped_column(
+        ForeignKey("workbook_versions.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    headline: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+
 class RunSheetValues(Base):
     """Gzipped columnar JSON of a run's formula-cell values for one sheet."""
 

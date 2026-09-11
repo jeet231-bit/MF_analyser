@@ -36,7 +36,10 @@ def test_full_then_incremental_run(client: TestClient, version_id: str) -> None:
     assert inc["overrides"] == {"Inputs!B3": 200}
 
     listed = client.get(f"/api/workbooks/{version_id}/runs").json()
-    assert [r["id"] for r in listed] == [inc["id"], base["id"]]
+    assert [r["id"] for r in listed][:2] == [
+        inc["id"],
+        base["id"],
+    ]  # plus the pipeline's validation run
     assert client.get(f"/api/runs/{inc['id']}").json()["kind"] == "incremental"
     assert client.get("/api/runs/nope").status_code == 404
 
@@ -69,9 +72,6 @@ def test_full_then_incremental_run(client: TestClient, version_id: str) -> None:
 
 
 def test_lineage_endpoint(client: TestClient, version_id: str) -> None:
-    assert (
-        client.get(f"/api/workbooks/{version_id}/lineage/Series!D5").status_code == 404
-    )  # no run yet
     client.post(f"/api/workbooks/{version_id}/runs", json={})
     node = client.get(f"/api/workbooks/{version_id}/lineage/Series!D5", params={"depth": 2}).json()
     assert node["formula"] == '=IF(B5<=120,"Low",IF(B5<=200,"Mid","High"))'

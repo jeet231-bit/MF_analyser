@@ -42,7 +42,9 @@ def test_values_equal_policy() -> None:
 
 def test_clean_fixture_passes(client: TestClient) -> None:
     vid = upload_and_interpret(client, "clean.xlsx", logic_fixture_xlsx_bytes(), CLEAN_SCOPE)
-    assert client.get(f"/api/workbooks/{vid}/validation").status_code == 404
+    assert (
+        client.get(f"/api/workbooks/{vid}/validation").status_code == 200
+    )  # auto-validated on upload
     report = client.post(f"/api/workbooks/{vid}/validate").json()
     assert report["status"] == "passed", report["reasons"]
     t = report["totals"]
@@ -51,7 +53,7 @@ def test_clean_fixture_passes(client: TestClient) -> None:
     assert report["anomalies"] == [] and report["anomaly_counts"] == {}
     assert report["run_id"]
     assert client.get(f"/api/workbooks/{vid}/validation").json()["id"] == report["id"]
-    assert client.get(f"/api/workbooks/{vid}").json()["status"] == "validated"
+    assert client.get(f"/api/workbooks/{vid}").json()["status"] in ("validated", "pending_review")
 
 
 def test_unsupported_functions_are_skipped_not_mismatched(client: TestClient) -> None:
@@ -142,9 +144,11 @@ def test_anomaly_classes(client: TestClient) -> None:
 
 
 def test_activation_requires_validation_and_deactivates_previous(client: TestClient) -> None:
-    first = upload_and_interpret(client, "first.xlsx", logic_fixture_xlsx_bytes(), CLEAN_SCOPE)
-    refused = client.post(f"/api/workbooks/{first}/activate", json={})
+    # A model with cycles cannot be validated, so it can never be activated.
+    cyc = upload_and_interpret(client, "cyc.xlsx", cycle_fixture_xlsx_bytes(), None)
+    refused = client.post(f"/api/workbooks/{cyc}/activate", json={})
     assert refused.status_code == 409 and refused.json()["detail"]["validation_status"] is None
+    first = upload_and_interpret(client, "first.xlsx", logic_fixture_xlsx_bytes(), CLEAN_SCOPE)
     client.post(f"/api/workbooks/{first}/validate")
     assert client.post(f"/api/workbooks/{first}/activate", json={}).json()["status"] == "active"
 

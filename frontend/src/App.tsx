@@ -11,6 +11,7 @@ import { AppShell } from "@/modules/shell/AppShell";
 import type { PageId } from "@/modules/shell/navigation";
 import { Sidebar } from "@/modules/shell/Sidebar";
 import { ValidationPage } from "@/modules/validation/ValidationPage";
+import { VersionsPage } from "@/modules/versions/VersionsPage";
 import { useTheme } from "@/theme";
 
 export default function App() {
@@ -97,6 +98,18 @@ export default function App() {
         onDone={(id) => {
           setSelectedId(id);
           versions.reload();
+        }}
+      />
+    );
+  } else if (page === "versions") {
+    content = (
+      <VersionsPage
+        versions={versionList}
+        selectedId={effectiveId}
+        onBusy={onBusy}
+        onVersionsChanged={() => {
+          versions.reload();
+          validation.reload();
         }}
       />
     );

@@ -25,39 +25,56 @@ BANDS = {"Low": 1, "Mid": 2, "High": 3}
 UNITS = 120  # Inputs!B3
 
 
-def band(sales: int) -> str:
-    return "Low" if sales <= 120 else ("Mid" if sales <= 200 else "High")
+def band(sales: int, threshold: int = 120) -> str:
+    return "Low" if sales <= threshold else ("Mid" if sales <= 200 else "High")
 
 
-def build_logic_fixture_workbook():
+def sales_for(i: int) -> int:
+    return 90 + 7 * i
+
+
+def build_logic_fixture_workbook(
+    *,
+    rows: int = ROWS,
+    threshold: int = 120,
+    series_name: str = "Series",
+    name_ref: str = "Inputs!$B$2",
+):
+    """The logic fixture; keyword variants produce comparable workbooks for diff tests."""
     wb = build_fixture_workbook()
+    if name_ref != "Inputs!$B$2":
+        from openpyxl.workbook.defined_name import DefinedName
+
+        wb.defined_names["Threshold"] = DefinedName("Threshold", attr_text=name_ref)
     lookup = wb["Lookup"]
     for i, (name, code) in enumerate(BANDS.items(), start=1):
         lookup[f"D{i}"], lookup[f"E{i}"] = name, code
 
     wb["Calc"]["A14"] = "Notes: values in INR lakh"
 
-    s = wb.create_sheet("Series")
+    s = wb.create_sheet(series_name)
     for col, header in zip(
         "ABCDEFG",
         ["Month", "Sales", "Cumulative", "Band", "Rated", "Safe", "Above units"],
         strict=True,
     ):
         s[f"{col}1"] = header
-    for i in range(1, ROWS + 1):
+    for i in range(1, rows + 1):
         r = i + 1
         s[f"A{r}"] = i
-        s[f"B{r}"] = SALES[i - 1]
+        s[f"B{r}"] = sales_for(i)
         s[f"C{r}"] = "=B2" if r == 2 else f"=C{r - 1}+B{r}"
-        s[f"D{r}"] = f'=IF(B{r}<=120,"Low",IF(B{r}<=200,"Mid","High"))'
+        s[f"D{r}"] = f'=IF(B{r}<={threshold},"Low",IF(B{r}<=200,"Mid","High"))'
         s[f"E{r}"] = f"=VLOOKUP(D{r},Lookup!$D$1:$E$3,2,FALSE)"
         s[f"F{r}"] = f'=IFERROR(E{r}/B{r},"n/a")'
         s[f"G{r}"] = f"=B{r}>Inputs!$B$3"
 
     o = wb.create_sheet("Outputs")
-    o["A1"], o["B1"] = "Total sales", "=SUM(Series!B2:B21)"
-    o["A2"], o["B2"] = "Peak cumulative", "=MAX(Series!C2:C21)"
-    o["A3"], o["B3"] = "High months", '=COUNTIF(Series!D2:D21,"High")'
+    last = rows + 1
+    ref = f"'{series_name}'!" if " " in series_name else f"{series_name}!"
+    o["A1"], o["B1"] = "Total sales", f"=SUM({ref}B2:B{last})"
+    o["A2"], o["B2"] = "Peak cumulative", f"=MAX({ref}C2:C{last})"
+    o["A3"], o["B3"] = "High months", f'=COUNTIF({ref}D2:D{last},"High")'
 
     # Excel semantics the engine must reproduce exactly (cached values in SEMANTICS_CACHED).
     sm = wb.create_sheet("Semantics")
@@ -152,31 +169,41 @@ SEMANTICS_CACHED: dict[str, object] = {
 }
 
 
-def logic_cached_values() -> dict[tuple[str, str], object]:
+def logic_cached_values(
+    *,
+    rows: int = ROWS,
+    threshold: int = 120,
+    series_name: str = "Series",
+    name_ref: str = "Inputs!$B$2",
+) -> dict[tuple[str, str], object]:
     values: dict[tuple[str, str], object] = dict(FIXTURE_CACHED_VALUES)
+    if name_ref == "Inputs!$B$3":
+        values[("Calc", "B6")] = 240  # =Threshold*2 with Threshold -> Units
+    sales_list = [sales_for(i) for i in range(1, rows + 1)]
     cumulative = 0
-    for i in range(1, ROWS + 1):
+    for i in range(1, rows + 1):
         r = i + 1
-        sales = SALES[i - 1]
+        sales = sales_list[i - 1]
         cumulative += sales
-        b = band(sales)
+        b = band(sales, threshold)
         rated = BANDS[b]
-        values[("Series", f"C{r}")] = cumulative
-        values[("Series", f"D{r}")] = b
-        values[("Series", f"E{r}")] = rated
-        values[("Series", f"F{r}")] = rated / sales
-        values[("Series", f"G{r}")] = sales > UNITS
-    values[("Outputs", "B1")] = sum(SALES)
+        values[(series_name, f"C{r}")] = cumulative
+        values[(series_name, f"D{r}")] = b
+        values[(series_name, f"E{r}")] = rated
+        values[(series_name, f"F{r}")] = rated / sales
+        values[(series_name, f"G{r}")] = sales > UNITS
+    values[("Outputs", "B1")] = sum(sales_list)
     values[("Outputs", "B2")] = cumulative
-    values[("Outputs", "B3")] = sum(1 for x in SALES if band(x) == "High")
+    values[("Outputs", "B3")] = sum(1 for x in sales_list if band(x, threshold) == "High")
     for addr, value in SEMANTICS_CACHED.items():
         values[("Semantics", addr)] = value
     return values
 
 
-def logic_fixture_xlsx_bytes() -> bytes:
+def logic_fixture_xlsx_bytes(**variant) -> bytes:
+    """Default fixture, or a variant: rows=, threshold=, series_name=, name_ref=."""
     return inject_cached_values(
-        workbook_bytes(build_logic_fixture_workbook()), logic_cached_values()
+        workbook_bytes(build_logic_fixture_workbook(**variant)), logic_cached_values(**variant)
     )
 
 
