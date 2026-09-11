@@ -60,6 +60,8 @@ class RunSummary(BaseModel):
     error_cells: int
     hot_templates: list[HotTemplate] = Field(default_factory=list)
     evaluated_block_ids: list[int] = Field(default_factory=list)
+    skipped_blocks: int = 0
+    skipped_template_ids: list[int] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
 
@@ -97,16 +99,26 @@ class RunResult:
         return {"address": addresses, "value": values, "type": types}
 
 
-def preflight(model: WorkbookLogicModel) -> None:
-    """Refuse models with cycles or out-of-contract functions before evaluating anything."""
+def preflight(model: WorkbookLogicModel, *, skip_unsupported: bool = False) -> set[int]:
+    """Refuse models with cycles; refuse (or, when skipping, list) out-of-contract templates.
+
+    Returns the ids of templates the run must skip (empty unless ``skip_unsupported``).
+    """
     if model.cycles or any(b.self_order == "cycle" for b in model.formula_blocks):
         raise ModelHasCyclesError(model.cycle_descriptions)
+    skipped: set[int] = set()
     for tpl in model.templates:
-        if tpl.parse_error:
-            raise UnsupportedFunctionError("<unparsed formula>", tpl.sheet, tpl.example_cell)
-        for name in tpl.functions:
-            if name not in REGISTRY:
-                raise UnsupportedFunctionError(name, tpl.sheet, tpl.example_cell)
+        offending = (
+            "<unparsed formula>"
+            if tpl.parse_error
+            else next((name for name in tpl.functions if name not in REGISTRY), None)
+        )
+        if offending is None:
+            continue
+        if not skip_unsupported:
+            raise UnsupportedFunctionError(offending, tpl.sheet, tpl.example_cell)
+        skipped.add(tpl.id)
+    return skipped
 
 
 def resolve_override(
@@ -212,11 +224,13 @@ class Engine:
         mode: str = "auto",
         seed: SeedValues | None = None,
         state: tuple[dict[str, Grid], StringTable] | None = None,
+        skip_unsupported: bool = False,
     ) -> RunResult:
         """``seed`` are a previous run's stored values; ``state`` is a previous run's in-memory
-        grids and string table (cloned here), which avoids reloading and reseeding."""
+        grids and string table (cloned here), which avoids reloading and reseeding.
+        ``skip_unsupported`` leaves out-of-contract templates at their cached values (validation)."""
         overrides = overrides or {}
-        preflight(self.model)
+        skipped_templates = preflight(self.model, skip_unsupported=skip_unsupported)
         started = time.perf_counter()
         if state is not None:
             src_grids, src_table = state
@@ -249,6 +263,15 @@ class Engine:
         by_id = {b.id: b for b in self.model.formula_blocks}
         timings: dict[int, float] = defaultdict(float)
         cells_evaluated = 0
+        skipped_blocks = 0
+        if skipped_templates:
+            kept = []
+            for block_id in order:
+                if by_id[block_id].template_id in skipped_templates:
+                    skipped_blocks += 1
+                else:
+                    kept.append(block_id)
+            order = kept
         for block_id in order:
             block = by_id[block_id]
             tpl = self.model.template(block.template_id)
@@ -313,9 +336,16 @@ class Engine:
                 for tid, sec in hot
             ],
             evaluated_block_ids=list(order),
+            skipped_blocks=skipped_blocks,
+            skipped_template_ids=sorted(skipped_templates),
             notes=(
                 ["incremental: block-level descendants; cell-level narrowing not applied"]
                 if incremental
+                else []
+            )
+            + (
+                [f"{skipped_blocks} block(s) with unsupported functions left at cached values"]
+                if skipped_blocks
                 else []
             ),
         )

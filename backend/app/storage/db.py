@@ -35,7 +35,32 @@ def get_session() -> Iterator[Session]:
 
 
 def init_db() -> None:
-    Base.metadata.create_all(get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    _add_missing_columns(engine)
+
+
+def _add_missing_columns(engine: Engine) -> None:
+    """Development-grade migration: add columns that exist in the models but not in an older
+    SQLite file. Postgres deployments get Alembic; this keeps local databases usable across phases."""
+    if not engine.url.get_backend_name().startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            existing = {row[1] for row in conn.execute(text(f'PRAGMA table_info("{table.name}")'))}
+            if not existing:
+                continue
+            for column in table.columns:
+                if column.name in existing:
+                    continue
+                ctype = column.type.compile(dialect=engine.dialect)
+                default = ""
+                if column.default is not None and column.default.is_scalar:
+                    value = column.default.arg
+                    default = f" DEFAULT {int(value) if isinstance(value, bool) else value!r}"
+                conn.execute(
+                    text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {ctype}{default}')
+                )
 
 
 def check_database() -> bool:

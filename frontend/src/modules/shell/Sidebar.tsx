@@ -1,9 +1,10 @@
+import type { ValidationStatus } from "@/api/validation";
 import type { LogicModel, WorkbookVersion } from "@/api/workbooks";
-import { Pill, Select } from "@/components";
+import { Pill, Select, type PillTone } from "@/components";
 import { cn } from "@/lib/cn";
 import { formatDate } from "@/lib/format";
 import type { Theme } from "@/theme";
-import { buildNavigation } from "./navigation";
+import { buildNavigation, validationPill, type PageId } from "./navigation";
 
 export interface SidebarProps {
   displayName: string | null;
@@ -11,12 +12,15 @@ export interface SidebarProps {
   selectedVersionId: string | null;
   onSelectVersion: (id: string) => void;
   model: LogicModel | null;
-  activeItem: string;
+  activeItem: PageId;
+  onNavigate: (page: PageId) => void;
+  validationStatus: ValidationStatus | null;
+  anomalyCount: number;
   theme: Theme;
   onToggleTheme: () => void;
 }
 
-const statusTone: Record<string, "neutral" | "accent" | "positive" | "warning"> = {
+const statusTone: Record<string, PillTone> = {
   uploaded: "neutral",
   interpreted: "accent",
   validated: "positive",
@@ -31,11 +35,15 @@ export function Sidebar({
   onSelectVersion,
   model,
   activeItem,
+  onNavigate,
+  validationStatus,
+  anomalyCount,
   theme,
   onToggleTheme,
 }: SidebarProps) {
   const selected = versions.find((v) => v.id === selectedVersionId) ?? null;
-  const nav = buildNavigation(model);
+  const nav = buildNavigation(model, anomalyCount);
+  const vpill = validationStatus ? validationPill[validationStatus] : { tone: "neutral" as PillTone, label: "not yet validated" };
 
   return (
     <nav aria-label="Primary" className="flex h-full flex-col gap-3 px-3 py-3">
@@ -58,6 +66,7 @@ export function Sidebar({
             {versions.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.filename} · {formatDate(v.uploaded_at)}
+                {v.status === "active" ? " · active" : ""}
               </option>
             ))}
           </Select>
@@ -80,6 +89,7 @@ export function Sidebar({
             <button
               type="button"
               disabled={!item.enabled}
+              onClick={item.enabled ? () => onNavigate(item.id as PageId) : undefined}
               aria-current={item.id === activeItem ? "page" : undefined}
               aria-disabled={!item.enabled}
               className={cn(
@@ -95,6 +105,14 @@ export function Sidebar({
                 )}
               </span>
               {item.note && <span className="text-[11px] italic text-muted">{item.note}</span>}
+              {item.badge !== undefined && (
+                <span
+                  className="tabular rounded-full border border-warning/40 px-1.5 text-[11px] font-medium text-warning"
+                  aria-label={`${item.badge} anomalies`}
+                >
+                  {item.badge}
+                </span>
+              )}
             </button>
           </li>
         ))}
@@ -103,7 +121,7 @@ export function Sidebar({
       <div className="mt-auto space-y-2 border-t border-hairline pt-2">
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted">Validation</span>
-          <Pill tone="neutral">not yet validated</Pill>
+          <Pill tone={vpill.tone}>{vpill.label}</Pill>
         </div>
         <button
           type="button"

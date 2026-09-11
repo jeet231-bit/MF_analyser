@@ -178,6 +178,13 @@ def fixture_xlsx_bytes(*, with_cached_values: bool = True) -> bytes:
     return inject_cached_values(data, FIXTURE_CACHED_VALUES) if with_cached_values else data
 
 
+def build_logic_fixture_workbook_bytes() -> bytes:
+    """Raw bytes of the extended (logic) fixture without cached values, for perturbation tests."""
+    from tests.fixtures.logic_workbook import build_logic_fixture_workbook
+
+    return workbook_bytes(build_logic_fixture_workbook())
+
+
 def as_xlsm(xlsx: bytes) -> bytes:
     """Repackage as a macro-enabled workbook by adding a (dummy) VBA project part."""
     src = zipfile.ZipFile(io.BytesIO(xlsx))

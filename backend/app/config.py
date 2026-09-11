@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     database_url: str = ""
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     max_upload_mb: int = 50
+    # Validation gate thresholds (fractions of checked formula cells).
+    validation_max_mismatch_ratio: float = 0.0
+    validation_max_precision_ratio: float = 0.001
 
     @property
     def resolved_database_url(self) -> str:

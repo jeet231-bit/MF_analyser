@@ -80,6 +80,9 @@ cd backend && uv run pytest -m real -s
 | GET | `/api/workbooks/{id}/runs`, `/api/runs/{run_id}` | Run list and one run's summary (blocks, cells, seconds, hot templates) |
 | GET | `/api/runs/{run_id}/values?sheet=&range=` | Computed and input values of a sheet for a run |
 | GET | `/api/workbooks/{id}/lineage/{Sheet!A1}?run_id=&depth=` | Explain a cell: formula, consumed values, expandable |
+| POST | `/api/workbooks/{id}/validate` | Zero-override run reconciled cell by cell against Excel's cached values, plus structural anomalies |
+| GET | `/api/workbooks/{id}/validation` | Latest validation report |
+| POST | `/api/workbooks/{id}/activate` | Activate the version; a failed validation needs `{"override_reason": "..."}` |
 
 Interactive docs: http://127.0.0.1:8000/api/docs
 
@@ -93,7 +96,7 @@ The system is built one phase per session; each phase is committed separately an
 | 1 | Excel ingestion → RawWorkbook (formulas + cached values, function inventory) | done |
 | 2 | Logic interpretation: formula templates, block-level dependency DAG, classification, business rules | done |
 | 3 | Analytical engine: vectorised block-by-block runs, incremental what-ifs, lineage | done |
-| 4 | Validation and reconciliation; activation gate | |
+| 4 | Validation and reconciliation, structural anomaly report, activation gate, Validation module | done |
 | 5 | Versioning and logic diff with impact analysis | |
 | 6 | Dashboard shell, design system, overview page (pulled forward; module views wait for the engine) | done |
 | 7 | Module views: inputs, calculations, outputs, versions, validation | |
@@ -105,7 +108,8 @@ The system is built one phase per session; each phase is committed separately an
 1. Close the workbook in Excel. Excel holds an exclusive lock on OneDrive files, and an upload or test that reads a locked file fails with "permission denied".
 2. Save a **copy** of the master as `samples/master.xlsx`. Never point the system at the file Excel has open; `samples/` is a drop zone for copies and is git-ignored.
 3. Upload it (`POST /api/workbooks`, or the dashboard's upload control) and interpret it (`POST /api/workbooks/{id}/interpret`). The dashboard overview then shows the new version, its sheet roles, and any reported cycles.
-4. From Phase 5 on, the upload also produces a diff against the active version, and activation goes through the validation gate.
+4. Open the Validation module and run validation. Read the mismatch table and the structural anomalies (pasted rows, pattern breaks, duplicate lookup keys, stale cells); fix real defects in the master and re-upload rather than accepting them.
+5. Activate the version. A failed validation can only be activated with a written override reason, which is stored with the version. From Phase 5 on, the upload also produces a diff against the active version.
 
 Keep the master free of circular references: the analyser reports a cycle readably and refuses to evaluate it rather than iterating around it.
 

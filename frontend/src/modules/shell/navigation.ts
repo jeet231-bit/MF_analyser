@@ -1,4 +1,8 @@
+import type { ValidationStatus } from "@/api/validation";
 import type { LogicModel, SheetRole } from "@/api/workbooks";
+import type { PillTone } from "@/components";
+
+export type PageId = "overview" | "validation";
 
 export interface NavItem {
   id: string;
@@ -7,6 +11,7 @@ export interface NavItem {
   /** Sheets in this module, derived from roles; empty for non-module entries. */
   sheets: string[];
   note?: string;
+  badge?: number;
 }
 
 /** Module groups are grouped sheet roles; the mapping is the only fixed thing here. */
@@ -20,7 +25,7 @@ const MODULE_GROUPS: { id: string; label: string; roles: SheetRole[] }[] = [
 export const ENGINE_NOTE = "arrives with the engine";
 
 /** Sidebar entries: Overview, one per module present in the model, then Versions and Validation. */
-export function buildNavigation(model: LogicModel | null): NavItem[] {
+export function buildNavigation(model: LogicModel | null, anomalyCount = 0): NavItem[] {
   const items: NavItem[] = [{ id: "overview", label: "Overview", enabled: true, sheets: [] }];
   if (model) {
     const inScope = model.sheets.filter((s) => s.in_scope);
@@ -32,6 +37,18 @@ export function buildNavigation(model: LogicModel | null): NavItem[] {
     }
   }
   items.push({ id: "versions", label: "Versions", enabled: false, sheets: [], note: ENGINE_NOTE });
-  items.push({ id: "validation", label: "Validation", enabled: false, sheets: [], note: ENGINE_NOTE });
+  items.push({
+    id: "validation",
+    label: "Validation",
+    enabled: true,
+    sheets: [],
+    badge: anomalyCount > 0 ? anomalyCount : undefined,
+  });
   return items;
 }
+
+export const validationPill: Record<ValidationStatus, { tone: PillTone; label: string }> = {
+  passed: { tone: "positive", label: "passed" },
+  passed_with_warnings: { tone: "warning", label: "passed with warnings" },
+  failed: { tone: "negative", label: "failed" },
+};

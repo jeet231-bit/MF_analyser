@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -35,6 +36,9 @@ class WorkbookVersion(Base):
     meta_json: Mapped[str | None] = mapped_column(
         Text, nullable=True, comment="RawWorkbook JSON without per-sheet cells"
     )
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    activation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    activation_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     sheets: Mapped[list[RawSheetBlob]] = relationship(
         back_populates="version", cascade="all, delete-orphan", order_by="RawSheetBlob.sheet_index"
@@ -120,6 +124,22 @@ class Run(Base):
     sheets: Mapped[list[RunSheetValues]] = relationship(
         back_populates="run", cascade="all, delete-orphan"
     )
+
+
+class ValidationRow(Base):
+    """A ValidationReport for one version (gzipped JSON); the latest one gates activation."""
+
+    __tablename__ = "validations"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    version_id: Mapped[str] = mapped_column(
+        ForeignKey("workbook_versions.id", ondelete="CASCADE"), index=True
+    )
+    run_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    summary_json: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
 
 class RunSheetValues(Base):

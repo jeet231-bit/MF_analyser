@@ -32,12 +32,18 @@ class WorkbookVersionOut(BaseModel):
     size_bytes: int
     parse_seconds: float | None = None
     summary: WorkbookSummary | None = None
+    activated_at: datetime | None = None
+    activation_reason: str | None = None
+    activation_override: bool = False
 
     @classmethod
     def from_row(cls, row: WorkbookVersion) -> "WorkbookVersionOut":
         uploaded_at = row.uploaded_at
         if uploaded_at.tzinfo is None:  # SQLite stores naive timestamps; ours are always UTC
             uploaded_at = uploaded_at.replace(tzinfo=UTC)
+        activated_at = row.activated_at
+        if activated_at is not None and activated_at.tzinfo is None:
+            activated_at = activated_at.replace(tzinfo=UTC)
         return cls(
             id=row.id,
             filename=row.filename,
@@ -46,6 +52,9 @@ class WorkbookVersionOut(BaseModel):
             size_bytes=row.size_bytes,
             parse_seconds=row.parse_seconds,
             summary=store.summary_of(row),
+            activated_at=activated_at,
+            activation_reason=row.activation_reason,
+            activation_override=bool(row.activation_override),
         )
 
 

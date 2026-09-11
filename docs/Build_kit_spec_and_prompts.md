@@ -274,3 +274,10 @@ User uploaded the master (AZ move already applied by user). XML-level repairs ma
 - Stale cached values removed from all 46 repaired cells; fullCalcOnLoad="1" set so Excel full-recalcs on open. User must open in Excel and SAVE before ingesting (restores complete cached values for validation baseline).
 - Expect downstream output changes (composite ranks etc.) since two fund rows previously carried index data — correct behaviour, not regression.
 Phase 3 plan approved with 3 amendments: IF/IFERROR branch-error isolation + guarded-division fixture case; float tolerance 1e-9 everywhere (exact only for text/bool/error); reconciliation mismatches classified with zero-mismatch target.
+
+### 2026-09-11 — Phase 3 complete (commit 2d4354b)
+Engine done. Full run 5.9s (budget 90s), peak 300MB, incremental 0.1–2.7s (budget 5s). **Full reconciliation: 467,289/467,289 formula cells exact.** 125 fast tests + real-workbook test.
+- **Binding semantic discovery:** Excel compares numbers at 15 significant digits — rank COUNTIFS(">"&ref) text-converts at 15 digits, and exact doubles made cells exceed their own threshold (reconciliation stuck at 96.9% until both sides of every numeric comparison round identically). Recorded in CLAUDE.md.
+- Incremental on master-table cells is inherently broad (whole-column VLOOKUPs → 126/193 blocks); sort-based rank fast path + baseline cache got 20s→2s. Key-aware lookup narrowing deferred to Phase 9 if ever needed.
+- Phase 4 prompt issued: formal ValidationReport (15-sig-digit numeric policy), structural anomaly classes (fragmentation outliers, own-row violations, duplicate lookup keys, recalc staleness) as warnings, activation gate, Validation UI module enabled; regression test = old stored version must flag rows 3181/3182, fixed file must be clean.
+- Pending user action: open FIXED workbook in Excel → save → samples/master.xlsx.

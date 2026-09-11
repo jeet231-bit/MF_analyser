@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { getConfig } from "@/api/config";
 import { getModel } from "@/api/model";
+import { anomalyTotal, getValidation } from "@/api/validation";
 import { listWorkbooks } from "@/api/workbooks";
 import { Button, EmptyState, ProgressBar } from "@/components";
 import { useAsync } from "@/lib/useAsync";
 import { OverviewPage } from "@/modules/overview/OverviewPage";
 import { UploadPanel } from "@/modules/overview/UploadPanel";
 import { AppShell } from "@/modules/shell/AppShell";
+import type { PageId } from "@/modules/shell/navigation";
 import { Sidebar } from "@/modules/shell/Sidebar";
+import { ValidationPage } from "@/modules/validation/ValidationPage";
 import { useTheme } from "@/theme";
 
 export default function App() {
@@ -15,6 +18,7 @@ export default function App() {
   const config = useAsync(getConfig, []);
   const versions = useAsync(listWorkbooks, []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [page, setPage] = useState<PageId>("overview");
   const [busy, setBusy] = useState<{ active: boolean; label?: string }>({ active: false });
 
   const versionList = versions.data ?? [];
@@ -25,6 +29,10 @@ export default function App() {
     () => (effectiveId ? getModel(effectiveId) : Promise.reject(new Error("no version"))),
     [effectiveId],
   );
+  const validation = useAsync(
+    () => (effectiveId ? getValidation(effectiveId) : Promise.reject(new Error("no version"))),
+    [effectiveId],
+  );
 
   useEffect(() => {
     document.title = config.data?.display_name ? `${config.data.display_name} · MF Analyser` : "MF Analyser";
@@ -32,6 +40,7 @@ export default function App() {
 
   const onBusy = (active: boolean, label?: string) => setBusy({ active, label });
   const displayName = config.data?.display_name ?? null;
+  const validationReport = validation.status === "ready" ? validation.data : null;
 
   const sidebar = (
     <div className="flex h-full flex-col">
@@ -41,7 +50,10 @@ export default function App() {
         selectedVersionId={effectiveId}
         onSelectVersion={setSelectedId}
         model={model.status === "ready" ? model.data : null}
-        activeItem="overview"
+        activeItem={page}
+        onNavigate={setPage}
+        validationStatus={validationReport?.status ?? null}
+        anomalyCount={anomalyTotal(validationReport?.anomaly_counts)}
         theme={theme}
         onToggleTheme={toggle}
       />
@@ -52,6 +64,7 @@ export default function App() {
             onBusy={onBusy}
             onDone={(id) => {
               setSelectedId(id);
+              setPage("overview");
               versions.reload();
             }}
           />
@@ -84,6 +97,18 @@ export default function App() {
         onDone={(id) => {
           setSelectedId(id);
           versions.reload();
+        }}
+      />
+    );
+  } else if (page === "validation") {
+    content = (
+      <ValidationPage
+        version={version}
+        report={validation}
+        onBusy={onBusy}
+        onVersionChanged={() => {
+          versions.reload();
+          validation.reload();
         }}
       />
     );
