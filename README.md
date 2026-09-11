@@ -113,6 +113,7 @@ The system is built one phase per session; each phase is committed separately an
 | 7 | Stage A: scope extension to the Report layer (upstream-closed, 15 sheets). Stage B: Inputs, Calculations, Outputs modules with what-if runs and lineage | done |
 | 8 | Exports: xlsx (in place, cover sheet, background jobs), csv (grid windows), PDF analysis report, changelog export, one Export menu | done |
 | 9 | Hardening: run limiter and bounded caches for two users, robustness and end-to-end tests, QA.md timings, master findings for the research team | done |
+| 10 | Research views. Stage A: the semantic map, research API, declarative insights, snapshots. Stage B: the research console (rail with Research / Workbook switch, Dashboard, Insights, Funds with pivots, Fund detail, Categories, Movement, Admin, Upload) | done |
 
 ## Runbook: a new master version
 
@@ -157,6 +158,20 @@ Consistency across months, fund history and movement read **per-version snapshot
 `GET /api/research/config` shows how every reference resolved against the active version and lists problems in plain words ("measures[7] 'roll1y': sheet 'Summary-Perf' is not in scope; did you mean 'Summary-Performance'?"). An absent or broken section never breaks the app: every research endpoint answers `configured: false` with the problems. `MFA_DASHBOARD_CONFIG_PATH` points the backend at another config file (tests and deployments).
 
 Endpoints: `/research/summary`, `/research/entities` (search, category, AMC, plan, quartile filters; sort; paging; `groupBy=<dimension>` or `<measure>_band` for pivots), `/research/entities/{key}`, `/research/categories`, `/research/movement?from=&to=`, `/research/insights?section=`, and `/research/{entities|categories|movement|insights}/export?format=csv|xlsx` through the same export view descriptor as every other export. The PDF analysis report carries an "Insights brief" section.
+
+## The research console
+
+The dashboard opens in **Research** mode: a constant dark rail (brand, the active version chip, the Research / Workbook switch, Dashboard · Insights · Funds · Categories · Movement with live counts, then Upload version, Admin and the theme toggle). **Workbook** mode keeps every sheet-shaped page from the earlier phases: the in-scope sheets grouped by role (each opens its grid with what-ifs and lineage), Weights & dates, Overview, Versions and Validation. The mode and page persist per browser.
+
+- **Dashboard**: the rated universe against the whole universe with the computed explanation of the gap, the movement and consistency narrative, quartile distribution, engine agreement and freshness, biggest movers, category averages, and the watchlist.
+- **Insights**: the configured cards by section, each with its computed sentence and rows; a card whose inputs are not yet available (held-Q1 before a second genuine month) says so instead of showing zeros. "See all" opens the Funds page on exactly those funds.
+- **Funds**: the "Analyse funds by" pivot row (any dimension, or a quantile band of any factor measure such as corpus or expense) groups the table with subtotals; search, category, AMC, plan and quartile filters apply within groups; headers sort; the Δ rank column compares with the previous activated version. Export the current view as csv or xlsx.
+- **Fund detail**: stat tiles (click any to trace the number through the workbook), the rank hero with the quartile rule in words as the engine evaluated it, bull and bear phases against the category average, peers, history across genuine uploads, and every measure with its cell. "Watch" pins the fund to the dashboard watchlist.
+- **Categories**: a card per category with the chosen average, the quartile bar or the "fewer than N ranked funds" note, and a link into Funds.
+- **Movement**: any two activated versions; tiles, the narrative, the data-repair note, moved-up and moved-down lists with repaired rows labelled.
+- **Admin**: active version, reconciliation, structural warnings and data findings tiles; the findings list and the column map (both from `dashboard.config.json`); then the Versions and Validation panels.
+
+The watchlist lives in the browser's local storage (per viewer, per browser) until the platform has accounts; blocked storage never breaks a page.
 
 ## Deployment notes
 

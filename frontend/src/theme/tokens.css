@@ -20,6 +20,32 @@
   --warning: #a16207;
   --negative: #b4232a;
 
+  /* Research console (Phase 10B): the constant dark rail, the gradient hero, the quartile ramp. */
+  --ink-2: #41454c;
+  --rail: #101216;
+  --rail-ink: #e7e8ea;
+  --rail-muted: #8a8f97;
+  --rail-line: #22262c;
+  --rail-active: #1b1f26;
+  --rail-hover: #191d23;
+  --rail-label: #5e636b;
+  --hero: #17191d;
+  --hero-a: #242a36;
+  --hero-ink: #f3f3f1;
+  --hero-muted: #9a9fa7;
+  --hero-line: #2a2e35;
+  --hero-tile: #21252c;
+  --hero-link: #93aeff;
+  --hero-up: #7be0a8;
+  --q1: #184f95;
+  --q2: #2a78d6;
+  --q3: #5598e7;
+  --q4: #86b6ef;
+  --q1-ink: #ffffff;
+  --q2-ink: #ffffff;
+  --q3-ink: #0b2545;
+  --q4-ink: #0b2545;
+
   color-scheme: light;
 }
 
@@ -35,6 +61,22 @@
   --positive: #4fc38a;
   --warning: #d9a53a;
   --negative: #e0616a;
+
+  --ink-2: #c0c4ca;
+  --hero: #1e222a;
+  --hero-a: #2a3240;
+  --hero-ink: #f3f3f1;
+  --hero-muted: #9a9fa7;
+  --hero-line: #2e333b;
+  --hero-tile: #272c34;
+  --q1: #86b6ef;
+  --q2: #5598e7;
+  --q3: #2a78d6;
+  --q4: #184f95;
+  --q1-ink: #0b2545;
+  --q2-ink: #0b2545;
+  --q3-ink: #ffffff;
+  --q4-ink: #ffffff;
 
   color-scheme: dark;
 }
@@ -54,6 +96,30 @@
   --color-negative: var(--negative);
   --color-white: #ffffff;
   --color-transparent: transparent;
+  --color-ink-2: var(--ink-2);
+  --color-rail: var(--rail);
+  --color-rail-ink: var(--rail-ink);
+  --color-rail-muted: var(--rail-muted);
+  --color-rail-line: var(--rail-line);
+  --color-rail-active: var(--rail-active);
+  --color-rail-hover: var(--rail-hover);
+  --color-rail-label: var(--rail-label);
+  --color-hero: var(--hero);
+  --color-hero-a: var(--hero-a);
+  --color-hero-ink: var(--hero-ink);
+  --color-hero-muted: var(--hero-muted);
+  --color-hero-line: var(--hero-line);
+  --color-hero-tile: var(--hero-tile);
+  --color-hero-link: var(--hero-link);
+  --color-hero-up: var(--hero-up);
+  --color-q1: var(--q1);
+  --color-q2: var(--q2);
+  --color-q3: var(--q3);
+  --color-q4: var(--q4);
+  --color-q1-ink: var(--q1-ink);
+  --color-q2-ink: var(--q2-ink);
+  --color-q3-ink: var(--q3-ink);
+  --color-q4-ink: var(--q4-ink);
 
   --font-heading: "Schibsted Grotesk", "Inter", system-ui, sans-serif;
   --font-body: "Instrument Sans", "Inter", system-ui, sans-serif;
@@ -65,6 +131,7 @@
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
+  --radius-xl: 20px;
 
   --shadow-*: initial;
   --shadow-elevated: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -12px rgb(0 0 0 / 0.12);
