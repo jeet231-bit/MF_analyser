@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.workbooks import WorkbookVersionOut
-from app.engine.runner import ModelHasCyclesError
 from app.storage import logic, workbooks
 from app.storage import validation as store
 from app.storage.db import get_session
@@ -39,10 +38,6 @@ def validate(version_id: str, session: SessionDep) -> ValidationReport:
     except logic.ModelNotFoundError as exc:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, "No logic model for this version yet. POST /interpret first."
-        ) from exc
-    except ModelHasCyclesError as exc:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, {"message": str(exc), "cycles": exc.descriptions}
         ) from exc
 
 

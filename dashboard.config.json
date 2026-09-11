@@ -15,10 +15,20 @@
     "3Y Roll-2Y",
     "Stat Comp",
     "Bull-Bear Returns",
-    "First NAV"
+    "First NAV",
+    "CY Returns",
+    "Averages",
+    "Report",
+    "Summary-Performance",
+    "Nifty"
   ],
-  "sheetRoleOverrides": {},
-  "outputSheets": [],
+  "sheetRoleOverrides": {
+    "Nifty": "reference"
+  },
+  "outputSheets": [
+    "Report",
+    "Composite Ranks"
+  ],
   "labelOverrides": {},
   "numberFormat": {
     "grouping": "indian",

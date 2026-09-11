@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.dashboard_config import load_dashboard_config
-from app.engine.runner import ModelHasCyclesError
 from app.storage import diffs, logic, validation
 from app.storage.models import WorkbookVersion
 
@@ -34,9 +33,10 @@ def process_upload(session: Session, version: WorkbookVersion) -> list[str]:
         return notes
     try:
         report = validation.validate_version(session, version.id)
-        notes.append(f"validation {report.status.replace('_', ' ')}")
-    except ModelHasCyclesError as exc:
-        notes.append(f"validation skipped: {len(exc.descriptions)} circular reference(s)")
+        note = f"validation {report.status.replace('_', ' ')}"
+        if report.status == "failed" and report.reasons:
+            note += f": {report.reasons[0]}"
+        notes.append(note)
     except Exception as exc:  # noqa: BLE001
         log.warning("validation failed for %s: %s", version.id, exc)
         notes.append(f"validation failed: {exc}")

@@ -144,10 +144,12 @@ def test_anomaly_classes(client: TestClient) -> None:
 
 
 def test_activation_requires_validation_and_deactivates_previous(client: TestClient) -> None:
-    # A model with cycles cannot be validated, so it can never be activated.
+    # A model with cycles validates as failed without a run, so it can never be activated,
+    # not even with an override reason.
     cyc = upload_and_interpret(client, "cyc.xlsx", cycle_fixture_xlsx_bytes(), None)
-    refused = client.post(f"/api/workbooks/{cyc}/activate", json={})
-    assert refused.status_code == 409 and refused.json()["detail"]["validation_status"] is None
+    refused = client.post(f"/api/workbooks/{cyc}/activate", json={"override_reason": "try"})
+    assert refused.status_code == 409 and refused.json()["detail"]["validation_status"] == "failed"
+    assert "circular" in refused.json()["detail"]["message"]
     first = upload_and_interpret(client, "first.xlsx", logic_fixture_xlsx_bytes(), CLEAN_SCOPE)
     client.post(f"/api/workbooks/{first}/validate")
     assert client.post(f"/api/workbooks/{first}/activate", json={}).json()["status"] == "active"
@@ -160,8 +162,13 @@ def test_activation_requires_validation_and_deactivates_previous(client: TestCli
     assert client.post("/api/workbooks/nope/validate").status_code == 404
 
 
-def test_cycle_model_cannot_be_validated(client: TestClient) -> None:
+def test_cycle_model_validates_as_failed_with_structural_report(client: TestClient) -> None:
     vid = upload_and_interpret(client, "cyc.xlsx", cycle_fixture_xlsx_bytes(), None)
     response = client.post(f"/api/workbooks/{vid}/validate")
-    assert response.status_code == 409
-    assert "reference cycle" in response.json()["detail"]["cycles"][0]
+    assert response.status_code == 200
+    report = response.json()
+    assert report["status"] == "failed"
+    assert report["run_id"] is None
+    assert report["totals"]["checked"] == 0
+    assert "circular reference" in report["reasons"][0]
+    assert any("reference cycle" in r for r in report["reasons"][1:])

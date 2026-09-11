@@ -100,7 +100,7 @@ The system is built one phase per session; each phase is committed separately an
 | 4 | Validation and reconciliation, structural anomaly report, activation gate, Validation module | done |
 | 5 | Versioning, upload pipeline, logic diff (data / logic / structural) with impact, Versions module | done |
 | 6 | Dashboard shell, design system, overview page (pulled forward; module views wait for the engine) | done |
-| 7 | Module views: inputs, calculations, outputs, versions, validation | |
+| 7 | Stage A: scope extension to the Report layer (upstream-closed, 15 sheets). Stage B: Inputs, Calculations, Outputs modules | A done |
 | 8 | Exports: xlsx, csv, pdf | |
 | 9 | Hardening and real-workbook QA; runbook | |
 
@@ -112,7 +112,9 @@ The system is built one phase per session; each phase is committed separately an
 4. Open the Versions module. Read the changelog: logic changes first (each with the outputs it affects), then data changes as counts, then structural changes including new or resolved anomalies. Open the Validation module for the mismatch table and anomaly detail; fix real defects in the master and re-upload rather than accepting them.
 5. Activate the version. A failed validation can only be activated with a written override reason, which is stored with the version. Rolling back is activating an older version.
 
-Keep the master free of circular references: the analyser reports a cycle readably and refuses to evaluate it rather than iterating around it.
+Keep the master free of circular references: the analyser reports a cycle readably and refuses to evaluate it rather than iterating around it. After fixing formulas in the master, force a full recalculation in Excel (Ctrl+Alt+F9) before saving the copy, so the cached values the validator compares against are current.
+
+Changing the sheet scope: `sheetScope` in `dashboard.config.json` must be upstream-closed (every sheet an in-scope formula reads is itself in scope). Derive it rather than guess it: `app/model/scope.py` computes the closure from formula text, and `cd backend && uv run pytest -m real -s tests/test_real_scope.py` checks the configured scope against the master.
 
 ## Known constraints (v1)
 

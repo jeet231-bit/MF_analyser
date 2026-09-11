@@ -91,6 +91,8 @@ def build_logic_fixture_workbook(
         sm[f"D{i}"] = v
     for i, v in enumerate([2, 3, 4, 5, 6], start=1):
         sm[f"E{i}"] = v
+    for i, v in enumerate(SUMMATION_ORDER_VALUES, start=1):
+        sm[f"H{i}"], sm[f"I{i}"] = v, 1
     for addr, formula in SEMANTICS_FORMULAS.items():
         if addr in ("F1", "F2"):
             continue
@@ -131,9 +133,21 @@ SEMANTICS_FORMULAS: dict[str, str] = {
     "C29": '=CONCATENATE("v",B2,"-",C6)',
     "F1": "=E1:E2*2",
     "F2": "=E1:E2*2",
+    # Summation order: Excel adds one double at a time; a pairwise or unrolled sum gives 8 here.
+    "C30": "=SUM(H1:H10)",
+    "C31": "=SUMIF(I1:I10,1,H1:H10)",
+    "C32": "=AVERAGEIF(I1:I10,1,H1:H10)",
+    "C33": "=SUMPRODUCT(H1:H10,I1:I10)",
 }
 
+# 1e16 swallows every +1 that follows it (ulp is 2), then -1e16 cancels it: Excel returns 0.
+SUMMATION_ORDER_VALUES: list[float] = [1e16] + [1.0] * 8 + [-1e16]
+
 SEMANTICS_CACHED: dict[str, object] = {
+    "C30": 0,
+    "C31": 0,
+    "C32": 0,
+    "C33": 0,
     "B4": "#DIV/0!",
     "C1": 1,
     "C2": "x",

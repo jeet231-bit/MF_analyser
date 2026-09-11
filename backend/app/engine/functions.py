@@ -68,6 +68,20 @@ def _shape(ctx: BlockContext) -> tuple[int, int]:
 # ---- helpers over ranges ------------------------------------------------------------------
 
 
+def window_sum(arr: np.ndarray) -> np.ndarray:
+    """Sum a window's last two axes in Excel's order: one double addition at a time, row-major.
+
+    numpy's reduction is pairwise and 8-way unrolled, which differs from sequential addition in
+    the last digit once a window holds more than a handful of numbers. Excel adds sequentially,
+    and reconciliation at 15 significant digits (and every `">"&A1` threshold built from a sum)
+    needs the same digits, so every SUM/SUMIF/AVERAGEIF/SUMPRODUCT goes through here.
+    """
+    flat = arr.reshape(*arr.shape[:-2], -1)
+    if flat.shape[-1] == 0:
+        return np.zeros(flat.shape[:-1], dtype=np.float64)
+    return np.cumsum(flat, axis=-1, dtype=np.float64)[..., -1]
+
+
 def _reduce_numeric(rng: RangeOperand, fn: str) -> Values:
     """Reduce a 4-D range over its window axes; text/bool/empty ignored, errors propagate."""
     v = rng.values
@@ -78,7 +92,7 @@ def _reduce_numeric(rng: RangeOperand, fn: str) -> Values:
     err_any = (kind == ERROR) if rng.valid is None else ((kind == ERROR) & rng.valid)
     nums = np.where(numeric, num, 0.0)
     if fn == "sum":
-        out = nums.sum(axis=(-2, -1))
+        out = window_sum(nums)
     elif fn == "count":
         out = numeric.sum(axis=(-2, -1)).astype(np.float64)
         res = Values.number(0.0, out.shape)
@@ -93,7 +107,7 @@ def _reduce_numeric(rng: RangeOperand, fn: str) -> Values:
     elif fn == "average":
         n = numeric.sum(axis=(-2, -1))
         with np.errstate(invalid="ignore", divide="ignore"):
-            out = np.where(n > 0, nums.sum(axis=(-2, -1)) / np.maximum(n, 1), 0.0)
+            out = np.where(n > 0, window_sum(nums) / np.maximum(n, 1), 0.0)
         res = Values.number(0.0, out.shape)
         res.num = out
         res.kind[n == 0] = ERROR
@@ -389,7 +403,7 @@ def fn_sumif(ctx: BlockContext, args: list[Node]) -> Values:
     shape = np.broadcast_shapes(mask.shape, tv.kind.shape)
     m = np.broadcast_to(mask, shape) & np.broadcast_to(numeric, shape)
     nums = np.where(m, np.broadcast_to(tv.num, shape), 0.0)
-    total = nums.sum(axis=(-2, -1))
+    total = window_sum(nums)
     out = Values.number(0.0, total.shape)
     if fname == "AVERAGEIF":
         n = m.sum(axis=(-2, -1))
@@ -419,7 +433,7 @@ def fn_sumproduct(ctx: BlockContext, args: list[Node]) -> Values:
             res.kind[has] = ERROR
             res.err[has] = int(XlError.VALUE)
             err_res = res if err_res is None else err_res
-    total = prod.sum(axis=(-2, -1))
+    total = window_sum(prod)
     out = Values.number(0.0, total.shape)
     out.num = total
     if err_res is not None:

@@ -12,11 +12,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.engine.runner import ModelHasCyclesError
 from app.storage import runs, workbooks
 from app.storage.models import ValidationRow, WorkbookVersion
 from app.validation.anomalies import find_anomalies
 from app.validation.reconcile import reconcile
-from app.validation.schema import ValidationPolicy, ValidationReport
+from app.validation.schema import Totals, ValidationPolicy, ValidationReport
 
 
 class ValidationNotFoundError(LookupError):
@@ -82,38 +83,54 @@ def validate_version(
     policy = policy or default_policy()
     started = time.perf_counter()
     engine, model, _meta, version = runs.load_engine(session, version_id)
-    result = engine.run({}, mode="full", skip_unsupported=True)
-    run = runs.save_run(session, version, result, parent_run_id=None)
-    if not result.summary.skipped_template_ids:
-        runs.state_cache.put((version_id, run.id), (result.grids, result.table))
 
     def load_raw(name: str):
         return workbooks.load_raw(session, version_id, sheet=name).sheets[0]
 
     raw_sheets = {s.name: load_raw(s.name) for s in model.sheets if s.in_scope and s.formula_cells}
-    computed_cache: dict[str, dict] = {}
+    anomaly_loader = lambda name: raw_sheets.get(name) or load_raw(name)  # noqa: E731
 
-    def computed(sheet: str) -> dict:
-        if sheet not in computed_cache:
-            cols = result.formula_values(sheet)
-            computed_cache[sheet] = {
-                a: (v, t)
-                for a, v, t in zip(cols["address"], cols["value"], cols["type"], strict=True)
-            }
-        return computed_cache[sheet]
+    try:
+        result = engine.run({}, mode="full", skip_unsupported=True)
+    except ModelHasCyclesError as exc:
+        # The structural report still stands; reconciliation cannot, so the version fails
+        # validation until the circular reference is fixed in the master.
+        run = None
+        totals, coverage, mismatches, truncated, unsupported = Totals(), [], [], False, []
+        anomalies = find_anomalies(model, anomaly_loader)
+        status = "failed"
+        reasons = [
+            f"{len(exc.descriptions)} circular reference(s): the engine refuses to evaluate the "
+            "model, so no cell could be reconciled; fix the master and upload a new version",
+            *exc.descriptions[:5],
+        ]
+    else:
+        run = runs.save_run(session, version, result, parent_run_id=None)
+        if not result.summary.skipped_template_ids:
+            runs.state_cache.put((version_id, run.id), (result.grids, result.table))
+        computed_cache: dict[str, dict] = {}
 
-    totals, coverage, mismatches, truncated, unsupported = reconcile(
-        model, raw_sheets, computed, set(result.summary.skipped_template_ids), policy
-    )
-    anomalies = find_anomalies(model, lambda name: raw_sheets.get(name) or load_raw(name))
-    status, reasons = decide_status(totals, mismatches, anomalies, policy)
+        def computed(sheet: str) -> dict:
+            if sheet not in computed_cache:
+                cols = result.formula_values(sheet)
+                computed_cache[sheet] = {
+                    a: (v, t)
+                    for a, v, t in zip(cols["address"], cols["value"], cols["type"], strict=True)
+                }
+            return computed_cache[sheet]
+
+        totals, coverage, mismatches, truncated, unsupported = reconcile(
+            model, raw_sheets, computed, set(result.summary.skipped_template_ids), policy
+        )
+        anomalies = find_anomalies(model, anomaly_loader)
+        status, reasons = decide_status(totals, mismatches, anomalies, policy)
     counts: dict[str, int] = {}
     for a in anomalies:
         counts[a.kind] = counts.get(a.kind, 0) + 1
     report = ValidationReport(
         id=uuid.uuid4().hex,
         version_id=version_id,
-        run_id=run.id,
+        run_id=run.id if run is not None else None,
         created_at=datetime.now(UTC),
         status=status,  # type: ignore[arg-type]
         policy=policy,
@@ -131,7 +148,7 @@ def validate_version(
         ValidationRow(
             id=report.id,
             version_id=version_id,
-            run_id=run.id,
+            run_id=report.run_id,
             status=status,
             created_at=report.created_at,
             summary_json=json.dumps(
@@ -184,6 +201,13 @@ def activate_version(
     if status is None:
         raise ActivationRefusedError("Validate this version before activating it.", status=None)
     override = False
+    if status == "failed" and latest_validation(session, version_id).run_id is None:
+        # No run could be made at all (circular references): nothing to activate, override or not.
+        raise ActivationRefusedError(
+            "This version has circular references and cannot be evaluated; fix the master and "
+            "upload a new version.",
+            status=status,
+        )
     if status == "failed":
         if not override_reason or not override_reason.strip():
             raise ActivationRefusedError(

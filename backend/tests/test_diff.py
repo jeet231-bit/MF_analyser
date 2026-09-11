@@ -199,5 +199,5 @@ def test_upload_pipeline_survives_cycles(client: TestClient, name: str) -> None:
     assert response.status_code == 201
     body = response.json()
     assert body["status"] == "pending_review"
-    assert body["validation_status"] is None
+    assert body["validation_status"] == "failed"
     assert any("circular" in n for n in body["pipeline_notes"])

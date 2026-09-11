@@ -43,12 +43,16 @@ def test_old_vs_fixed_master_diff(client) -> None:
     for s in report.structural:
         print(f"  STRUCTURAL {s.kind}: {s.description[:110]}".encode("ascii", "replace").decode())
 
-    repairs = [c for c in report.logic if c.kind == "template_changed"]
+    changed = [c for c in report.logic if c.kind == "template_changed"]
+    repairs = [c for c in changed if c.detail.get("repair")]
     assert sum(c.cells for c in repairs) == 46
     assert len(repairs) == 2  # one merged entry per repaired row
     assert {c.sheet for c in repairs} == {"Roll Perf", "Bull-Bear Returns"}
-    assert all(c.detail.get("repair") for c in repairs)
     assert all(c.affected_output_count > 0 for c in repairs)
+    # The Report/Averages cycle fix: whole-column AVERAGEIF ranges bounded to the fund rows.
+    others = [c for c in changed if not c.detail.get("repair")]
+    assert [(c.sheet, c.cells) for c in others] == [("Averages", 280)]
+    assert not any(c.kind in ("template_added", "template_removed") for c in report.logic)
     resolved = [
         s
         for s in report.structural
