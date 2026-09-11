@@ -19,13 +19,14 @@ from app.exports.csv_export import write_csv
 from app.exports.xlsx import write_workbook
 from app.research import export as rexport
 from app.research import insights as engine
-from app.research.insights import entity_sub, fmt_count, fmt_measure, render_sentence
-from app.research.semantic import Predicate, parse_map
+from app.research import snapshots as snaps
+from app.research.insights import entity_sub, fmt_count, fmt_measure, render_sentences
+from app.research.semantic import parse_map
+from app.research.snapshots import Snapshot
 from app.research.table import (
     Entity,
     NotConfigured,
     ResearchTable,
-    baseline_tables,
     get_table,
     resolve_for_version,
 )
@@ -133,6 +134,43 @@ def _previous_version(session: Session, current: WorkbookVersion) -> WorkbookVer
     return max(pool, key=lambda v: v.activated_at or v.uploaded_at) if pool else None
 
 
+def _snapshot_of(
+    session: Session, version: WorkbookVersion | None, table: ResearchTable | None = None
+) -> Snapshot | None:
+    """The version's snapshot (taken on demand when it is missing). For the current table the
+    snapshot is derived in memory so a what-if run never writes one."""
+    if version is None:
+        return None
+    if table is not None and table.version_id == version.id:
+        rows, fingerprint = snaps.build_payload(table)
+        return Snapshot(
+            version_id=version.id,
+            filename=version.filename,
+            uploaded_at=version.uploaded_at,
+            activated_at=version.activated_at,
+            run_id=table.run_id,
+            as_of=table.as_of,
+            fingerprint=fingerprint,
+            rows={k: snaps.SnapshotRow(*v) for k, v in rows.items()},
+        )
+    return snaps.snapshot_for(session, version)
+
+
+def _history(session: Session, current: Snapshot | None) -> list[Snapshot]:
+    """Genuine (distinct-month) activated snapshots, oldest first."""
+    return snaps.genuine(snaps.activated_snapshots(session))
+
+
+def _version_out(v: WorkbookVersion, snapshot: Snapshot | None, current: Snapshot | None):
+    return {
+        "id": v.id,
+        "filename": v.filename,
+        "uploaded_at": _iso(v.uploaded_at),
+        "as_of": snapshot.date.date().isoformat() if snapshot else None,
+        "date": snaps.date_label(snapshot, current),
+    }
+
+
 def _entity_dict(table: ResearchTable, e: Entity) -> dict[str, Any]:
     return {
         "key": e.key,
@@ -214,32 +252,32 @@ def _repair_keys(
 def compute_movement(
     session: Session, base: WorkbookVersion, target: WorkbookVersion, table_to: ResearchTable
 ) -> dict[str, Any]:
-    run_from = run_store.baseline_run(session, base.id)
-    if run_from is None:
+    """Rank and quartile movement from the base version's snapshot to the target's table."""
+    if run_store.baseline_run(session, base.id) is None:
         return {"available": False, "reason": f"version {base.id[:8]} has no baseline run"}
-    try:
-        table_from = get_table(session, base, run_from)
-    except NotConfigured as exc:
-        return {"available": False, "reason": "; ".join(exc.problems)}
-    rank_key = table_to.primary_key("rank")
-    q_key = table_to.primary_key("quartile")
-    if rank_key is None or rank_key not in table_from.resolved.measures:
+    snap_from = _snapshot_of(session, base)
+    if snap_from is None:
         return {
             "available": False,
-            "reason": "the primary rank measure does not resolve on both versions",
+            "reason": f"the research map does not resolve on version {base.id[:8]}",
         }
+    rank_key = table_to.primary_key("rank")
+    q_key = table_to.primary_key("quartile")
+    if rank_key is None:
+        return {"available": False, "reason": "the primary rank measure does not resolve"}
+    snap_to = _snapshot_of(session, target, table_to)
     repairs = _repair_keys(session, base, target, table_to)
     movers: list[dict[str, Any]] = []
     entries: list[dict[str, Any]] = []
     exits: list[dict[str, Any]] = []
     into_q1 = out_q1 = q_changes = 0
     for e in table_to.entities:
-        before = table_from.by_key.get(e.key)
+        before = snap_from.rows.get(e.key)
         if before is None:
             entries.append({"key": e.key, "label": e.label, "category": e.category})
             continue
-        r_from, r_to = before.measures.get(rank_key), e.measures.get(rank_key)
-        q_from = before.measures.get(q_key) if q_key else None
+        r_from, r_to = before.rank, e.measures.get(rank_key)
+        q_from = before.quartile if q_key else None
         q_to = e.measures.get(q_key) if q_key else None
         if q_from != q_to and (q_from is not None or q_to is not None):
             q_changes += 1
@@ -265,7 +303,7 @@ def compute_movement(
                 "note": repairs.get(e.key),
             }
         )
-    for k, before in table_from.by_key.items():
+    for k, before in snap_from.rows.items():
         if k not in table_to.by_key:
             exits.append({"key": k, "label": before.label, "category": before.category})
     up = [m for m in movers if m["delta"] > 0]
@@ -274,12 +312,9 @@ def compute_movement(
     down.sort(key=lambda m: m["delta"])
     return {
         "available": True,
-        "from": {"id": base.id, "filename": base.filename, "uploaded_at": _iso(base.uploaded_at)},
-        "to": {
-            "id": target.id,
-            "filename": target.filename,
-            "uploaded_at": _iso(target.uploaded_at),
-        },
+        "from": _version_out(base, snap_from, snap_to),
+        "to": _version_out(target, snap_to, snap_to),
+        "same_month": bool(snap_to and snap_from.fingerprint == snap_to.fingerprint),
         "rated": table_to.summary["rated"],
         "moved": len(movers),
         "up": len(up),
@@ -298,21 +333,57 @@ def compute_movement(
     }
 
 
-def _held_q1(session: Session, table: ResearchTable) -> dict[str, Any] | None:
+def _held_q1(table: ResearchTable, history: list[Snapshot]) -> dict[str, Any]:
+    """How many current Q1 funds were Q1 in every genuine month. Unavailable (with the reason)
+    until two activated versions with different as-of dates exist."""
     q_key = table.primary_key("quartile")
     if q_key is None:
-        return None
-    tables = baseline_tables(session)
-    if len(tables) < 2:
-        return None
-    pred = [Predicate(measure=q_key, op="eq", value=1)]
+        return {"available": False, "note": "the primary quartile measure does not resolve"}
+    if len(history) < 2:
+        return {
+            "available": False,
+            "versions": len(history),
+            "note": "Becomes available after a second genuine monthly upload; every activated "
+            "version so far carries the same as-of date."
+            if history
+            else "Becomes available once two activated versions with different as-of dates exist.",
+        }
     tallies: dict[str, int] = {}
-    for _v, _r, t in tables:
-        for e in t.entities:
-            if all(engine.matches(t, e, p) for p in pred):
-                tallies[e.key] = tallies.get(e.key, 0) + 1
-    held = [k for k, c in tallies.items() if c == len(tables) and k in table.by_key]
-    return {"count": len(held), "versions": len(tables)}
+    for snap in history:
+        for key, row in snap.rows.items():
+            if row.quartile == 1:
+                tallies[key] = tallies.get(key, 0) + 1
+    current_q1 = [e.key for e in table.entities if e.measures.get(q_key) == 1]
+    held = [k for k in current_q1 if tallies.get(k, 0) == len(history)]
+    return {
+        "available": True,
+        "count": len(held),
+        "current_q1": len(current_q1),
+        "versions": len(history),
+        "from": snaps.date_label(history[0], history[-1]),
+    }
+
+
+def _previous_label(movement: dict[str, Any]) -> str | None:
+    """'31 Aug' normally; 'the earlier upload of 31 Aug' when both versions carry that date."""
+    date = movement["from"]["date"]
+    if date is None:
+        return None
+    return f"the earlier upload of {date}" if movement.get("same_month") else date
+
+
+def _numbers(**values: Any) -> dict[str, Any]:
+    """Formatted placeholders plus the raw numbers (under ``_n``) for zero-variant selection."""
+    ctx: dict[str, Any] = {"_n": {}}
+    for k, v in values.items():
+        if isinstance(v, bool) or v is None:
+            ctx[k] = v
+        elif isinstance(v, int | float):
+            ctx[k] = fmt_count(v)
+            ctx["_n"][k] = v
+        else:
+            ctx[k] = v
+    return ctx
 
 
 # ---- endpoints --------------------------------------------------------------------------
@@ -349,6 +420,9 @@ def research_config(
                 else (list(ent.rows) if ent.rows else None),
                 "key": f"{ent.sheet}!{ent.keyColumn}",
                 "label": f"{ent.sheet}!{ent.labelColumn}" if ent.labelColumn else None,
+                "universe": f"{ent.sheet}!{ent.universe.column} = {ent.universe.equals!r}"
+                if ent.universe
+                else None,
             },
             "dimensions": [
                 {
@@ -417,8 +491,11 @@ def research_config(
             "footer": rmap.footer,
             "findings": [f.model_dump() for f in rmap.findings],
             "quartileRule": rmap.quartileRule.model_dump(),
+            "minGroupCount": rmap.minGroupCount,
         }
     )
+    for d in base["dimensions"]:
+        d["split"] = rmap.dimensions[d["key"]].split
     return base
 
 
@@ -481,9 +558,11 @@ def research_summary(
     # Movement headline vs the previous activated version.
     previous = _previous_version(session, version)
     movement = compute_movement(session, previous, version, table) if previous else None
+    available = bool(movement and movement.get("available"))
     out["movement"] = (
         {
             "previous": movement["from"],
+            "same_month": movement["same_month"],
             "moved": movement["moved"],
             "up": movement["up"],
             "down": movement["down"],
@@ -492,26 +571,48 @@ def research_summary(
             "exits": len(movement["exits"]),
             "top": (movement["risers"][:3] + movement["fallers"][:2]),
         }
-        if movement and movement.get("available")
+        if available and movement
         else None
     )
-    held = _held_q1(session, table)
+    current = _snapshot_of(session, version, table)
+    history = _history(session, current)
+    held = _held_q1(table, history)
     out["held_q1"] = held
-    template = table.map.narratives.get("dashboard")
-    narrative_ctx = {
-        "moved": fmt_count(movement["moved"]) if movement and movement.get("available") else None,
-        "up": fmt_count(movement["up"]) if movement and movement.get("available") else None,
-        "down": fmt_count(movement["down"]) if movement and movement.get("available") else None,
-        "repairs": fmt_count(len(movement["repairs"]))
-        if movement and movement.get("available")
-        else None,
-        "previous": previous.filename if previous else None,
-        "held_q1": fmt_count(held["count"]) if held else None,
-        "versions": held["versions"] if held else None,
-        "rated": fmt_count(table.summary["rated"]),
-        "categories": fmt_count(table.summary["categories"]),
-    }
-    out["narrative"] = render_sentence(template, narrative_ctx) if template else None
+    out["history"] = [
+        {
+            "id": s.version_id,
+            "date": snaps.date_label(s, current),
+            "as_of": s.date.date().isoformat(),
+        }
+        for s in history
+    ]
+    u = table.summary
+    universe_ctx = _numbers(
+        total=u["total"],
+        rated=u["rated"],
+        unrated=u["total"] - u["rated"],
+        categories=u["categories"],
+        unranked=u["unranked_categories"],
+        unranked_below=table.map.quartileRule.unrankedBelow,
+        unrated_small=u["unrated_small_categories"],
+        unrated_other=u["unrated_missing_data"],
+        outside=u.get("outside_universe", 0),
+        as_of=snaps.date_label(current) if current else None,
+    )
+    out["universe_narrative"] = render_sentences(table.map.narrative("universe"), universe_ctx)
+    dashboard_ctx = _numbers(
+        moved=movement["moved"] if available and movement else None,
+        up=movement["up"] if available and movement else None,
+        down=movement["down"] if available and movement else None,
+        repairs=len(movement["repairs"]) if available and movement else None,
+        previous=_previous_label(movement) if available and movement else None,
+        current=snaps.date_label(current) if current else None,
+        held_q1=held.get("count") if held.get("available") else None,
+        versions=held.get("versions") if held.get("available") else None,
+        rated=u["rated"],
+        categories=u["categories"],
+    )
+    out["narrative"] = render_sentences(table.map.narrative("dashboard"), dashboard_ctx)
     out["footer"] = table.map.footer
     return out
 
@@ -613,30 +714,22 @@ def research_entities(
         rows = engine.sort_entities(table, rows, sort_key, direction)
     else:
         direction = "asc"
-    # Deltas vs the previous activated version.
+    # Deltas vs the previous activated version's snapshot.
     previous = _previous_version(session, version)
+    prev_snap = _snapshot_of(session, previous)
     deltas: dict[str, dict[str, Any]] = {}
-    if previous is not None and rank_key:
-        prev_run = run_store.baseline_run(session, previous.id)
-        if prev_run is not None:
-            try:
-                prev_table = get_table(session, previous, prev_run)
-                q_key = table.primary_key("quartile")
-                for e in rows:
-                    b = prev_table.by_key.get(e.key)
-                    if b is None:
-                        deltas[e.key] = {"rank": None, "new": True}
-                        continue
-                    rf, rt = b.measures.get(rank_key), e.measures.get(rank_key)
-                    deltas[e.key] = {
-                        "rank": int(rf - rt) if rf is not None and rt is not None else None,
-                        "quartileFrom": int(b.measures[q_key])
-                        if q_key and b.measures.get(q_key) is not None
-                        else None,
-                        "new": False,
-                    }
-            except NotConfigured:
-                pass
+    if prev_snap is not None and rank_key:
+        for e in rows:
+            b = prev_snap.rows.get(e.key)
+            if b is None:
+                deltas[e.key] = {"rank": None, "new": True}
+                continue
+            rt = e.measures.get(rank_key)
+            deltas[e.key] = {
+                "rank": int(b.rank - rt) if b.rank is not None and rt is not None else None,
+                "quartileFrom": int(b.quartile) if b.quartile is not None else None,
+                "new": False,
+            }
     # Grouping (a pivot, not a filter).
     groups: list[dict[str, Any]] | None = None
     group_of: dict[str, str] = {}
@@ -692,7 +785,9 @@ def research_entities(
                 for d in ("category", "amc", "plan")
                 if d in table.resolved.dimensions
             },
-            "previous": {"id": previous.id, "filename": previous.filename} if previous else None,
+            "previous": _version_out(previous, prev_snap, _snapshot_of(session, version, table))
+            if previous
+            else None,
             "groups": groups,
             "rows": [
                 {**_entity_dict(table, e), "delta": deltas.get(e.key), "group": group_of.get(e.key)}
@@ -710,7 +805,7 @@ def _category_rows(
     chosen = next((m for m in returns if m.key == measure), returns[0] if returns else None)
     rows = []
     for c in table.categories.values():
-        if c.count == 0 and not c.stats:
+        if c.count == 0:  # a key in the category-statistics table with no fund behind it
             continue
         rows.append(
             {
@@ -745,30 +840,36 @@ def research_categories(
     out = _status(version, run, table)
     rows, chosen = _category_rows(table, measure)
     spec = table.map.measure(chosen) if chosen else None
+    min_group = table.map.minGroupCount
+    eligible = [r for r in rows if r["rated"] >= min_group]
     widest = (
         max(
-            (r for r in rows if r["spreads"].get(chosen) is not None),
+            (r for r in eligible if r["spreads"].get(chosen) is not None),
             key=lambda r: r["spreads"][chosen],
             default=None,
         )
         if chosen
         else None
     )
-    best = next((r for r in rows if r["value"] is not None), None)
-    template = table.map.narratives.get("categories")
-    narrative_ctx = {
-        "categories": fmt_count(len(rows)),
-        "unranked": fmt_count(sum(1 for r in rows if r["unranked"])),
-        "widest": {
+    best = next((r for r in eligible if r["value"] is not None), None)
+    narrative_ctx = _numbers(
+        categories=len(rows),
+        unranked=sum(1 for r in rows if r["unranked"]),
+        unranked_below=table.map.quartileRule.unrankedBelow,
+        eligible=len(eligible),
+        min_group=min_group,
+    )
+    narrative_ctx["widest"] = (
+        {
             "label": widest["key"],
             "value": fmt_measure(widest["spreads"][chosen], spec)
             + (" pts" if spec and not spec.unit else ""),
         }
         if widest
-        else None,
-        "best": {"label": best["key"], "value": best["valueLabel"]} if best else None,
-        "measure": {"label": spec.label} if spec else None,
-    }
+        else None
+    )
+    narrative_ctx["best"] = {"label": best["key"], "value": best["valueLabel"]} if best else None
+    narrative_ctx["measure"] = {"label": spec.label} if spec else None
     out.update(
         {
             "measure": chosen,
@@ -778,8 +879,10 @@ def research_categories(
                 if m.role == "return"
             ],
             "unrankedBelow": table.map.quartileRule.unrankedBelow,
+            "minGroupCount": min_group,
+            "statsOnly": table.summary.get("stats_only_categories", 0),
             "rows": rows,
-            "narrative": render_sentence(template, narrative_ctx) if template else None,
+            "narrative": render_sentences(table.map.narrative("categories"), narrative_ctx),
         }
     )
     return out
@@ -804,11 +907,11 @@ def research_movement(
         return out
     movement = compute_movement(session, base, version, table)
     out.update(movement)
+    current = _snapshot_of(session, version, table)
+    by_id = {s.version_id: s for s in snaps.activated_snapshots(session)}
     out["versions"] = [
         {
-            "id": v.id,
-            "filename": v.filename,
-            "uploaded_at": _iso(v.uploaded_at),
+            **_version_out(v, by_id.get(v.id), current),
             "status": v.status,
             "activated_at": _iso(v.activated_at),
         }
@@ -816,29 +919,30 @@ def research_movement(
         if run_store.baseline_run(session, v.id) is not None
     ]
     if movement.get("available"):
-        template = table.map.narratives.get("movement")
-        narrative_ctx = {
-            "moved": fmt_count(movement["moved"]),
-            "up": fmt_count(movement["up"]),
-            "down": fmt_count(movement["down"]),
-            "repairs": fmt_count(len(movement["repairs"])),
-            "into_q1": fmt_count(movement["quartileChanges"]["into_q1"]),
-            "out_of_q1": fmt_count(movement["quartileChanges"]["out_of_q1"]),
-            "entries": fmt_count(len(movement["entries"])),
-            "exits": fmt_count(len(movement["exits"])),
-            "previous": base.filename,
-            "current": version.filename,
-        }
-        out["narrative"] = render_sentence(template, narrative_ctx) if template else None
+        narrative_ctx = _numbers(
+            moved=movement["moved"],
+            up=movement["up"],
+            down=movement["down"],
+            repairs=len(movement["repairs"]),
+            into_q1=movement["quartileChanges"]["into_q1"],
+            out_of_q1=movement["quartileChanges"]["out_of_q1"],
+            entries=len(movement["entries"]),
+            exits=len(movement["exits"]),
+            previous=_previous_label(movement),
+            current=(
+                f"the later upload of {movement['to']['date']}"
+                if movement.get("same_month")
+                else movement["to"]["date"]
+            ),
+        )
+        out["narrative"] = render_sentences(table.map.narrative("movement"), narrative_ctx)
     return out
 
 
-def _versions_for_insights(
-    session: Session, table: ResearchTable
-) -> list[tuple[str, ResearchTable]]:
+def _versions_for_insights(session: Session, table: ResearchTable) -> list[Snapshot]:
     if not any(i.mode == "acrossVersions" for i in table.map.insights):
         return []
-    return [(v.filename, t) for v, _r, t in baseline_tables(session)]
+    return _history(session, None)
 
 
 def _insight_dict(ins: engine.ComputedInsight) -> dict[str, Any]:
@@ -853,6 +957,8 @@ def _insight_dict(ins: engine.ComputedInsight) -> dict[str, Any]:
         "measure": ins.measure,
         "drill": ins.drill,
         "problems": ins.problems,
+        "status": ins.status,
+        "note": ins.note,
         "rows": [
             {
                 "key": r.key,
@@ -1141,44 +1247,33 @@ def research_entity(
         }
         for p in window
     ]
-    # History across stored versions.
+    # History across genuine activated versions (snapshots).
+    current = _snapshot_of(session, version, table)
     history = []
-    for v, _r, t in baseline_tables(session):
-        h = t.by_key.get(e.key)
+    for s in _history(session, current):
+        h = s.rows.get(e.key)
         if h is None:
             continue
         history.append(
             {
-                "version_id": v.id,
-                "filename": v.filename,
-                "uploaded_at": _iso(v.uploaded_at),
-                "rank": h.measures.get(t.primary_key("rank") or "")
-                if t.primary_key("rank")
-                else None,
-                "quartile": h.measures.get(t.primary_key("quartile") or "")
-                if t.primary_key("quartile")
-                else None,
-                "score": h.measures.get(t.primary_key("score") or "")
-                if t.primary_key("score")
-                else None,
+                "version_id": s.version_id,
+                "filename": s.filename,
+                "uploaded_at": _iso(s.uploaded_at),
+                "date": snaps.date_label(s, current),
+                "as_of": s.date.date().isoformat(),
+                "rank": h.rank,
+                "quartile": h.quartile,
+                "score": h.score,
             }
         )
     # Movement vs previous and the narrative.
     previous = _previous_version(session, version)
+    prev_snap = _snapshot_of(session, previous)
     delta = None
-    if previous is not None:
-        prev_run = run_store.baseline_run(session, previous.id)
-        if prev_run is not None and rank_key:
-            try:
-                b = get_table(session, previous, prev_run).by_key.get(e.key)
-                if (
-                    b is not None
-                    and b.measures.get(rank_key) is not None
-                    and e.measures.get(rank_key) is not None
-                ):
-                    delta = int(b.measures[rank_key] - e.measures[rank_key])  # type: ignore[operator]
-            except NotConfigured:
-                delta = None
+    if prev_snap is not None and rank_key:
+        b = prev_snap.rows.get(e.key)
+        if b is not None and b.rank is not None and e.measures.get(rank_key) is not None:
+            delta = int(b.rank - e.measures[rank_key])  # type: ignore[operator]
     # The quartile rule in words: re-evaluate the quartile cell with tracing.
     explanation: list[str] | None = None
     q_cell = e.cells.get(q_key) if q_key else None
@@ -1197,19 +1292,23 @@ def research_entity(
             explanation = None
     rank_v = e.measures.get(rank_key) if rank_key else None
     q_v = e.measures.get(q_key) if q_key else None
-    narrative_ctx = {
-        "label": e.label,
-        "rank": fmt_count(rank_v) if rank_v is not None else None,
-        "category_count": fmt_count(info.rated) if info else None,
-        "category": cat,
-        "quartile": f"Q{int(q_v)}" if q_v is not None else None,
-        "delta": _fmt_delta(delta),
-        "previous": previous.filename if previous else None,
-        "score": fmt_measure(e.measures.get(score_key), table.map.measure(score_key))
-        if score_key
-        else None,
-    }
-    template = table.map.narratives.get("fund")
+    narrative_ctx = _numbers(
+        rank=rank_v,
+        category_count=info.rated if info else None,
+        delta=delta,
+    )
+    narrative_ctx.update(
+        {
+            "label": e.label,
+            "category": cat,
+            "quartile": f"Q{int(q_v)}" if q_v is not None else None,
+            "delta_text": _fmt_delta(delta),
+            "previous": snaps.date_label(prev_snap, current) if prev_snap else None,
+            "score": fmt_measure(e.measures.get(score_key), table.map.measure(score_key))
+            if score_key
+            else None,
+        }
+    )
     out.update(
         {
             "entity": _entity_dict(table, e),
@@ -1228,9 +1327,9 @@ def research_entity(
             "history": history,
             "delta": delta,
             "deltaLabel": _fmt_delta(delta),
-            "previous": {"id": previous.id, "filename": previous.filename} if previous else None,
+            "previous": _version_out(previous, prev_snap, current) if previous else None,
             "quartileExplanation": explanation,
-            "narrative": render_sentence(template, narrative_ctx) if template else None,
+            "narrative": render_sentences(table.map.narrative("fund"), narrative_ctx),
             "cells": e.cells,
         }
     )

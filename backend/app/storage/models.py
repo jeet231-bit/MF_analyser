@@ -179,6 +179,24 @@ class DiffRow(Base):
     payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
 
+class ResearchSnapshot(Base):
+    """A small per-version record of every entity's primary rank, quartile and score, taken
+    when the version is activated (or on first demand), so consistency and movement across
+    months are read from snapshots rather than by rebuilding every version's research table."""
+
+    __tablename__ = "research_snapshots"
+
+    version_id: Mapped[str] = mapped_column(
+        ForeignKey("workbook_versions.id", ondelete="CASCADE"), primary_key=True
+    )
+    run_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    as_of: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    entity_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+
 class RunSheetValues(Base):
     """Gzipped columnar JSON of a run's formula-cell values for one sheet."""
 

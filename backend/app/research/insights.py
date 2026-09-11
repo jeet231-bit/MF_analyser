@@ -1,11 +1,13 @@
 """The insight engine: declarative questions over the research table, each with a computed
 sentence. Config describes the question; this module evaluates it. Sentences are templates
 with a fixed vocabulary of placeholders, validated at load, so a card is either fully computed
-or reported as a problem, never rendered with holes."""
+or reported, never rendered with holes. A sentence whose trigger count is zero uses its ``zero``
+variant or is omitted: a sentence made of zeros is never emitted."""
 
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -15,7 +17,9 @@ from app.research.semantic import (
     InsightSpec,
     MeasureSpec,
     Predicate,
+    SentenceSpec,
 )
+from app.research.snapshots import Snapshot, SnapshotRow
 from app.research.table import Entity, ResearchTable
 
 INDIAN = True
@@ -44,9 +48,22 @@ class ComputedInsight:
     drill: dict[str, Any]
     measure: str | None = None
     problems: list[str] = field(default_factory=list)
+    status: str = "ok"  # ok | empty | unavailable | problem
+    note: str | None = None  # why an unavailable or empty card shows a placeholder
 
 
 # ---- formatting -------------------------------------------------------------------------
+
+
+def fmt_inr_crore(x: float) -> str:
+    """Indian currency for amounts held in crore: ₹39.1 lakh crore, ₹86,785 crore, ₹45.3 crore."""
+    sign = "-" if x < 0 else ""
+    a = abs(x)
+    if a >= 1e5:
+        return f"{sign}₹{_group(a / 1e5, 1, INDIAN)} lakh crore"
+    if a >= 100:
+        return f"{sign}₹{_group(a, 0, INDIAN)} crore"
+    return f"{sign}₹{_group(a, 1, INDIAN)} crore"
 
 
 def fmt_measure(value: Any, spec: MeasureSpec | None) -> str:
@@ -59,6 +76,8 @@ def fmt_measure(value: Any, spec: MeasureSpec | None) -> str:
     x = float(value)
     if spec is None:
         return _group(x, 0 if x.is_integer() else 2, INDIAN)
+    if spec.format == "inr_crore":
+        return fmt_inr_crore(x)
     decimals = spec.decimals
     if decimals is None:
         decimals = 0 if spec.format == "integer" or spec.role in ("rank", "quartile") else 2
@@ -72,54 +91,121 @@ def fmt_count(n: float) -> str:
     return _group(float(n), 0, INDIAN)
 
 
-def render_sentence(template: str, ctx: dict[str, Any]) -> str | None:
-    """Fill a template; None when any placeholder is missing or None (never a hole)."""
-
-    def lookup(path: str) -> Any:
-        cur: Any = ctx
-        for part in path.split("."):
-            if isinstance(cur, dict):
-                cur = cur.get(part)
-            else:
-                cur = getattr(cur, part, None)
-            if cur is None:
-                return None
-        return cur
-
-    out = template
-    for ph in SENTENCE_PLACEHOLDER.findall(template):
-        v = lookup(ph)
-        if v is None:
+def _lookup(ctx: dict[str, Any], path: str) -> Any:
+    cur: Any = ctx
+    for part in path.split("."):
+        if isinstance(cur, dict):
+            cur = cur.get(part)
+        else:
+            cur = getattr(cur, part, None)
+        if cur is None:
             return None
-        out = out.replace("{" + ph + "}", str(v))
-    return out
+    return cur
+
+
+def _as_number(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.replace(",", "").rstrip("%").strip())
+        except ValueError:
+            return None
+    return None
+
+
+def render_sentence(template: str, ctx: dict[str, Any]) -> str | None:
+    """Fill a template; None when any placeholder is missing or None (never a hole).
+    ``{n|fund|funds}`` renders the number and the right word; ``{n?is|are}`` only the word."""
+    numbers: dict[str, Any] = ctx.get("_n") or {}
+    missing = False
+
+    def fill(m: re.Match[str]) -> str:
+        nonlocal missing
+        name, mode, one, many = m.group(1), m.group(2), m.group(3), m.group(4)
+        v = _lookup(ctx, name)
+        if v is None:
+            missing = True
+            return ""
+        if not mode:
+            return str(v)
+        n = _as_number(numbers.get(name)) if name in numbers else _as_number(v)
+        word = one if n == 1 else many
+        return word if mode == "?" else f"{v} {word}"
+
+    out = SENTENCE_PLACEHOLDER.sub(fill, template)
+    return None if missing else out
+
+
+def _is_zero(value: Any) -> bool:
+    n = _as_number(value)
+    return n is not None and n == 0
+
+
+def render_sentences(specs: list[SentenceSpec], ctx: dict[str, Any]) -> str | None:
+    """Render every sentence that can be completed, choosing the zero variant when the trigger
+    placeholder is zero and omitting the sentence when it is zero without a variant. Raw numbers
+    for the zero test come from ``ctx['_n']`` when present, else from the formatted value."""
+    numbers: dict[str, Any] = ctx.get("_n") or {}
+
+    def raw(ph: str) -> Any:
+        return numbers.get(ph) if ph in numbers else _lookup(ctx, ph)
+
+    parts: list[str] = []
+    for spec in specs:
+        if any(raw(ph) is None or _is_zero(raw(ph)) for ph in spec.requires):
+            continue
+        triggers = spec.trigger_keys
+        if triggers and all(_is_zero(raw(t)) for t in triggers):
+            if not spec.zero:
+                continue
+            text = render_sentence(spec.zero, ctx)
+        else:
+            text = render_sentence(spec.default, ctx)
+        if text:
+            parts.append(text[0].upper() + text[1:])
+    return " ".join(parts) or None
 
 
 # ---- predicates -------------------------------------------------------------------------
 
 
-def _top_bottom(table: ResearchTable, spec: MeasureSpec, e: Entity, top: bool) -> bool:
+def _top_bottom(table: ResearchTable, spec: MeasureSpec, e: Entity, pred: Predicate) -> bool:
+    top = pred.op == "top"
     v = e.measures.get(spec.key)
     if v is None:
         return False
     if spec.role == "quartile":
         return v == (1 if top else 4)
     if spec.role == "rank":
-        cat = e.category
-        info = table.categories.get(cat) if cat else None
+        info = table.categories.get(e.category) if e.category else None
         n = info.rated if info and info.rated else None
         if not n:
             return False
-        cut = math.ceil(n / 4)
-        return v <= cut if top else v > n - cut
-    bounds = table.quantile_bounds(spec.key)
-    if bounds is None:
+        return _rank_in_share(v, n, pred.fraction, top)
+    return _value_in_share(table, spec, v, pred.fraction, top)
+
+
+def _rank_in_share(rank: float, n: int, fraction: float, top: bool) -> bool:
+    cut = math.ceil(n * fraction)
+    return rank <= cut if top else rank > n - cut
+
+
+def _value_in_share(
+    table: ResearchTable, spec: MeasureSpec, v: float, fraction: float, top: bool
+) -> bool:
+    vals = table.sorted_values(spec.key)
+    if len(vals) < 4:
         return False
-    q1, q3 = bounds
+    k = max(1, math.ceil(len(vals) * fraction))
     best_high = spec.higherIsBetter
     if top:
-        return v >= q3 if best_high else v <= q1
-    return v <= q1 if best_high else v >= q3
+        threshold = vals[-k] if best_high else vals[k - 1]
+        return v >= threshold if best_high else v <= threshold
+    threshold = vals[k - 1] if best_high else vals[-k]
+    return v <= threshold if best_high else v >= threshold
 
 
 def matches(table: ResearchTable, e: Entity, pred: Predicate) -> bool:
@@ -131,10 +217,13 @@ def matches(table: ResearchTable, e: Entity, pred: Predicate) -> bool:
     if op == "notnull":
         return v is not None
     if op in ("top", "bottom"):
-        return _top_bottom(table, spec, e, op == "top")
+        return _top_bottom(table, spec, e, pred)
     if v is None:
         return False
-    target = pred.value
+    return _compare(v, op, pred.value)
+
+
+def _compare(v: float, op: str, target: Any) -> bool:
     if op == "in":
         return v in [float(x) for x in (target or [])]
     try:
@@ -149,6 +238,30 @@ def matches(table: ResearchTable, e: Entity, pred: Predicate) -> bool:
         "gt": v > t,
         "gte": v >= t,
     }[op]
+
+
+def matches_snapshot(
+    table: ResearchTable, snap: Snapshot, row: SnapshotRow, pred: Predicate
+) -> bool:
+    """A predicate over a snapshot row: only the primary score / rank / quartile exist there."""
+    spec = table.map.measure(pred.measure)
+    if spec is None:
+        return False
+    v = {"rank": row.rank, "quartile": row.quartile, "score": row.score}.get(spec.role)
+    op = pred.op
+    if op == "notnull":
+        return v is not None
+    if v is None:
+        return False
+    if op in ("top", "bottom"):
+        top = op == "top"
+        if spec.role == "quartile":
+            return v == (1 if top else 4)
+        if spec.role == "rank":
+            n = snap.rated_in_category(row.category)
+            return bool(n) and _rank_in_share(v, n, pred.fraction, top)
+        return False
+    return _compare(v, op, pred.value)
 
 
 def select(table: ResearchTable, preds: list[Predicate]) -> list[Entity]:
@@ -178,12 +291,42 @@ def entity_sub(e: Entity) -> str | None:
 # ---- the engine -------------------------------------------------------------------------
 
 
+def _result(
+    spec: InsightSpec,
+    sentence: str,
+    rows: list[InsightRow],
+    count: int,
+    total: int,
+    drill: dict[str, Any],
+    measure_key: str | None,
+    problems: list[str],
+    status: str = "ok",
+    note: str | None = None,
+) -> ComputedInsight:
+    return ComputedInsight(
+        spec.key,
+        spec.section,
+        spec.eyebrow,
+        spec.title,
+        sentence,
+        rows,
+        count,
+        total,
+        drill,
+        measure_key,
+        problems,
+        status,
+        note,
+    )
+
+
 def compute_insight(
     table: ResearchTable,
     spec: InsightSpec,
-    versions: list[tuple[str, ResearchTable]] | None = None,
+    snapshots: list[Snapshot] | None = None,
 ) -> ComputedInsight:
-    """``versions``: (label, table) per stored version, oldest first, for acrossVersions."""
+    """``snapshots``: one per genuine (distinct-month) activated version, oldest first, for
+    acrossVersions insights."""
     problems: list[str] = []
     needed = [p.measure for p in spec.where] + ([spec.sort.measure] if spec.sort else [])
     if spec.groupBy:
@@ -198,7 +341,12 @@ def compute_insight(
     if missing:
         problems.append(f"measure(s) not resolved on this version: {', '.join(missing)}")
     rated_total = table.summary["rated"] or table.summary["total"]
-    ctx: dict[str, Any] = {"total": fmt_count(rated_total), "versions": len(versions or [])}
+    numbers: dict[str, Any] = {"total": rated_total, "versions": len(snapshots or [])}
+    ctx: dict[str, Any] = {
+        "total": fmt_count(rated_total),
+        "versions": len(snapshots or []),
+        "_n": numbers,
+    }
     rows: list[InsightRow] = []
     count = 0
     drill: dict[str, Any] = dict(spec.drill)
@@ -207,22 +355,16 @@ def compute_insight(
     )
 
     if problems:
-        return ComputedInsight(
-            spec.key,
-            spec.section,
-            spec.eyebrow,
-            spec.title,
-            "",
-            [],
-            0,
-            rated_total,
-            drill,
-            measure_key,
-            problems,
-        )
+        return _result(spec, "", [], 0, rated_total, drill, measure_key, problems, "problem")
 
     if spec.mode == "filter":
         found = select(table, spec.where)
+        if spec.minGroupCount:
+            eligible = {c.key for c in table.categories.values() if c.rated >= spec.minGroupCount}
+            found = [e for e in found if e.category in eligible]
+            numbers["groups"] = len(eligible)
+            ctx["groups"] = fmt_count(len(eligible))
+            ctx["min_group"] = spec.minGroupCount
         if spec.sort:
             found = sort_entities(table, found, spec.sort.measure, spec.sort.dir)
             drill.setdefault("sort", spec.sort.measure)
@@ -233,26 +375,23 @@ def compute_insight(
             rows.append(_entity_row(table, e, spec, show_spec))
         drill.setdefault("keys", [e.key for e in found[:200]])
     elif spec.mode == "groupBy" and spec.groupBy:
-        rows, count, gctx = _group_by(table, spec)
+        rows, count, gctx, gnumbers = _group_by(table, spec)
         ctx.update(gctx)
+        numbers.update(gnumbers)
     elif spec.mode == "acrossVersions" and spec.across:
-        if len(versions or []) < 2:
-            problems.append("needs at least two stored versions with a baseline run")
-            return ComputedInsight(
-                spec.key,
-                spec.section,
-                spec.eyebrow,
-                spec.title,
-                "",
-                [],
-                0,
-                rated_total,
-                drill,
-                measure_key,
-                problems,
+        if len(snapshots or []) < 2:
+            note = (
+                "Becomes available after a second genuine monthly upload; every activated "
+                "version so far carries the same as-of date."
+                if snapshots
+                else "Becomes available once two activated versions with different as-of dates exist."
             )
-        rows, count, actx = _across_versions(table, spec, versions or [])
+            return _result(
+                spec, "", [], 0, rated_total, drill, measure_key, [], "unavailable", note
+            )
+        rows, count, actx, anumbers = _across_versions(table, spec, snapshots or [])
         ctx.update(actx)
+        numbers.update(anumbers)
     elif spec.mode == "aggregate" and spec.aggregate:
         found = select(table, spec.where)
         agg = table.map.measure(spec.aggregate.measure)
@@ -260,44 +399,46 @@ def compute_insight(
         total_sum = sum(v for _e, v in vals)
         count = len(vals)
         ctx["sum"] = fmt_measure(total_sum, agg)
+        numbers["sum"] = total_sum
         vals.sort(key=lambda ev: -ev[1])
         for e, v in vals[: spec.limit]:
             rows.append(InsightRow(e.key, e.label, entity_sub(e), v, fmt_measure(v, agg)))
         drill.setdefault("keys", [e.key for e, _v in vals[:200]])
 
     ctx["count"] = fmt_count(count)
+    numbers["count"] = count
     ctx["pct"] = f"{(100 * count / rated_total):.0f}%" if rated_total else None
     if rows:
         ctx["top"] = {
             "label": rows[0].label,
             "value": rows[0].value_label,
             "sub": rows[0].sub or "",
+            "group": rows[0].extra.get("group") or "",
         }
     if measure_key and table.map.measure(measure_key):
         ctx["measure"] = {"label": table.map.measure(measure_key).label}  # type: ignore[union-attr]
-    sentence = render_sentence(spec.sentence, ctx)
+    sentence = render_sentences(spec.sentences, ctx)
+    status = "ok"
+    note = None
     if sentence is None:
-        problems.append("sentence could not be completed: an input is unavailable on this version")
+        if count == 0:
+            status, note = "empty", "No fund meets this test on this version."
+        else:
+            problems.append(
+                "sentence could not be completed: an input is unavailable on this version"
+            )
+            status = "problem"
         sentence = ""
-    return ComputedInsight(
-        spec.key,
-        spec.section,
-        spec.eyebrow,
-        spec.title,
-        sentence,
-        rows,
-        count,
-        rated_total,
-        drill,
-        measure_key,
-        problems,
+    return _result(
+        spec, sentence, rows, count, rated_total, drill, measure_key, problems, status, note
     )
 
 
 def _entity_row(
     table: ResearchTable, e: Entity, spec: InsightSpec, show_spec: MeasureSpec | None
 ) -> InsightRow:
-    extra = {p.measure: e.measures.get(p.measure) for p in spec.where}
+    extra: dict[str, Any] = {p.measure: e.measures.get(p.measure) for p in spec.where}
+    extra["group"] = e.category
     if "quartile_pair" in spec.show and len(spec.where) >= 2:
         a, b = spec.where[0].measure, spec.where[1].measure
         va, vb = e.measures.get(a), e.measures.get(b)
@@ -322,21 +463,35 @@ def _entity_row(
     return InsightRow(e.key, e.label, entity_sub(e), None, "", extra)
 
 
+def group_values(table: ResearchTable, dimension: str, e: Entity) -> list[str]:
+    """The group(s) an entity belongs to on a dimension; a ``split`` separator yields several."""
+    v = e.dims.get(dimension)
+    if not v:
+        return []
+    spec = table.map.dimensions.get(dimension)
+    if spec is not None and spec.split:
+        return [part.strip() for part in v.split(spec.split) if part.strip()]
+    return [v]
+
+
 def _group_by(table: ResearchTable, spec: InsightSpec):
     g = spec.groupBy
     assert g is not None
     base = select(table, spec.where) if spec.where else list(table.entities)
     groups: dict[str, list[Entity]] = {}
     for e in base:
-        v = e.dims.get(g.dimension)
-        if v:
+        for v in group_values(table, g.dimension, e):
             groups.setdefault(v, []).append(e)
+    threshold = spec.minGroupCount if spec.minGroupCount is not None else table.map.minGroupCount
+    threshold = max(threshold, g.minMembers)
     scored: list[tuple[str, float, int, int]] = []  # label, value, count, total
     mspec = table.map.measure(g.measure) if g.measure else None
+    considered = 0
     for label, members in groups.items():
-        rated = [e for e in members if table.rated(e)] or members
-        if len(rated) < g.minMembers:
+        rated = [e for e in members if table.rated(e)]
+        if len(rated) < threshold:
             continue
+        considered += 1
         if g.aggregate in ("count_where", "hit_rate"):
             hits = [e for e in rated if all(matches(table, e, p) for p in g.where)]
             value = (
@@ -363,7 +518,8 @@ def _group_by(table: ResearchTable, spec: InsightSpec):
                 " pts" if g.aggregate == "dispersion" and mspec and not mspec.unit else ""
             )
         rows.append(InsightRow(None, label, None, value, vl, {"count": cnt, "total": total}))
-    ctx: dict[str, Any] = {}
+    ctx: dict[str, Any] = {"groups": fmt_count(considered), "min_group": threshold}
+    numbers: dict[str, Any] = {"groups": considered}
     if scored:
         top = scored[0]
         ctx["group"] = {
@@ -372,32 +528,28 @@ def _group_by(table: ResearchTable, spec: InsightSpec):
             "count": top[2],
             "total": top[3],
         }
+        numbers["group.count"] = top[2]
         if g.aggregate == "count_where":
-            eligible = [t for t in scored if t[3] >= 5]
-            if eligible:
-                best = max(eligible, key=lambda t: t[2] / t[3])
-                ctx["hit"] = {
-                    "label": best[0],
-                    "value": f"{100 * best[2] / best[3]:.0f}%",
-                    "count": best[2],
-                    "total": best[3],
-                }
-    return rows, len(scored), ctx
+            best = max(scored, key=lambda t: t[2] / t[3])
+            ctx["hit"] = {
+                "label": best[0],
+                "value": f"{100 * best[2] / best[3]:.0f}%",
+                "count": best[2],
+                "total": best[3],
+            }
+    return rows, len(scored), ctx, numbers
 
 
-def _across_versions(
-    table: ResearchTable, spec: InsightSpec, versions: list[tuple[str, ResearchTable]]
-):
+def _across_versions(table: ResearchTable, spec: InsightSpec, snapshots: list[Snapshot]):
     a = spec.across
     assert a is not None
-    tables = versions or [("current", table)]
-    n_versions = len(tables)
+    n_versions = len(snapshots)
     need = a.minVersions or n_versions
     tallies: dict[str, int] = {}
-    for _label, t in tables:
-        for e in t.entities:
-            if all(matches(t, e, p) for p in a.where):
-                tallies[e.key] = tallies.get(e.key, 0) + 1
+    for snap in snapshots:
+        for key, row in snap.rows.items():
+            if all(matches_snapshot(table, snap, row, p) for p in a.where):
+                tallies[key] = tallies.get(key, 0) + 1
     current_ok = {e.key for e in table.entities if all(matches(table, e, p) for p in a.where)}
     held = [k for k, c in tallies.items() if c >= need and k in current_ok]
     rank_key = table.primary_key("rank")
@@ -415,17 +567,18 @@ def _across_versions(
             InsightRow(k, e.label, entity_sub(e), tallies[k], f"{tallies[k]} / {n_versions}")
         )
     ctx = {"versions": n_versions, "total": fmt_count(len(current_ok))}
-    return rows, len(held), ctx
+    numbers = {"versions": n_versions, "total": len(current_ok)}
+    return rows, len(held), ctx, numbers
 
 
 def compute_all(
     table: ResearchTable,
-    versions: list[tuple[str, ResearchTable]] | None = None,
+    snapshots: list[Snapshot] | None = None,
     section: str | None = None,
 ) -> list[ComputedInsight]:
     out = []
     for spec in table.map.insights:
         if section and spec.section != section:
             continue
-        out.append(compute_insight(table, spec, versions))
+        out.append(compute_insight(table, spec, snapshots))
     return out

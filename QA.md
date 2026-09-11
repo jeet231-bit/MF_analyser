@@ -33,9 +33,10 @@ Measured on 11 September 2026 against `samples/master.xlsx` (the recalculated 15
 | Analysis report, HTML | 2.2 s, 32 KB | |
 | Analysis report, PDF (WeasyPrint with the GTK3 runtime) | 4.3 s, 50 KB | |
 | Live engine state (grids + string table) | about 300 MB each | `MFA_STATE_CACHE_ENTRIES` bounds how many are kept, default 3 |
-| Research table build (3,232 entities, 34 measures, phases, periods, category stats) | 1.6 s cold, then cached | per (version, run); `/research/summary` warm 0.02 s |
-| Research entities page / fund detail / categories | 0.02 s / 0.08 s / 0.01 s | detail includes the quartile rule in words (engine re-evaluation with tracing) |
-| Insights (12 cards) | 0.2 s cold, 0.15 s warm | across-versions cards add one table build per stored version the first time |
+| Research table build (3,232 entities, 34 measures, phases, periods, category stats) | 1.6 s cold, then cached | per (version, run); built once at activation together with the version's snapshot |
+| Research summary | 0.02 s warm | movement, history and held-Q1 read per-version snapshots (about 60 KB gzipped each), never other versions' tables |
+| Research entities page / fund detail / categories | 0.02 s / 0.09 s / 0.02 s | detail includes the quartile rule in words (engine re-evaluation with tracing) |
+| Insights (12 cards) | 0.2 s cold, 0.17 s warm | flat in the number of stored versions |
 
 Budgets asserted by the real tests: full run under 90 s, typical what-if under 5 s, worst-case what-if under 8 s, sampled reconciliation at least 99 percent (measured 100 percent).
 

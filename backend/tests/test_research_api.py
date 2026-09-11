@@ -120,6 +120,13 @@ def test_summary_counts_and_distribution(client: TestClient, config) -> None:
     assert body["validation"]["status"] in ("passed", "passed_with_warnings")
     assert body["findings"] == {"open": 0, "fixed": 1}
     assert body["movement"] is None and body["narrative"] is None  # one version: nothing to compare
+    assert body["held_q1"]["available"] is False and "second genuine" in body["held_q1"]["note"]
+    assert body["universe"]["unrated_small_categories"] == 3  # the three Direct-Beta funds
+    assert body["universe"]["unrated_missing_data"] == 1  # Gamma One - Dir reads "--"
+    assert body["universe_narrative"] == (
+        "8 of 12 funds are rated. 1 of 3 categories has fewer than 4 funds (3 funds). "
+        "1 fund is unrated for missing data."
+    )
     assert body["footer"] == "Test console · confidential"
 
 
@@ -189,7 +196,7 @@ def test_entity_detail(client: TestClient, config) -> None:
     assert body["category"]["count"] == 5 and body["category"]["rated"] == 4
     assert body["history"][0]["rank"] == 1 and len(body["history"]) == 1
     assert body["quartileExplanation"] and any("<=" in line for line in body["quartileExplanation"])
-    assert body["narrative"] is None  # no previous version yet
+    assert body["narrative"] == "Beta One ranks 1 of 4 in Direct-Alpha (Q1)."  # no previous version
     assert client.get("/api/research/entities/Nobody").status_code == 404
 
 
@@ -205,7 +212,13 @@ def test_categories(client: TestClient, config) -> None:
     assert rows["Direct-Alpha"]["stats"]["B"] == pytest.approx(
         sum(v for v in (76.0, 62.0, 88.0, 42.0)) / 4
     )
-    assert "widest spread" in body["narrative"]
+    assert body["statsOnly"] == 1  # Direct-Ghost is in the averages table with no fund behind it
+    assert (
+        body["narrative"].startswith(
+            "3 categories, 1 unranked. Among the 2 categories with 2 or more rated funds, "
+        )
+        and "widest spread" in body["narrative"]
+    )
 
 
 def test_movement_labels_repairs(client: TestClient, config) -> None:
@@ -218,7 +231,8 @@ def test_movement_labels_repairs(client: TestClient, config) -> None:
     by_key = {m["key"]: m for m in body["risers"] + body["fallers"]}
     assert "Beta One - Dir" in by_key and by_key["Beta One - Dir"]["cause"] == "repair"
     assert body["repairs"][0]["key"] == "Beta One - Dir"
-    assert "data repairs" in body["narrative"]
+    assert "is a data repair" in body["narrative"] and "master" not in body["narrative"]
+    assert body["from"]["date"] and body["to"]["date"]  # dates, never filenames
 
     shifted = _upload(client, "master-v3.xlsx", variant="shift")
     body = client.get("/api/research/movement").json()
@@ -235,10 +249,13 @@ def test_movement_labels_repairs(client: TestClient, config) -> None:
 
     summary = client.get("/api/research/summary").json()
     assert summary["movement"]["previous"]["id"] == fixed and summary["movement"]["moved"] >= 2
-    assert summary["held_q1"]["versions"] == 3
-    assert "changed rank since master.xlsx" in summary["narrative"]
+    assert summary["held_q1"]["available"] is True and summary["held_q1"]["versions"] == 3
+    assert "changed rank since" in summary["narrative"] and "master" not in summary["narrative"]
+    assert "held Q1 across all 3 genuine uploads" in summary["narrative"]
     detail = client.get("/api/research/entities/Alpha One - Dir").json()
-    assert detail["deltaLabel"].startswith("up") and "since master.xlsx" in detail["narrative"]
+    assert detail["deltaLabel"].startswith("up") and detail["narrative"].startswith(
+        "Alpha One ranks 1 of 4 in Direct-Alpha (Q1). Up 1 place since "
+    )
     assert [h["rank"] for h in detail["history"]] == [1, 2, 1]  # repaired row, fixed, then shifted
     funds = client.get("/api/research/entities", params={"q": "Alpha One - Dir"}).json()
     assert funds["rows"][0]["delta"]["rank"] == 1
@@ -253,27 +270,113 @@ def test_insights_compute_sentences(client: TestClient, config) -> None:
     assert all(i["problems"] == [] for i in ins.values()), [i["problems"] for i in ins.values()]
     assert ins["best_score"]["sentence"] == "11 funds carry a score; Beta One leads at 88.00."
     assert [r["label"] for r in ins["best_score"]["rows"]] == ["Beta One", "Beta One", "Alpha One"]
-    assert ins["held_q1"]["sentence"].endswith("in all 2 stored versions.")
-    assert ins["held_q1"]["count"] >= 1
+    assert ins["held_q1"]["sentence"].endswith("in all 2 genuine uploads.")
+    assert ins["held_q1"]["count"] >= 1 and ins["held_q1"]["status"] == "ok"
+    # Teams are kept as the master lists them unless the dimension declares a split.
+    assert "B. Sen, E. Roy" in [r["label"] for r in ins["team_league"]["rows"]]
+    assert ins["team_league"]["sentence"].endswith("manages 1 Q1 fund.")
+    # A filter insight with a minimum category size counts only the eligible categories.
+    assert ins["leaders"]["sentence"] == (
+        "Across the 2 categories with 4 or more rated funds, Beta One leads Direct-Alpha."
+    )
+    # top with fraction 0.5 admits more funds than the default quarter.
+    assert ins["cheap_half"]["count"] > ins["cheap_quarter"]["count"] >= 1
     assert ins["amc_league"]["sentence"].startswith("Beta AMC has the most Q1 funds")
     assert ins["best_value"]["count"] >= 1 and ins["best_value"]["rows"][0]["valueLabel"].endswith(
         "%"
     )
     assert re.match(
-        r"^\d[\d,]* Cr sits in \d+ funds ranked Q3 or Q4\.$", ins["corpus_at_risk"]["sentence"]
+        r"^₹[\d,.]+ (lakh )?crore sits in \d+ funds ranked Q3 or Q4\.$",
+        ins["corpus_at_risk"]["sentence"],
     )
     assert ins["dispersion"]["rows"][0]["valueLabel"].endswith("%")
     only = client.get("/api/research/insights", params={"section": "cost"}).json()
     assert {i["section"] for i in only["insights"]} == {"cost"}
 
+    split = research_map()
+    split["dimensions"]["manager"]["split"] = ","
+    config(split)
+    ins = {i["key"]: i for i in client.get("/api/research/insights").json()["insights"]}
+    labels = [r["label"] for r in ins["team_league"]["rows"]]
+    assert "E. Roy" in labels and "B. Sen, E. Roy" not in labels
+
     broken = research_map()
     broken["insights"][0]["where"][0]["measure"] = "score_x"
-    broken["insights"][2]["sentence"] = "{group.label} and {nonsense}"
+    broken["insights"][2]["sentence"] = {
+        "default": "{group.label} and {nonsense}",
+        "zero": "{bogus}",
+    }
+    broken["insights"][1]["across"]["where"][0]["measure"] = "ret1y"
+    broken["narratives"]["fund"] = [{"default": "{label}", "requires": ["nothing"]}]
     config(broken)
     cfg = client.get("/api/research/config").json()
     joined = " | ".join(cfg["problems"])
     assert "measure 'score_x' is not declared; did you mean 'score'?" in joined
     assert "unknown sentence placeholder {nonsense}" in joined
+    assert "unknown sentence placeholder {bogus}" in joined
+    assert "across.where can only test the primary score, rank or quartile" in joined
+    assert "narratives.fund: unknown placeholder {nothing}" in joined
+
+
+def test_snapshots_make_same_month_uploads_one_genuine_version(client: TestClient, config) -> None:
+    """Two activations of the same master are one genuine month: consistency cards wait for a
+    second month, the movement narrative reads as a zero sentence, and both snapshots persist."""
+    from sqlalchemy import select
+
+    from app.storage.db import get_session_factory
+    from app.storage.models import ResearchSnapshot
+
+    first = _upload(client, "master.xlsx")
+    second = _upload(client, "master-again.xlsx")
+    with get_session_factory()() as session:
+        rows = list(session.scalars(select(ResearchSnapshot)))
+    assert {r.version_id for r in rows} == {first, second}
+    assert len({r.fingerprint for r in rows}) == 1 and all(r.entity_count == 12 for r in rows)
+
+    summary = client.get("/api/research/summary").json()
+    assert summary["held_q1"]["available"] is False and summary["held_q1"]["versions"] == 1
+    assert summary["movement"]["moved"] == 0 and summary["movement"]["same_month"] is True
+    assert "data repair" not in summary["narrative"]  # requires moved > 0
+    assert len(summary["history"]) == 1
+    ins = {i["key"]: i for i in client.get("/api/research/insights").json()["insights"]}
+    assert ins["held_q1"]["status"] == "unavailable" and ins["held_q1"]["sentence"] == ""
+    assert "second genuine monthly upload" in ins["held_q1"]["note"]
+    move = client.get("/api/research/movement").json()
+    assert move["narrative"].startswith("No fund changed rank between the earlier upload of ")
+    assert move["narrative"].endswith(" and the later upload of " + move["to"]["date"] + ".")
+    assert summary["narrative"].startswith("No fund changed rank since the earlier upload of ")
+    detail = client.get("/api/research/entities/Beta One - Dir").json()
+    assert detail["narrative"].endswith("(Q1). Unchanged since " + move["from"]["date"] + ".")
+    assert summary["universe"]["outside_universe"] == 0
+    assert len(detail["history"]) == 1
+
+
+def test_indian_currency_and_sentence_forms() -> None:
+    from app.research.insights import fmt_inr_crore, render_sentence, render_sentences
+    from app.research.semantic import SentenceSpec
+
+    assert fmt_inr_crore(3911885) == "₹39.1 lakh crore"
+    assert fmt_inr_crore(122954) == "₹1.2 lakh crore"
+    assert fmt_inr_crore(86785) == "₹86,785 crore"
+    assert fmt_inr_crore(45.26) == "₹45.3 crore"
+    ctx = {"n": "1", "m": "12", "_n": {"n": 1, "m": 12}}
+    assert (
+        render_sentence("{n|fund|funds} and {m|fund|funds} {m?is|are}", ctx)
+        == "1 fund and 12 funds are"
+    )
+    assert render_sentence("{missing} here", ctx) is None
+    specs = [
+        SentenceSpec(default="{z} moved.", zero="Nothing moved."),
+        SentenceSpec(default="{z} repairs.", requires=["z"]),
+        SentenceSpec(default="{n} fund held."),
+    ]
+    assert (
+        render_sentences(specs, {"z": "0", "n": "1", "_n": {"z": 0, "n": 1}})
+        == "Nothing moved. 1 fund held."
+    )
+    assert (
+        render_sentences([SentenceSpec(default="{z} moved.")], {"z": "0", "_n": {"z": 0}}) is None
+    )
 
 
 def test_exports_go_through_the_view_descriptor(client: TestClient, config) -> None:

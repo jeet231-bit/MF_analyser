@@ -73,7 +73,11 @@
       ],
       "keyColumn": "B",
       "labelColumn": "F",
-      "asOf": "CY Returns!A4"
+      "asOf": "CY Returns!A4",
+      "universe": {
+        "column": "A",
+        "equals": "Yes"
+      }
     },
     "dimensions": {
       "category": {
@@ -94,7 +98,9 @@
       },
       "manager": {
         "column": "AC",
-        "label": "Fund manager"
+        "label": "Management team",
+        "split": null,
+        "note": "The master lists comma-joined teams. Set split to \",\" for per-person attribution in insights."
       },
       "universe": {
         "column": "A",
@@ -238,10 +244,8 @@
         "label": "Corpus",
         "role": "factor",
         "column": "H",
-        "format": "number",
-        "higherIsBetter": true,
-        "unit": " Cr",
-        "decimals": 0
+        "format": "inr_crore",
+        "higherIsBetter": true
       },
       {
         "key": "expense",
@@ -497,7 +501,7 @@
         "key": "best_long_term",
         "section": "winning",
         "eyebrow": "Long term",
-        "title": "Best over the long term",
+        "title": "Best on long-term rank",
         "where": [
           {
             "measure": "rank_lt",
@@ -506,18 +510,21 @@
           }
         ],
         "sort": {
-          "measure": "ret_5y",
+          "measure": "score",
           "dir": "desc"
         },
         "limit": 5,
         "show": [
-          "measure:ret_5y"
+          "measure:score"
         ],
-        "sentence": "{count} funds lead their category on {measure.label}. {top.label} tops the list at {top.value} over five years.",
+        "sentence": {
+          "default": "Across the {groups} categories with {min_group} or more rated funds, {top.label} leads its category ({top.group}) on long-term rank."
+        },
         "drill": {
           "sort": "rank_lt",
           "dir": "asc"
-        }
+        },
+        "minGroupCount": 10
       },
       {
         "key": "held_q1",
@@ -535,7 +542,10 @@
           ]
         },
         "limit": 5,
-        "sentence": "{count} of {total} current Q1 funds have been Q1 in all {versions} stored versions. Consistency is the signal a single month cannot show."
+        "sentence": {
+          "default": "{count} of {total} current Q1 funds {count?has|have} been Q1 in every one of the {versions} genuine monthly uploads. Consistency is the signal a single month cannot show.",
+          "zero": "None of the {total} current Q1 funds has held Q1 across all {versions} genuine monthly uploads."
+        }
       },
       {
         "key": "risk_adjusted",
@@ -549,7 +559,8 @@
           },
           {
             "measure": "rank_stddev",
-            "op": "top"
+            "op": "top",
+            "fraction": 0.5
           }
         ],
         "sort": {
@@ -560,7 +571,10 @@
         "show": [
           "measure:rank_rar"
         ],
-        "sentence": "{count} funds sit in the top quarter of {measure.label} with a standard-deviation rank in the top quarter too, so the return did not come from volatility alone.",
+        "sentence": {
+          "default": "{count|fund is|funds are} in the top quarter of their category on {measure.label} while sitting in the top half on standard deviation: the return did not come from volatility alone.",
+          "zero": "No fund combines a top-quarter {measure.label} with a top-half standard-deviation rank this month."
+        },
         "drill": {
           "sort": "rank_rar",
           "dir": "asc"
@@ -591,7 +605,10 @@
         "show": [
           "quartile_pair"
         ],
-        "sentence": "{count} funds sit in the top quartile on both phases. They captured the upside and held the downside."
+        "sentence": {
+          "default": "{count|fund sits|funds sit} in the top quartile on both phases. They captured the upside and held the downside.",
+          "zero": "No fund is top quartile on both the bull and the bear phases this month."
+        }
       },
       {
         "key": "downside",
@@ -612,7 +629,9 @@
         "show": [
           "measure:bear"
         ],
-        "sentence": "Top {measure.label} across the bear phases. {top.label} leads at {top.value}; useful for conservative allocations even where the bull rank is mid-table.",
+        "sentence": {
+          "default": "{top.label} leads the bear-phase composite at {top.value}; useful for conservative allocations even where the bull rank is mid-table."
+        },
         "drill": {
           "sort": "bear",
           "dir": "desc"
@@ -641,7 +660,10 @@
         "show": [
           "measure:roll3y"
         ],
-        "sentence": "{count} funds rank top-quartile on {measure.label} but bottom-quartile on standard deviation. The return came with the ride."
+        "sentence": {
+          "default": "{count|fund ranks|funds rank} top-quartile on {measure.label} but bottom-quartile on standard deviation. The return came with the ride.",
+          "zero": "No fund pairs a top-quartile {measure.label} with a bottom-quartile standard deviation this month."
+        }
       },
       {
         "key": "amc_league",
@@ -658,17 +680,19 @@
               "op": "eq",
               "value": 1
             }
-          ],
-          "minMembers": 2
+          ]
         },
         "limit": 6,
-        "sentence": "{group.label} has the most top-quartile funds ({group.count} of {group.total} rated); {hit.label} has the highest hit rate, with {hit.count} of its {hit.total} rated funds in Q1."
+        "sentence": {
+          "default": "{group.label} has the most top-quartile funds ({group.count} of {group.total} rated); {hit.label} has the highest hit rate, with {hit.count} of its {hit.total} rated funds in Q1. Houses with fewer than {min_group} rated funds are not ranked."
+        },
+        "minGroupCount": 10
       },
       {
         "key": "manager_league",
         "section": "houses",
-        "eyebrow": "Fund managers",
-        "title": "Most Q1 funds managed",
+        "eyebrow": "Management teams",
+        "title": "Q1 funds by management team",
         "mode": "groupBy",
         "groupBy": {
           "dimension": "manager",
@@ -679,11 +703,13 @@
               "op": "eq",
               "value": 1
             }
-          ],
-          "minMembers": 2
+          ]
         },
         "limit": 6,
-        "sentence": "From the manager column on the master. {group.label} runs {group.count} top-quartile funds out of {group.total} rated."
+        "sentence": {
+          "default": "The master lists teams, not individuals: {group.label} manages {group.count|top-quartile fund|top-quartile funds} out of {group.total} rated. Teams with fewer than {min_group} rated funds are not ranked."
+        },
+        "minGroupCount": 10
       },
       {
         "key": "dispersion",
@@ -694,15 +720,17 @@
         "groupBy": {
           "dimension": "category",
           "aggregate": "dispersion",
-          "measure": "roll3y",
-          "minMembers": 4
+          "measure": "roll3y"
         },
         "limit": 6,
-        "sentence": "Categories where the gap between the best and worst fund on {measure.label} is largest are where picking well pays most; {group.label} spans {group.value}.",
+        "sentence": {
+          "default": "Among the {groups} categories with {min_group} or more rated funds, the gap between the best and worst fund on {measure.label} is widest in {group.label} ({group.value}); that is where picking well pays most."
+        },
         "sort": {
           "measure": "roll3y",
           "dir": "desc"
-        }
+        },
+        "minGroupCount": 10
       },
       {
         "key": "best_value",
@@ -729,7 +757,10 @@
         "show": [
           "measure:expense"
         ],
-        "sentence": "{count} funds are top quartile on composite rank and top quartile on expense: performance that is not being paid for twice."
+        "sentence": {
+          "default": "{count|fund is|funds are} top quartile on composite rank and top quartile on expense: performance that is not being paid for twice.",
+          "zero": "No fund is top quartile on both composite rank and expense this month."
+        }
       },
       {
         "key": "expensive_laggards",
@@ -756,7 +787,10 @@
         "show": [
           "measure:expense"
         ],
-        "sentence": "{count} funds sit in Q4 on both composite rank and expense. These are the exit conversations."
+        "sentence": {
+          "default": "{count|fund sits|funds sit} in Q4 on both composite rank and expense. These are the exit conversations.",
+          "zero": "No fund sits in Q4 on both composite rank and expense this month."
+        }
       },
       {
         "key": "corpus_at_risk",
@@ -776,14 +810,96 @@
           }
         ],
         "limit": 5,
-        "sentence": "Weighted by corpus: {sum} sits in {count} funds ranked Q3 or Q4, and a small number of large funds carries most of it."
+        "sentence": {
+          "default": "{sum} sits in {count|fund|funds} ranked Q3 or Q4, and a small number of large funds carries most of it.",
+          "zero": "No rated fund sits in Q3 or Q4 this month."
+        }
       }
     ],
     "narratives": {
-      "dashboard": "{moved} funds changed rank since {previous}: {up} up, {down} down. {repairs} of those moves are data repairs, not market movement. {held_q1} funds have held Q1 across all {versions} stored versions.",
-      "movement": "{moved} funds changed composite rank between {previous} and {current}: {up} up and {down} down; {into_q1} entered Q1 and {out_of_q1} left it. {repairs} of the moves are data repairs rather than market movement.",
-      "categories": "{categories} categories, {unranked} left unranked by the workbook rule. {widest.label} has the widest spread in {measure.label} ({widest.value}); {best.label} has the highest average at {best.value}.",
-      "fund": "{label} ranks {rank} of {category_count} rated funds in {category}, quartile {quartile}, {delta} since {previous}."
+      "universe": [
+        {
+          "default": "{rated} of {total} funds are rated."
+        },
+        {
+          "default": "{unranked} of {categories} categories {unranked?has|have} fewer than {unranked_below} ranked funds and {unranked?is|are} left unranked by the workbook's own rule ({unrated_small|fund|funds}).",
+          "zero": "Every category has at least {unranked_below} ranked funds, so none is left unranked by the workbook rule."
+        },
+        {
+          "default": "{unrated_other|fund is|funds are} unrated because the master shows \"--\" for part of the composite."
+        },
+        {
+          "default": "{outside|fund sits|funds sit} outside the universe flag."
+        }
+      ],
+      "dashboard": [
+        {
+          "default": "{moved|fund|funds} changed rank since {previous}: {up} up, {down} down.",
+          "zero": "No fund changed rank since {previous}."
+        },
+        {
+          "default": "{repairs} of those moves {repairs?is a data repair|are data repairs}, not market movement.",
+          "zero": "None of those moves is a data repair.",
+          "requires": [
+            "moved"
+          ]
+        },
+        {
+          "default": "{held_q1|fund has|funds have} held Q1 across all {versions} genuine monthly uploads.",
+          "zero": "No fund has held Q1 across all {versions} genuine monthly uploads."
+        }
+      ],
+      "movement": [
+        {
+          "default": "{moved|fund|funds} changed composite rank between {previous} and {current}: {up} up and {down} down.",
+          "zero": "No fund changed composite rank between {previous} and {current}."
+        },
+        {
+          "default": "{into_q1} entered Q1 and {out_of_q1} left it.",
+          "zero": "No fund crossed the Q1 line.",
+          "trigger": [
+            "into_q1",
+            "out_of_q1"
+          ],
+          "requires": [
+            "moved"
+          ]
+        },
+        {
+          "default": "{repairs} of the moves {repairs?is a data repair|are data repairs} rather than market movement.",
+          "zero": "None of the moves is a data repair.",
+          "requires": [
+            "moved"
+          ]
+        },
+        {
+          "default": "{entries|fund is|funds are} new to the universe and {exits} {exits?has|have} left it.",
+          "trigger": [
+            "entries",
+            "exits"
+          ]
+        }
+      ],
+      "categories": [
+        {
+          "default": "{categories} categories; {unranked} {unranked?has|have} fewer than {unranked_below} ranked funds and {unranked?is|are} left unranked by the workbook rule.",
+          "zero": "{categories} categories, all large enough for the workbook rule to rank.",
+          "trigger": "unranked"
+        },
+        {
+          "default": "Among the {eligible} categories with {min_group} or more rated funds, {widest.label} has the widest spread in {measure.label} ({widest.value}) and {best.label} the highest average at {best.value}."
+        }
+      ],
+      "fund": [
+        {
+          "default": "{label} ranks {rank} of {category_count} rated funds in {category} ({quartile})."
+        },
+        {
+          "default": "{delta_text} since {previous}.",
+          "zero": "Unchanged since {previous}.",
+          "trigger": "delta"
+        }
+      ]
     },
     "footer": "Pantomath Group — Equity MF Research Engine · Private & Confidential",
     "findings": [
@@ -807,6 +923,7 @@
         "detail": "Both plans show #N/A on Report, so the two Multi Asset category averages read \"--\".",
         "status": "open"
       }
-    ]
+    ],
+    "minGroupCount": 10
   }
 }

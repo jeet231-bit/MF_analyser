@@ -230,4 +230,10 @@ def activate_version(
     )
     session.commit()
     session.refresh(version)
+    try:  # the research snapshot is a convenience; activation never fails because of it
+        from app.research.snapshots import ensure_snapshot
+
+        ensure_snapshot(session, version)
+    except Exception:  # noqa: BLE001
+        session.rollback()
     return version

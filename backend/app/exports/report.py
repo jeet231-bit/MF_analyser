@@ -308,15 +308,16 @@ def build_context(
         ctx.sections.append(section)
     try:
         from app.research import insights as rinsights
+        from app.research import snapshots as rsnaps
         from app.research import table as rtable
 
         rt = rtable.get_table(session, version, run)
-        versions = (
-            [(v.filename, t) for v, _r, t in rtable.baseline_tables(session)]
+        history = (
+            rsnaps.genuine(rsnaps.activated_snapshots(session))
             if any(i.mode == "acrossVersions" for i in rt.map.insights)
             else []
         )
-        ctx.insights = [c for c in rinsights.compute_all(rt, versions) if c.sentence]
+        ctx.insights = [c for c in rinsights.compute_all(rt, history) if c.sentence]
     except Exception:  # noqa: BLE001 - the research map is optional for the report
         ctx.insights = None
     if what_if or version.status in ("pending_review", "active", "validated"):

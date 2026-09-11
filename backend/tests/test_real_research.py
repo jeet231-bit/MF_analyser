@@ -47,6 +47,9 @@ def test_research_views_on_the_real_master(client: TestClient) -> None:
     print(
         f"summary cold {cold:.1f}s | universe {summary['universe']} | quartiles {summary['quartiles']}"
     )
+    print("  universe narrative:", summary["universe_narrative"])
+    print("  dashboard narrative:", summary["narrative"])
+    print("  held_q1:", summary["held_q1"])
     t = time.perf_counter()
     client.get("/api/research/summary").json()
     warm = time.perf_counter() - t
@@ -88,13 +91,13 @@ def test_research_views_on_the_real_master(client: TestClient) -> None:
     print(f"insights warm {time.perf_counter() - t:.2f}s")
     for i in ins["insights"]:
         print(
-            f"  [{i['section']}] {i['title']}: {i['sentence'] or '(no sentence: ' + '; '.join(i['problems']) + ')'}"
+            f"  [{i['section']}] {i['title']}: {i['sentence'] or '(' + i['status'] + ': ' + (i['note'] or '; '.join(i['problems'])) + ')'}"
         )
         for r in i["rows"][:3]:
             print(f"      {r['label']} · {r['sub'] or ''} · {r['valueLabel']}")
     # A single stored version cannot answer "held every version"; every other card must read.
-    assert all(i["sentence"] or i["key"] == "held_q1" for i in ins["insights"]), [
-        i["problems"] for i in ins["insights"] if not i["sentence"]
+    assert all(i["sentence"] or i["status"] == "unavailable" for i in ins["insights"]), [
+        (i["key"], i["status"], i["problems"]) for i in ins["insights"] if not i["sentence"]
     ]
 
     t = time.perf_counter()

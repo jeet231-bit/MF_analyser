@@ -97,7 +97,7 @@ FUNDS: list[tuple] = [
         "Regular",
         "Beta AMC",
         "Regular-Alpha",
-        "B. Sen",
+        "B. Sen, E. Roy",
         88,
         83,
         5200,
@@ -171,6 +171,7 @@ PERF: dict[str, tuple[float, ...]] = {
 }
 PERF_HEADERS = ["Name", "1Y", "3Y", "Bull 2020-21", "Bull 2022-24", "Bear 2020", "Bear 2022"]
 CATEGORIES = ["Direct-Alpha", "Regular-Alpha", "Direct-Beta"]
+GHOST_CATEGORY = "Direct-Ghost"  # in the averages table, with no fund behind it
 
 
 def _inputs(variant: str) -> list[tuple]:
@@ -270,7 +271,7 @@ def build_research_workbook(variant: str = "base") -> openpyxl.Workbook:
             perf.cell(row=FIRST + i, column=c, value=v)
     cat = wb.create_sheet("CatAvg")
     cat["A1"], cat["B1"] = "Category", "Average score"
-    for i, name in enumerate(CATEGORIES, start=2):
+    for i, name in enumerate([*CATEGORIES, GHOST_CATEGORY], start=2):
         cat[f"A{i}"] = name
         cat[f"B{i}"] = (
             f'=IFERROR(AVERAGEIF(Funds!{cat_range},A{i},Funds!$I${FIRST}:$I${LAST}),"--")'
@@ -291,6 +292,7 @@ def research_fixture_xlsx_bytes(variant: str = "base") -> bytes:
         cached[("Funds", f"O{row}")] = e["qrtl_expense"]
     for i, (_cat, avg) in enumerate(category_averages(variant).items(), start=2):
         cached[("CatAvg", f"B{i}")] = avg
+    cached[("CatAvg", f"B{2 + len(CATEGORIES)}")] = "--"
     return inject_cached_values(workbook_bytes(build_research_workbook(variant)), cached)
 
 
@@ -308,7 +310,7 @@ def research_map() -> dict:
             {"key": "score", "label": "Score", "role": "score", "column": "I", "primary": True},
             {"key": "rank", "label": "Rank", "role": "rank", "column": "J", "format": "integer", "higherIsBetter": False, "primary": True},
             {"key": "quartile", "label": "Quartile", "role": "quartile", "column": "K", "format": "integer", "higherIsBetter": False, "primary": True},
-            {"key": "corpus", "label": "Corpus", "role": "factor", "column": "L", "unit": " Cr", "decimals": 0},
+            {"key": "corpus", "label": "Corpus", "role": "factor", "column": "L", "format": "inr_crore"},
             {"key": "expense", "label": "Expense", "role": "factor", "column": "M", "unit": "%", "higherIsBetter": False},
             {"key": "rank_expense", "label": "Expense rank", "role": "rank", "column": "N", "format": "integer", "higherIsBetter": False},
             {"key": "qrtl_expense", "label": "Expense quartile", "role": "quartile", "column": "O", "format": "integer", "higherIsBetter": False},
@@ -319,18 +321,34 @@ def research_map() -> dict:
                    "groups": [{"key": "bull", "label": "Bull", "columns": ["D", "E"]},
                               {"key": "bear", "label": "Bear", "columns": ["F", "G"]}]},
         "periods": {"sheet": "Perf", "keyColumn": "A", "headerRow": 1, "columns": ["B", "C"], "unit": "%"},
-        "categoryStats": {"sheet": "CatAvg", "keyColumn": "A", "rows": [2, 4], "headerRow": 1, "columns": ["B"]},
+        "categoryStats": {"sheet": "CatAvg", "keyColumn": "A", "rows": [2, 5], "headerRow": 1, "columns": ["B"]},
+        "minGroupCount": 2,
         "insights": [
             {"key": "best_score", "section": "winning", "eyebrow": "Leaders", "title": "Highest scores",
              "where": [{"measure": "score", "op": "notnull"}], "sort": {"measure": "score", "dir": "desc"}, "limit": 3,
              "show": ["measure:score"], "sentence": "{count} funds carry a score; {top.label} leads at {top.value}."},
             {"key": "held_q1", "section": "winning", "eyebrow": "Consistency", "title": "Held Q1 every version",
              "mode": "acrossVersions", "across": {"where": [{"measure": "quartile", "op": "eq", "value": 1}]}, "limit": 5,
-             "sentence": "{count} of {total} current Q1 funds have been Q1 in all {versions} stored versions."},
+             "sentence": {"default": "{count} of {total} current Q1 funds {count?has|have} been Q1 in all {versions} genuine uploads.",
+                          "zero": "No current Q1 fund has held Q1 across all {versions} genuine uploads."}},
             {"key": "amc_league", "section": "houses", "eyebrow": "AMC league", "title": "Q1 funds by house",
              "mode": "groupBy", "groupBy": {"dimension": "amc", "aggregate": "count_where",
                                             "where": [{"measure": "quartile", "op": "eq", "value": 1}]}, "limit": 4,
              "sentence": "{group.label} has the most Q1 funds ({group.count} of {group.total})."},
+            {"key": "team_league", "section": "houses", "eyebrow": "Teams", "title": "Q1 funds by team",
+             "mode": "groupBy", "minGroupCount": 1, "groupBy": {"dimension": "manager", "aggregate": "count_where",
+                                            "where": [{"measure": "quartile", "op": "eq", "value": 1}]}, "limit": 6,
+             "sentence": "{group.label} manages {group.count|Q1 fund|Q1 funds}."},
+            {"key": "leaders", "section": "winning", "eyebrow": "Leaders", "title": "Category leaders",
+             "where": [{"measure": "rank", "op": "eq", "value": 1}], "minGroupCount": 4, "sort": {"measure": "score", "dir": "desc"},
+             "limit": 5, "show": ["measure:score"],
+             "sentence": "Across the {groups} categories with {min_group} or more rated funds, {top.label} leads {top.group}."},
+            {"key": "cheap_half", "section": "cost", "eyebrow": "Cost", "title": "Top half on expense",
+             "where": [{"measure": "rank_expense", "op": "top", "fraction": 0.5}], "sort": {"measure": "expense", "dir": "asc"},
+             "limit": 3, "show": ["measure:expense"], "sentence": "{count|fund is|funds are} in the cheaper half of their category."},
+            {"key": "cheap_quarter", "section": "cost", "eyebrow": "Cost", "title": "Top quarter on expense",
+             "where": [{"measure": "rank_expense", "op": "top"}], "sort": {"measure": "expense", "dir": "asc"},
+             "limit": 3, "show": ["measure:expense"], "sentence": "{count|fund is|funds are} in the cheapest quarter of their category."},
             {"key": "best_value", "section": "cost", "eyebrow": "Best value", "title": "Q1 at Q1 cost",
              "where": [{"measure": "quartile", "op": "eq", "value": 1}, {"measure": "qrtl_expense", "op": "eq", "value": 1}],
              "sort": {"measure": "expense", "dir": "asc"}, "limit": 3, "show": ["measure:expense"],
@@ -338,16 +356,24 @@ def research_map() -> dict:
             {"key": "corpus_at_risk", "section": "cost", "eyebrow": "Investor impact", "title": "Corpus in the bottom half",
              "mode": "aggregate", "aggregate": {"measure": "corpus", "fn": "sum"},
              "where": [{"measure": "quartile", "op": "gte", "value": 3}], "limit": 3,
-             "sentence": "{sum} sits in {count} funds ranked Q3 or Q4."},
+             "sentence": {"default": "{sum} sits in {count|fund|funds} ranked Q3 or Q4.", "zero": "No fund sits in Q3 or Q4."}},
             {"key": "dispersion", "section": "houses", "eyebrow": "Selection", "title": "Widest dispersion",
              "mode": "groupBy", "groupBy": {"dimension": "category", "aggregate": "dispersion", "measure": "ret3y", "minMembers": 3}, "limit": 3,
              "sentence": "{group.label} spans {group.value} on {measure.label}.", "sort": {"measure": "ret3y", "dir": "desc"}},
         ],
         "narratives": {
-            "dashboard": "{moved} funds changed rank since {previous} — {up} up, {down} down. {repairs} are data repairs.",
-            "movement": "{moved} funds changed rank between {previous} and {current}: {up} up, {down} down. {repairs} are data repairs.",
-            "categories": "{categories} categories, {unranked} unranked. {widest.label} has the widest spread ({widest.value}).",
-            "fund": "{label} ranks {rank} of {category_count} in {category}, quartile {quartile}, {delta} since {previous}.",
+            "universe": [{"default": "{rated} of {total} funds are rated."},
+                         {"default": "{unranked} of {categories} categories {unranked?has|have} fewer than {unranked_below} funds ({unrated_small|fund|funds})."},
+                         {"default": "{unrated_other|fund is|funds are} unrated for missing data."}],
+            "dashboard": [{"default": "{moved|fund|funds} changed rank since {previous}: {up} up, {down} down.", "zero": "No fund changed rank since {previous}."},
+                          {"default": "{repairs} of those {repairs?is a data repair|are data repairs}.", "zero": "None of those moves is a data repair.", "requires": ["moved"]},
+                          {"default": "{held_q1|fund has|funds have} held Q1 across all {versions} genuine uploads.", "zero": "No fund has held Q1 across all {versions} genuine uploads."}],
+            "movement": [{"default": "{moved|fund|funds} changed rank between {previous} and {current}: {up} up, {down} down.", "zero": "No fund changed rank between {previous} and {current}."},
+                         {"default": "{repairs} of those {repairs?is a data repair|are data repairs}.", "zero": "None of the moves is a data repair.", "requires": ["moved"]}],
+            "categories": [{"default": "{categories} categories, {unranked} unranked.", "zero": "{categories} categories, none unranked.", "trigger": "unranked"},
+                           {"default": "Among the {eligible} categories with {min_group} or more rated funds, {widest.label} has the widest spread ({widest.value})."}],
+            "fund": [{"default": "{label} ranks {rank} of {category_count} in {category} ({quartile})."},
+                     {"default": "{delta_text} since {previous}.", "zero": "Unchanged since {previous}.", "trigger": "delta"}],
         },
         "footer": "Test console · confidential",
         "findings": [{"title": "One fund reads the row above", "detail": "Repaired in the fixed version.", "status": "fixed"}],

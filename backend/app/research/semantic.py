@@ -20,18 +20,78 @@ from app.model.schema import WorkbookLogicModel
 
 Role = Literal["score", "rank", "quartile", "return", "factor"]
 Op = Literal["eq", "ne", "lt", "lte", "gt", "gte", "in", "top", "bottom", "notnull"]
-SENTENCE_PLACEHOLDER = re.compile(r"\{([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?)\}")
+# {name} · {name|one|many} renders "N one/many" · {name?one|many} renders just the word.
+SENTENCE_PLACEHOLDER = re.compile(
+    r"\{([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?)(?:([|?])([^{}|]*)\|([^{}|]*))?\}"
+)
+
+
+def placeholder_names(template: str) -> list[str]:
+    return [m.group(1) for m in SENTENCE_PLACEHOLDER.finditer(template)]
+
+
 INSIGHT_PLACEHOLDERS = {
-    "count", "total", "pct", "sum", "versions", "top.label", "top.value", "top.sub",
+    "count", "total", "pct", "sum", "versions", "groups", "min_group",
+    "top.label", "top.value", "top.sub", "top.group",
     "group.label", "group.value", "group.count", "group.total",
     "hit.label", "hit.value", "hit.count", "hit.total", "measure.label",
 }  # fmt: skip
 NARRATIVE_PLACEHOLDERS: dict[str, set[str]] = {
-    "dashboard": {"moved", "up", "down", "repairs", "held_q1", "versions", "previous", "rated", "categories"},
+    "universe": {"total", "rated", "unrated", "categories", "unranked", "unranked_below", "unrated_small", "unrated_other", "outside", "as_of"},
+    "dashboard": {"moved", "up", "down", "repairs", "held_q1", "versions", "previous", "current", "rated", "categories"},
     "movement": {"moved", "up", "down", "repairs", "into_q1", "out_of_q1", "entries", "exits", "previous", "current"},
-    "categories": {"categories", "unranked", "widest.label", "widest.value", "best.label", "best.value", "measure.label"},
-    "fund": {"label", "rank", "category_count", "category", "quartile", "delta", "previous", "score"},
+    "categories": {"categories", "unranked", "unranked_below", "eligible", "min_group", "widest.label", "widest.value", "best.label", "best.value", "measure.label"},
+    "fund": {"label", "rank", "category_count", "category", "quartile", "delta", "delta_text", "previous", "score"},
 }  # fmt: skip
+
+
+class SentenceSpec(BaseModel):
+    """One sentence of a narrative or insight. ``default`` renders when every placeholder has a
+    value; ``zero`` replaces it when the trigger placeholder (the first one in ``default``
+    unless ``trigger`` says otherwise) is zero. Without a ``zero`` variant a zero-triggered
+    sentence is omitted: a sentence made of zeros is never emitted."""
+
+    default: str
+    zero: str | None = None
+    trigger: str | list[str] | None = None
+    requires: list[str] = Field(
+        default_factory=list,
+        description="placeholders that must be present and non-zero for the sentence to render",
+    )
+
+    @property
+    def trigger_keys(self) -> list[str]:
+        """The placeholders whose all-zero state selects the zero variant."""
+        if isinstance(self.trigger, list):
+            return self.trigger
+        if self.trigger:
+            return [self.trigger]
+        return placeholder_names(self.default)[:1]
+
+    def templates(self) -> list[str]:
+        return [self.default] + ([self.zero] if self.zero else [])
+
+    def placeholders_used(self) -> list[str]:
+        out: list[str] = []
+        for t in self.templates():
+            out.extend(placeholder_names(t))
+        return out + self.trigger_keys + list(self.requires)
+
+
+def sentences_of(raw: Any) -> list[SentenceSpec]:
+    """Normalise a string, an object or a list of either into sentence specs."""
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        return [SentenceSpec(default=raw)]
+    if isinstance(raw, dict):
+        return [SentenceSpec.model_validate(raw)]
+    if isinstance(raw, list):
+        out: list[SentenceSpec] = []
+        for item in raw:
+            out.extend(sentences_of(item))
+        return out
+    return [SentenceSpec(default=str(raw))]
 
 
 class IncludeWhen(BaseModel):
@@ -45,6 +105,11 @@ class EntitySpec(BaseModel):
     keyColumn: str
     labelColumn: str | None = None
     includeWhen: IncludeWhen | None = None
+    universe: IncludeWhen | None = Field(
+        default=None,
+        description="a flag column marking rows inside the rated universe; rows outside it "
+        "stay in the table but are counted separately (includeWhen drops them instead)",
+    )
     asOf: str | None = Field(default=None, description="'Sheet!A1' holding the as-of date")
 
 
@@ -53,6 +118,10 @@ class DimensionSpec(BaseModel):
     column: str
     label: str
     keyColumn: str | None = None
+    split: str | None = Field(
+        default=None,
+        description="separator that turns one cell into several group members (insights only)",
+    )
 
 
 class MeasureSpec(BaseModel):
@@ -62,7 +131,7 @@ class MeasureSpec(BaseModel):
     sheet: str | None = None
     column: str
     keyColumn: str | None = None
-    format: str = "number"  # number | integer | percent | general
+    format: str = "number"  # number | integer | percent | general | inr_crore
     unit: str | None = None
     higherIsBetter: bool = True
     primary: bool = False
@@ -109,6 +178,9 @@ class Predicate(BaseModel):
     measure: str
     op: Op = "eq"
     value: Any = None
+    fraction: float = Field(
+        default=0.25, gt=0, le=1, description="share for top/bottom: 0.25 = quarter, 0.5 = half"
+    )
 
 
 class SortSpec(BaseModel):
@@ -144,11 +216,20 @@ class InsightSpec(BaseModel):
     sort: SortSpec | None = None
     limit: int = 5
     show: list[str] = Field(default_factory=list)
-    sentence: str
+    sentence: Any  # a string or {default, zero}; see SentenceSpec
     groupBy: GroupBySpec | None = None
     aggregate: AggregateSpec | None = None
     across: AcrossSpec | None = None
     drill: dict[str, Any] = Field(default_factory=dict)
+    minGroupCount: int | None = Field(
+        default=None,
+        description="a category (filter) or group (groupBy) counts only with at least this many "
+        "rated members; defaults to the map's minGroupCount for groupBy insights",
+    )
+
+    @property
+    def sentences(self) -> list[SentenceSpec]:
+        return sentences_of(self.sentence)
 
 
 class Finding(BaseModel):
@@ -165,13 +246,21 @@ class ResearchMap(BaseModel):
     periods: PeriodSpec | None = None
     categoryStats: CategoryStatsSpec | None = None
     quartileRule: QuartileRule = Field(default_factory=QuartileRule)
+    minGroupCount: int = Field(
+        default=10,
+        description="superlatives over groups (AMC, manager, category) ignore groups with fewer "
+        "rated members than this, so tiny or exotic groups never top a league table",
+    )
     insights: list[InsightSpec] = Field(default_factory=list)
-    narratives: dict[str, str] = Field(default_factory=dict)
+    narratives: dict[str, Any] = Field(default_factory=dict)
     footer: str | None = None
     findings: list[Finding] = Field(default_factory=list)
 
     def measure(self, key: str) -> MeasureSpec | None:
         return next((m for m in self.measures if m.key == key), None)
+
+    def narrative(self, name: str) -> list[SentenceSpec]:
+        return sentences_of(self.narratives.get(name))
 
     def primary(self, role: Role) -> MeasureSpec | None:
         return next((m for m in self.measures if m.role == role and m.primary), None) or next(
@@ -205,16 +294,22 @@ def parse_map(raw: Any) -> tuple[ResearchMap | None, list[str]]:
         problems.append("dimensions: a 'category' dimension is required")
     for i, ins in enumerate(rmap.insights):
         problems.extend(_check_insight(rmap, i, ins))
-    for name, template in rmap.narratives.items():
+    for name, raw in rmap.narratives.items():
         allowed = NARRATIVE_PLACEHOLDERS.get(name)
         if allowed is None:
             problems.append(
                 f"narratives.{name}: unknown narrative (expected one of {sorted(NARRATIVE_PLACEHOLDERS)})"
             )
             continue
-        for ph in SENTENCE_PLACEHOLDER.findall(template):
-            if ph not in allowed:
-                problems.append(f"narratives.{name}: unknown placeholder {{{ph}}}")
+        try:
+            specs = sentences_of(raw)
+        except ValidationError as exc:
+            problems.append(f"narratives.{name}: {exc.errors()[0]['msg']}")
+            continue
+        for spec in specs:
+            for ph in dict.fromkeys(spec.placeholders_used()):
+                if ph not in allowed:
+                    problems.append(f"narratives.{name}: unknown placeholder {{{ph}}}")
     return rmap, problems
 
 
@@ -236,6 +331,13 @@ def _check_insight(rmap: ResearchMap, i: int, ins: InsightSpec) -> list[str]:
         refs.append(ins.aggregate.measure)
     if ins.across:
         refs += [p.measure for p in ins.across.where]
+        primary = {m.key for r in ("score", "rank", "quartile") if (m := rmap.primary(r))}  # type: ignore[arg-type]
+        for p in ins.across.where:
+            if p.measure not in primary and rmap.measure(p.measure) is not None:
+                problems.append(
+                    f"{where}: across.where can only test the primary score, rank or quartile "
+                    f"(version snapshots hold those), not '{p.measure}'"
+                )
     if ins.mode == "groupBy" and not ins.groupBy:
         problems.append(f"{where}: mode groupBy needs a groupBy block")
     if ins.mode == "aggregate" and not ins.aggregate:
@@ -249,9 +351,17 @@ def _check_insight(rmap: ResearchMap, i: int, ins: InsightSpec) -> list[str]:
                 f"{where}: measure '{ref}' is not declared"
                 + (f"; did you mean '{hint[0]}'?" if hint else "")
             )
-    for ph in SENTENCE_PLACEHOLDER.findall(ins.sentence):
-        if ph not in INSIGHT_PLACEHOLDERS:
-            problems.append(f"{where}: unknown sentence placeholder {{{ph}}}")
+    try:
+        specs = ins.sentences
+    except ValidationError as exc:
+        problems.append(f"{where}: sentence: {exc.errors()[0]['msg']}")
+        return problems
+    if not specs:
+        problems.append(f"{where}: sentence is empty")
+    for spec in specs:
+        for ph in dict.fromkeys(spec.placeholders_used()):
+            if ph not in INSIGHT_PLACEHOLDERS:
+                problems.append(f"{where}: unknown sentence placeholder {{{ph}}}")
     return problems
 
 
@@ -357,6 +467,8 @@ def resolve_map(
     )
     if ent.includeWhen:
         check_col("entity.includeWhen.column", ent.sheet, ent.includeWhen.column)
+    if ent.universe:
+        check_col("entity.universe.column", ent.sheet, ent.universe.column)
 
     resolved = ResolvedMap(
         map=rmap, entity_rows=rows, entity_key_col=key_col, entity_label_col=label_col

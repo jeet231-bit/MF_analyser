@@ -41,7 +41,8 @@ class Entity:
 class CategoryInfo:
     key: str
     count: int = 0
-    rated: int = 0
+    rated: int = 0  # entities with a primary quartile
+    ranked: int = 0  # entities with a primary rank (the workbook's own "< N" test counts these)
     quartiles: dict[int, int] = field(default_factory=lambda: {1: 0, 2: 0, 3: 0, 4: 0})
     means: dict[str, float | None] = field(default_factory=dict)  # return measure -> mean
     spreads: dict[str, float | None] = field(default_factory=dict)  # return measure -> max-min
@@ -60,6 +61,7 @@ class ResearchTable:
     summary: dict[str, Any]
     quantiles: dict[str, tuple[float, float]] = field(default_factory=dict)  # measure -> (q1, q3)
     as_of: Any = None
+    _sorted: dict[str, list[float]] = field(default_factory=dict, repr=False)
 
     @property
     def map(self) -> ResearchMap:
@@ -73,12 +75,18 @@ class ResearchTable:
         q = self.primary_key("quartile")
         return q is not None and e.measures.get(q) is not None
 
+    def sorted_values(self, key: str) -> list[float]:
+        """Ascending values of a measure over rated entities (memoised)."""
+        if key not in self._sorted:
+            self._sorted[key] = sorted(
+                v for e in self.entities if self.rated(e) and (v := e.measures.get(key)) is not None
+            )
+        return self._sorted[key]
+
     def quantile_bounds(self, key: str) -> tuple[float, float] | None:
         if key in self.quantiles:
             return self.quantiles[key]
-        vals = sorted(
-            v for e in self.entities if self.rated(e) and (v := e.measures.get(key)) is not None
-        )
+        vals = self.sorted_values(key)
         if len(vals) < 4:
             return None
         q = statistics.quantiles(vals, n=4)
@@ -155,6 +163,9 @@ def build_table(
     r1, r2 = resolved.entity_rows
     include = ent.includeWhen
     include_col = ci(include.column) if include else None
+    universe = ent.universe
+    universe_col = ci(universe.column) if universe else None
+    inside: dict[str, bool] = {}
     entities: list[Entity] = []
     for row in range(r1, r2 + 1):
         key = _text(esv.value(row, resolved.entity_key_col))
@@ -167,6 +178,8 @@ def build_table(
             _text(esv.value(row, resolved.entity_label_col)) if resolved.entity_label_col else None
         )
         entities.append(Entity(key=key, label=label or key, row=row))
+        if universe is not None and universe_col is not None:
+            inside[key] = _text(esv.value(row, universe_col)) == _text(universe.equals)
 
     # Dimensions.
     for dkey, ref in resolved.dimensions.items():
@@ -238,6 +251,8 @@ def build_table(
                 info.stats[letter.upper()] = _number(src.value(row, ci(letter)))
     qkey = rmap.primary("quartile")
     qkey = qkey.key if qkey and qkey.key in resolved.measures else None
+    rkey = rmap.primary("rank")
+    rkey = rkey.key if rkey and rkey.key in resolved.measures else None
     return_keys = [m.key for m in resolved.measure_specs() if m.role == "return"]
     members: dict[str, list[Entity]] = {}
     for e in entities:
@@ -249,6 +264,8 @@ def build_table(
         info = categories.setdefault(cat, CategoryInfo(key=cat))
         info.count = len(group)
         for e in group:
+            if rkey and e.measures.get(rkey) is not None:
+                info.ranked += 1
             q = e.measures.get(qkey) if qkey else None
             if q is not None:
                 info.rated += 1
@@ -259,11 +276,8 @@ def build_table(
             vals = [v for e in group if (v := e.measures.get(rk)) is not None]
             info.means[rk] = (sum(vals) / len(vals)) if vals else None
             info.spreads[rk] = (max(vals) - min(vals)) if len(vals) >= 2 else None
-        info.unranked = (
-            info.rated == 0
-            and info.count < rmap.quartileRule.unrankedBelow
-            or (info.count < rmap.quartileRule.unrankedBelow)
-        )
+        # The workbook's rule: fewer than N ranked funds in the category means no quartiles.
+        info.unranked = (info.ranked if rkey else info.count) < rmap.quartileRule.unrankedBelow
 
     rated = [e for e in entities if qkey and e.measures.get(qkey) is not None]
     dist = {q: 0 for q in (1, 2, 3, 4)}
@@ -271,6 +285,13 @@ def build_table(
         qi = int(e.measures[qkey])  # type: ignore[index]
         if qi in dist:
             dist[qi] += 1
+    # Why the rest are unrated: a category too small for the workbook's rule, or missing data.
+    small = {c.key for c in categories.values() if c.count and c.unranked}
+    unrated = [e for e in entities if not qkey or e.measures.get(qkey) is None]
+    outside = [e for e in unrated if universe is not None and not inside.get(e.key, False)]
+    outside_keys = {e.key for e in outside}
+    unrated_small = sum(1 for e in unrated if e.category in small and e.key not in outside_keys)
+    unrated_other = len(unrated) - unrated_small - len(outside)
     primary_keys = [k for k in (rmap.primary(r) for r in ("score", "rank", "quartile")) if k]
     complete = sum(
         1
@@ -304,7 +325,11 @@ def build_table(
             "complete": complete,
             "quartiles": dist,
             "categories": len(members),
-            "unranked_categories": sum(1 for c in categories.values() if c.count and c.unranked),
+            "unranked_categories": len(small),
+            "unrated_small_categories": unrated_small,
+            "unrated_missing_data": unrated_other,
+            "outside_universe": len(outside),
+            "stats_only_categories": sum(1 for c in categories.values() if c.count == 0),
         },
         as_of=as_of,
     )
