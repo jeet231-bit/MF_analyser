@@ -304,6 +304,11 @@ def compute_movement(
     q_key = table_to.primary_key("quartile")
     if rank_key is None:
         return {"available": False, "reason": "the primary rank measure does not resolve"}
+    if table_to.summary["rated"] == 0:
+        return {
+            "available": False,
+            "reason": "no rated fund in this scope: movement compares composite ranks",
+        }
     snap_to = _snapshot_of(session, target, table_to)
     repairs = _repair_keys(session, base, target, table_to)
     movers: list[dict[str, Any]] = []
@@ -424,6 +429,44 @@ def _coverage_since(table: ResearchTable) -> str | None:
         if value is not None
         else None
     )
+
+
+def _kpis(table: ResearchTable, ctx: dict[str, Any]) -> list[dict[str, Any]]:
+    """KPI tiles from the config: a tile is omitted when a required input is missing or when
+    its value renders to zero (unless keepZero); a zero note is dropped, never shown."""
+    from app.research.insights import _as_number  # noqa: PLC0415 - sibling helper
+    from app.research.semantic import SentenceSpec
+
+    numbers = ctx.get("_n") or {}
+    tiles = []
+    for k in table.map.kpis:
+        if any(
+            (numbers.get(r) if r in numbers else _lookup_ctx(ctx, r)) in (None, 0, 0.0)
+            for r in k.requires
+        ):
+            continue
+        value = render_sentence(k.value, ctx)
+        if value is None:
+            continue
+        n = _as_number(value)
+        if not k.keepZero and n is not None and n == 0:
+            continue
+        note = (
+            render_sentences([SentenceSpec(default=k.note)], ctx, capitalize=False)
+            if k.note
+            else None
+        )
+        tiles.append({"label": k.label, "value": value, "note": note, "tone": k.tone})
+    return tiles
+
+
+def _lookup_ctx(ctx: dict[str, Any], path: str) -> Any:
+    cur: Any = ctx
+    for part in path.split("."):
+        cur = cur.get(part) if isinstance(cur, dict) else None
+        if cur is None:
+            return None
+    return cur
 
 
 def _coverage_ctx(base: ResearchTable, as_of: str | None) -> dict[str, Any]:
@@ -730,17 +773,20 @@ def research_summary(
         for path, value in c.numbers.items():
             exec_ctx["_n"][f"ins.{c.key}.{path}"] = value
         exec_ctx["_n"][f"ins.{c.key}.count"] = c.count
+    exec_ctx.update(
+        _numbers(
+            unranked=u["unranked_categories"],
+            unranked_below=table.map.quartileRule.unrankedBelow,
+            unrated=u["total"] - u["rated"],
+            unrated_young=u.get("unrated_young", 0),
+            unrated_small=u["unrated_small_categories"],
+            unrated_gap=u.get("unrated_gap", 0),
+            unrated_unknown=u.get("unrated_unknown", 0),
+            outside=u.get("outside_universe", 0),
+        )
+    )
     out["executive"] = render_sentences(table.map.narrative("executive"), exec_ctx)
-    out["kpis"] = [
-        {
-            "label": k.label,
-            "value": value,
-            "note": render_sentence(k.note, exec_ctx) if k.note else None,
-            "tone": k.tone,
-        }
-        for k in table.map.kpis
-        if (value := render_sentence(k.value, exec_ctx)) is not None
-    ]
+    out["kpis"] = _kpis(table, exec_ctx)
     dist_ctx = _numbers(
         rated=u["rated"],
         ranked_categories=u.get("ranked_categories", 0),
@@ -1074,6 +1120,7 @@ def research_movement(
     ]
     if movement.get("available"):
         narrative_ctx = _numbers(
+            rated=movement["rated"],
             moved=movement["moved"],
             up=movement["up"],
             down=movement["down"],

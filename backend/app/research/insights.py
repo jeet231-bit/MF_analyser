@@ -153,7 +153,9 @@ def _is_zero(value: Any) -> bool:
     return n is not None and n == 0
 
 
-def render_sentences(specs: list[SentenceSpec], ctx: dict[str, Any]) -> str | None:
+def render_sentences(
+    specs: list[SentenceSpec], ctx: dict[str, Any], capitalize: bool = True
+) -> str | None:
     """Render every sentence that can be completed, choosing the zero variant when the trigger
     placeholder is zero and omitting the sentence when it is zero without a variant. Raw numbers
     for the zero test come from ``ctx['_n']`` when present, else from the formatted value."""
@@ -166,15 +168,19 @@ def render_sentences(specs: list[SentenceSpec], ctx: dict[str, Any]) -> str | No
     for spec in specs:
         if any(raw(ph) is None or _is_zero(raw(ph)) for ph in spec.requires):
             continue
+        if any(raw(ph) is not None and not _is_zero(raw(ph)) for ph in spec.unless):
+            continue
         triggers = spec.trigger_keys
         if triggers and all(_is_zero(raw(t)) for t in triggers):
             if not spec.zero:
                 continue
             text = render_sentence(spec.zero, ctx)
+        elif spec.one and len(triggers) == 1 and _as_number(raw(triggers[0])) == 1:
+            text = render_sentence(spec.one, ctx)
         else:
             text = render_sentence(spec.default, ctx)
         if text:
-            parts.append(text[0].upper() + text[1:])
+            parts.append(text[0].upper() + text[1:] if capitalize else text)
     return " ".join(parts) or None
 
 
@@ -400,6 +406,20 @@ def compute_insight(
 
     if problems:
         return _result(spec, "", [], 0, rated_total, drill, measure_key, problems, "problem")
+    where_text = "in this scope" if table.scope_key else "on this version"
+    if table.summary["rated"] == 0 and _rating_dependent(table, spec):
+        return _result(
+            spec,
+            "",
+            [],
+            0,
+            0,
+            drill,
+            measure_key,
+            [],
+            "unavailable",
+            f"No rated fund {where_text}: this question needs composite ranks.",
+        )
 
     if spec.mode == "filter":
         found = select(table, spec.where)
@@ -422,6 +442,18 @@ def compute_insight(
         rows, count, gctx, gnumbers = _group_by(table, spec)
         ctx.update(gctx)
         numbers.update(gnumbers)
+        considered = gnumbers.get("groups", 0)
+        if considered < 2:
+            dim = table.map.dimensions[spec.groupBy.dimension].label.lower()
+            note = (
+                f"No {dim} has {ctx['min_group']} or more rated funds {where_text}."
+                if considered == 0
+                else f"Only one {dim} has {ctx['min_group']} or more rated funds {where_text}: "
+                "nothing to compare."
+            )
+            return _result(
+                spec, "", rows, count, rated_total, drill, measure_key, [], "unavailable", note
+            )
     elif spec.mode == "acrossVersions" and spec.across:
         if len(snapshots or []) < 2:
             note = (
@@ -466,7 +498,7 @@ def compute_insight(
     note = None
     if sentence is None:
         if count == 0:
-            status, note = "empty", "No fund meets this test on this version."
+            status, note = "empty", f"No fund meets this test {where_text}."
         else:
             problems.append(
                 "sentence could not be completed: an input is unavailable on this version"
@@ -479,6 +511,24 @@ def compute_insight(
     out.context = {k: v for k, v in ctx.items() if k != "_n"}
     out.numbers = dict(numbers)
     return out
+
+
+def _rating_dependent(table: ResearchTable, spec: InsightSpec) -> bool:
+    """Does the question presuppose composite ranks? True when a predicate other than
+    ``isnull`` tests a rank or quartile measure (or the primary score), or the sort does."""
+    primary_score = table.primary_key("score")
+    keys = [p.measure for p in spec.where if p.measure and p.op != "isnull"]
+    if spec.groupBy:
+        keys += [p.measure for p in spec.groupBy.where if p.measure and p.op != "isnull"]
+    if spec.across:
+        keys += [p.measure for p in spec.across.where if p.measure and p.op != "isnull"]
+    if spec.sort:
+        keys.append(spec.sort.measure)
+    for key in keys:
+        m = table.map.measure(key)
+        if m is not None and (m.role in ("rank", "quartile") or key == primary_score):
+            return True
+    return False
 
 
 def _entity_row(

@@ -484,3 +484,115 @@ def test_scope_applies_to_every_view(client: TestClient, config) -> None:
     assert client.get("/api/research/summary", params={"scope": "{not json"}).status_code == 422
     bad = json.dumps({"rated": "maybe"})
     assert client.get("/api/research/summary", params={"scope": bad}).status_code == 422
+
+
+def _scoped(client: TestClient, scope: dict):
+    import json
+
+    s = json.dumps(scope)
+    summary = client.get("/api/research/summary", params={"scope": s}).json()
+    insights = {
+        i["key"]: i
+        for i in client.get("/api/research/insights", params={"scope": s}).json()["insights"]
+    }
+    cats = client.get("/api/research/categories", params={"scope": s}).json()
+    move = client.get("/api/research/movement", params={"scope": s}).json()
+    return summary, insights, cats, move
+
+
+def _no_zero_clause(text: str | None) -> None:
+    """No sentence may carry a bare zero or a dangling 'of 0'."""
+    import re
+
+    assert text is None or not re.search(r"(^|[ (])0([ ,.%)]|$)|\b0 of\b|\bof 0\b", text), text
+
+
+def test_extreme_scope_unrated_only(client: TestClient, config) -> None:
+    _upload(client, "master-old.xlsx", variant="repair")
+    _upload(client, "master.xlsx")
+    summary, ins, cats, move = _scoped(client, {"rated": "unrated"})
+    assert summary["universe"]["rated"] == 0 and summary["universe"]["total"] == 4
+    # Nothing about composite ratings is said with zeros; the coverage facts take over.
+    assert (
+        summary["executive"]
+        == "4 funds are in scope and none carries a composite rating. 1 fund is a data gap."
+    )
+    _no_zero_clause(summary["executive"])
+    assert summary["kpis"] == []  # every tile would read zero
+    assert summary["distribution_narrative"] is None
+    assert (
+        ins["amc_league"]["status"] == "unavailable"
+        and "No rated fund in this scope" in ins["amc_league"]["note"]
+    )
+    assert (
+        ins["best_value"]["status"] == "unavailable"
+        and ins["corpus_at_risk"]["status"] == "unavailable"
+    )
+    assert ins["unrated_gap"]["sentence"] == "1 fund older than the earliest phase still shows --."
+    assert ins["best_score"]["status"] == "unavailable"  # it sorts by the composite score
+    assert cats["narrative"].startswith("2 categories, 2 unranked.")
+    assert move["available"] is False and "no rated fund in this scope" in move["reason"]
+
+
+def test_extreme_scope_single_category_below_min_group(client: TestClient, config) -> None:
+    """One category whose rated count is below minGroupCount: no superlative names a group,
+    the distribution speaks of one category, and nothing reads '1 categories'."""
+    raised = research_map()
+    raised["minGroupCount"] = 5  # Regular-Alpha has 4 rated funds
+    config(raised)
+    _upload(client, "master-old.xlsx", variant="repair")
+    _upload(client, "master.xlsx")
+    summary, ins, cats, move = _scoped(client, {"dims": {"category": "Regular-Alpha"}})
+    assert summary["universe"]["rated"] == 4 and summary["universe"]["ranked_categories"] == 1
+    assert summary["executive"].startswith(
+        "4 funds carry a composite rating this cycle across 1 ranked category. "
+        "1 of them sits in the top quartile. No fund changed rank since "
+    )
+    _no_zero_clause(summary["executive"])
+    assert [(k["label"], k["value"], k["note"]) for k in summary["kpis"]] == [
+        ("Rated funds", "4", "across 1 ranked category"),
+        ("Top quartile", "1", "25.0% of rated funds"),
+    ]
+    assert summary["distribution_narrative"] == "One ranked category: its own quartiles."
+    assert summary["category_averages"]["rows"] == []  # nothing large enough to lead
+    assert ins["amc_league"]["status"] == "unavailable"
+    assert ins["amc_league"]["note"] == "No amc has 5 or more rated funds in this scope."
+    assert ins["dispersion"]["status"] == "unavailable"
+    assert cats["narrative"] == "1 category, none unranked."
+    assert move["available"] is True and move["narrative"].startswith("No fund changed rank")
+
+
+def test_extreme_scope_amc_with_one_rated_fund(client: TestClient, config) -> None:
+    """An AMC with exactly one rated fund: singular forms throughout, and never 'the most Q1
+    funds (1 of 1)': a league table needs at least two eligible groups."""
+    _upload(client, "master.xlsx")
+    summary, ins, cats, move = _scoped(client, {"dims": {"amc": "Gamma AMC"}})
+    assert summary["universe"]["total"] == 2 and summary["universe"]["rated"] == 1
+    assert summary["executive"] == (
+        "1 fund carries a composite rating this cycle, but its category has fewer than 4 ranked funds."
+    )
+    _no_zero_clause(summary["executive"])
+    assert [(k["label"], k["value"], k["note"]) for k in summary["kpis"]] == [
+        ("Rated funds", "1", None)
+    ]
+    assert ins["corpus_at_risk"]["sentence"] == "₹800 crore sits in the one fund ranked Q3 or Q4."
+    assert ins["amc_league"]["status"] == "unavailable"
+    assert cats["narrative"] == "2 categories, 2 unranked."
+
+    lenient = research_map()
+    lenient["minGroupCount"] = 1
+    config(lenient)
+    summary, ins, cats, move = _scoped(client, {"dims": {"amc": "Gamma AMC"}})
+    assert ins["amc_league"]["status"] == "unavailable"
+    assert (
+        ins["amc_league"]["note"]
+        == "Only one amc has 1 or more rated funds in this scope: nothing to compare."
+    )
+    assert "1 of 1" not in (summary["executive"] or "")
+    for text in [
+        summary["executive"],
+        summary["distribution_narrative"],
+        cats["narrative"],
+        move.get("narrative"),
+    ]:
+        _no_zero_clause(text)

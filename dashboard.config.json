@@ -618,6 +618,7 @@
         ],
         "sentence": {
           "default": "{count|fund sits|funds sit} in the top quartile on both phases. They captured the upside and held the downside.",
+          "one": "1 fund sits in the top quartile on both phases: it captured the upside and held the downside.",
           "zero": "No fund is top quartile on both the bull and the bear phases this month."
         }
       },
@@ -800,6 +801,7 @@
         ],
         "sentence": {
           "default": "{count|fund sits|funds sit} in Q4 on both composite rank and expense. These are the exit conversations.",
+          "one": "1 fund sits in Q4 on both composite rank and expense: an exit conversation.",
           "zero": "No fund sits in Q4 on both composite rank and expense this month."
         }
       },
@@ -823,7 +825,9 @@
         "limit": 5,
         "sentence": {
           "default": "{sum} sits in {count|fund|funds} ranked Q3 or Q4, and a small number of large funds carries most of it.",
-          "zero": "No rated fund sits in Q3 or Q4 this month."
+          "one": "{sum} sits in the one fund ranked Q3 or Q4.",
+          "zero": "No rated fund sits in Q3 or Q4 this month.",
+          "trigger": "count"
         }
       },
       {
@@ -990,8 +994,8 @@
       ],
       "categories": [
         {
-          "default": "{categories} categories; {unranked} {unranked?has|have} fewer than {unranked_below} ranked funds and {unranked?is|are} left unranked by the workbook rule.",
-          "zero": "{categories} categories, all large enough for the workbook rule to rank.",
+          "default": "{categories|category|categories}; {unranked} {unranked?has|have} fewer than {unranked_below} ranked funds and {unranked?is|are} left unranked by the workbook rule.",
+          "zero": "{categories|category|categories}, all large enough for the workbook rule to rank.",
           "trigger": "unranked"
         },
         {
@@ -1010,7 +1014,57 @@
       ],
       "executive": [
         {
-          "default": "{rated|fund carries|funds carry} a composite rating this cycle across {ranked_categories} ranked {ranked_categories?category|categories}, and {q1} of them {q1?sits|sit} in the top quartile."
+          "default": "{rated|fund carries|funds carry} a composite rating this cycle across {ranked_categories} ranked {ranked_categories?category|categories}.",
+          "requires": [
+            "ranked_categories"
+          ]
+        },
+        {
+          "default": "{rated|fund carries|funds carry} a composite rating this cycle, but {rated?its category has|their categories have} fewer than {unranked_below} ranked funds, so the workbook assigns no quartile.",
+          "requires": [
+            "rated"
+          ],
+          "unless": [
+            "ranked_categories"
+          ]
+        },
+        {
+          "default": "{q1} of them {q1?sits|sit} in the top quartile.",
+          "zero": "None of them sits in the top quartile.",
+          "requires": [
+            "rated",
+            "ranked_categories"
+          ]
+        },
+        {
+          "default": "{total|fund is|funds are} in scope and none carries a composite rating.",
+          "unless": [
+            "rated"
+          ]
+        },
+        {
+          "default": "{unrated_young|fund is|funds are} too young to rate.",
+          "unless": [
+            "rated"
+          ]
+        },
+        {
+          "default": "{unrated_small|fund sits|funds sit} in categories with fewer than {unranked_below} ranked funds.",
+          "unless": [
+            "rated"
+          ]
+        },
+        {
+          "default": "{unrated_gap|fund is|funds are} old enough to rate but incomplete: a data gap.",
+          "unless": [
+            "rated"
+          ]
+        },
+        {
+          "default": "{unrated_unknown|fund has|funds have} no first-NAV date on record.",
+          "unless": [
+            "rated"
+          ]
         },
         {
           "default": "{ins.amc_league.group.label} holds the most Q1 funds ({ins.amc_league.group.count} of {ins.amc_league.group.total} rated), while {ins.all_weather.count|fund was|funds were} top quartile in both bull and bear phases: the all-weather set.",
@@ -1018,11 +1072,17 @@
         },
         {
           "default": "{ins.best_value.count|fund delivers|funds deliver} Q1 performance at Q1 cost.",
-          "zero": "No fund delivers Q1 performance at Q1 cost this cycle."
+          "zero": "No fund delivers Q1 performance at Q1 cost this cycle.",
+          "requires": [
+            "rated"
+          ]
         },
         {
           "default": "{moved|fund|funds} changed rank since {previous}: {up} up, {down} down.",
-          "zero": "No fund changed rank since {previous}."
+          "zero": "No fund changed rank since {previous}.",
+          "requires": [
+            "rated"
+          ]
         },
         {
           "default": "{repairs} of those moves {repairs?is a data repair|are data repairs}, not market movement.",
@@ -1037,7 +1097,8 @@
       ],
       "distribution": [
         {
-          "default": "Quartiles are computed within each category, so the top quartile draws from all {ranked_categories} ranked categories rather than favouring the largest."
+          "default": "Quartiles are computed within each category, so the top quartile draws from all {ranked_categories} ranked categories rather than favouring the largest.",
+          "one": "Every rated fund in scope sits in one ranked category, so these quartiles are that category's own."
         }
       ],
       "coverage": [
@@ -1112,7 +1173,7 @@
       {
         "label": "Rated funds",
         "value": "{rated}",
-        "note": "across {ranked_categories} ranked categories",
+        "note": "across {ranked_categories} ranked {ranked_categories?category|categories}",
         "tone": "q1"
       },
       {
@@ -1136,7 +1197,7 @@
     ]
   },
   "viewer": {
-    "defaultName": "Jeet",
+    "defaultName": "Darsh",
     "note": "Interim: the greeting's first name until sign-in exists. A per-browser 'Your name' setting in Admin overrides it."
   }
 }

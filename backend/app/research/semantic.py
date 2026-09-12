@@ -39,10 +39,10 @@ INSIGHT_PLACEHOLDERS = {
 NARRATIVE_PLACEHOLDERS: dict[str, set[str]] = {
     "universe": {"total", "rated", "unrated", "categories", "unranked", "unranked_below", "unrated_small", "unrated_other", "unrated_young", "unrated_gap", "unrated_unknown", "coverage_since", "outside", "as_of"},
     "dashboard": {"moved", "up", "down", "repairs", "held_q1", "versions", "previous", "current", "rated", "categories"},
-    "movement": {"moved", "up", "down", "repairs", "into_q1", "out_of_q1", "entries", "exits", "previous", "current"},
+    "movement": {"rated", "moved", "up", "down", "repairs", "into_q1", "out_of_q1", "entries", "exits", "previous", "current"},
     "categories": {"categories", "unranked", "unranked_below", "eligible", "min_group", "widest.label", "widest.value", "best.label", "best.value", "measure.label"},
     "fund": {"label", "rank", "category_count", "category", "quartile", "delta", "delta_text", "previous", "score"},
-    "executive": {"rated", "total", "q1", "q1_pct", "ranked_categories", "categories", "moved", "up", "down", "repairs", "previous", "current", "checked", "matched", "mismatched", "agreement", "scope", "as_of"},
+    "executive": {"rated", "total", "q1", "q1_pct", "ranked_categories", "categories", "unranked", "unranked_below", "unrated", "unrated_young", "unrated_small", "unrated_gap", "unrated_unknown", "outside", "moved", "up", "down", "repairs", "previous", "current", "checked", "matched", "mismatched", "agreement", "scope", "as_of"},
     "distribution": {"rated", "ranked_categories", "categories", "median_category", "largest_category", "largest_category_rated"},
     "coverage": {"total", "rated", "unrated", "categories", "unranked", "unranked_below", "unrated_small", "unrated_other", "unrated_young", "unrated_gap", "unrated_unknown", "coverage_since", "outside", "as_of"},
 }  # fmt: skip
@@ -75,10 +75,17 @@ class SentenceSpec(BaseModel):
 
     default: str
     zero: str | None = None
+    one: str | None = Field(
+        default=None, description="variant when the trigger is exactly one (singular phrasing)"
+    )
     trigger: str | list[str] | None = None
     requires: list[str] = Field(
         default_factory=list,
         description="placeholders that must be present and non-zero for the sentence to render",
+    )
+    unless: list[str] = Field(
+        default_factory=list,
+        description="placeholders that must be absent or zero for the sentence to render",
     )
 
     @property
@@ -91,13 +98,13 @@ class SentenceSpec(BaseModel):
         return placeholder_names(self.default)[:1]
 
     def templates(self) -> list[str]:
-        return [self.default] + ([self.zero] if self.zero else [])
+        return [self.default] + [t for t in (self.zero, self.one) if t]
 
     def placeholders_used(self) -> list[str]:
         out: list[str] = []
         for t in self.templates():
             out.extend(placeholder_names(t))
-        return out + self.trigger_keys + list(self.requires)
+        return out + self.trigger_keys + list(self.requires) + list(self.unless)
 
 
 def sentences_of(raw: Any) -> list[SentenceSpec]:
@@ -299,6 +306,10 @@ class KpiSpec(BaseModel):
     value: str
     note: str | None = None
     tone: Literal["q1", "q2", "accent", "violet", "positive", "warning"] = "accent"
+    requires: list[str] = Field(default_factory=list)
+    keepZero: bool = Field(
+        default=False, description="show the tile even when its value is zero (default: omit)"
+    )
 
 
 class Finding(BaseModel):
@@ -388,7 +399,9 @@ def parse_map(raw: Any) -> tuple[ResearchMap | None, list[str]]:
                 if not narrative_placeholder_ok(name, ph, rmap):
                     problems.append(f"narratives.{name}: unknown placeholder {{{ph}}}")
     for i, kpi in enumerate(rmap.kpis):
-        for ph in dict.fromkeys(placeholder_names(kpi.value) + placeholder_names(kpi.note or "")):
+        for ph in dict.fromkeys(
+            placeholder_names(kpi.value) + placeholder_names(kpi.note or "") + list(kpi.requires)
+        ):
             if not narrative_placeholder_ok("executive", ph, rmap):
                 problems.append(f"kpis[{i}] '{kpi.label}': unknown placeholder {{{ph}}}")
     return rmap, problems
