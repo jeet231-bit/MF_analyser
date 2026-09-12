@@ -21,7 +21,7 @@ from app.research import export as rexport
 from app.research import insights as engine
 from app.research import snapshots as snaps
 from app.research.insights import entity_sub, fmt_count, fmt_measure, render_sentences
-from app.research.semantic import parse_map
+from app.research.semantic import MeasureSpec, parse_map
 from app.research.snapshots import Snapshot
 from app.research.table import (
     Entity,
@@ -372,6 +372,20 @@ def _previous_label(movement: dict[str, Any]) -> str | None:
     return f"the earlier upload of {date}" if movement.get("same_month") else date
 
 
+def _coverage_since(table: ResearchTable) -> str | None:
+    cov = table.map.coverage
+    if not cov:
+        return None
+    value = table.constants.get(cov.constant)
+    return (
+        fmt_measure(
+            value, MeasureSpec(key="_", label="_", role="factor", column="A", format="date")
+        )
+        if value is not None
+        else None
+    )
+
+
 def _numbers(**values: Any) -> dict[str, Any]:
     """Formatted placeholders plus the raw numbers (under ``_n``) for zero-variant selection."""
     ctx: dict[str, Any] = {"_n": {}}
@@ -492,10 +506,14 @@ def research_config(
             "findings": [f.model_dump() for f in rmap.findings],
             "quartileRule": rmap.quartileRule.model_dump(),
             "minGroupCount": rmap.minGroupCount,
+            "sectionLabels": rmap.sectionLabels,
+            "constants": {k: v.model_dump() for k, v in rmap.constants.items()},
+            "coverage": rmap.coverage.model_dump() if rmap.coverage else None,
         }
     )
     for d in base["dimensions"]:
         d["split"] = rmap.dimensions[d["key"]].split
+        d["attribute"] = rmap.dimensions[d["key"]].attribute
     return base
 
 
@@ -597,6 +615,10 @@ def research_summary(
         unrated_small=u["unrated_small_categories"],
         unrated_other=u["unrated_missing_data"],
         outside=u.get("outside_universe", 0),
+        unrated_young=u.get("unrated_young", 0),
+        unrated_gap=u.get("unrated_gap", 0),
+        unrated_unknown=u.get("unrated_unknown", 0),
+        coverage_since=_coverage_since(table),
         as_of=snaps.date_label(current) if current else None,
     )
     out["universe_narrative"] = render_sentences(table.map.narrative("universe"), universe_ctx)
@@ -994,6 +1016,7 @@ def research_insights(
     out.update(
         {
             "sections": sections,
+            "sectionLabels": table.map.sectionLabels,
             "insights": [_insight_dict(c) for c in computed],
             "footer": table.map.footer,
         }

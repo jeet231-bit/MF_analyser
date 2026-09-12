@@ -11,6 +11,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from openpyxl.utils.datetime import from_excel
+
 from app.exports.report import _group
 from app.research.semantic import (
     SENTENCE_PLACEHOLDER,
@@ -78,6 +80,11 @@ def fmt_measure(value: Any, spec: MeasureSpec | None) -> str:
         return _group(x, 0 if x.is_integer() else 2, INDIAN)
     if spec.format == "inr_crore":
         return fmt_inr_crore(x)
+    if spec.format == "date":
+        try:
+            return from_excel(x).strftime("%d %b %Y").lstrip("0")
+        except (ValueError, OverflowError, TypeError):
+            return str(value)
     decimals = spec.decimals
     if decimals is None:
         decimals = 0 if spec.format == "integer" or spec.role in ("rank", "quartile") else 2
@@ -208,7 +215,18 @@ def _value_in_share(
     return v <= threshold if best_high else v >= threshold
 
 
+def _target(table: ResearchTable, value: Any) -> Any:
+    """A literal, or a declared constant when the value is '$name' (None when unresolved)."""
+    if isinstance(value, str) and value.startswith("$"):
+        return table.constants.get(value[1:])
+    return value
+
+
 def matches(table: ResearchTable, e: Entity, pred: Predicate) -> bool:
+    if pred.dimension is not None:
+        return _matches_dimension(e.dims.get(pred.dimension), pred)
+    if pred.measure is None:
+        return False
     spec = table.map.measure(pred.measure)
     if spec is None or pred.measure not in table.resolved.measures:
         return False
@@ -216,11 +234,33 @@ def matches(table: ResearchTable, e: Entity, pred: Predicate) -> bool:
     op = pred.op
     if op == "notnull":
         return v is not None
+    if op == "isnull":
+        return v is None
     if op in ("top", "bottom"):
         return _top_bottom(table, spec, e, pred)
     if v is None:
         return False
-    return _compare(v, op, pred.value)
+    target = _target(table, pred.value)
+    if target is None and op != "in":
+        return False
+    return _compare(v, op, target)
+
+
+def _matches_dimension(v: str | None, pred: Predicate) -> bool:
+    op = pred.op
+    if op == "notnull":
+        return v is not None
+    if op == "isnull":
+        return v is None
+    if v is None:
+        return False
+    if op == "in":
+        return v in [str(x) for x in (pred.value or [])]
+    if op == "eq":
+        return v == str(pred.value)
+    if op == "ne":
+        return v != str(pred.value)
+    return False
 
 
 def _compare(v: float, op: str, target: Any) -> bool:
@@ -328,15 +368,17 @@ def compute_insight(
     """``snapshots``: one per genuine (distinct-month) activated version, oldest first, for
     acrossVersions insights."""
     problems: list[str] = []
-    needed = [p.measure for p in spec.where] + ([spec.sort.measure] if spec.sort else [])
+    needed = [p.measure for p in spec.where if p.measure] + (
+        [spec.sort.measure] if spec.sort else []
+    )
     if spec.groupBy:
-        needed += [p.measure for p in spec.groupBy.where] + (
+        needed += [p.measure for p in spec.groupBy.where if p.measure] + (
             [spec.groupBy.measure] if spec.groupBy.measure else []
         )
     if spec.aggregate:
         needed.append(spec.aggregate.measure)
     if spec.across:
-        needed += [p.measure for p in spec.across.where]
+        needed += [p.measure for p in spec.across.where if p.measure]
     missing = sorted({m for m in needed if m not in table.resolved.measures})
     if missing:
         problems.append(f"measure(s) not resolved on this version: {', '.join(missing)}")
@@ -437,7 +479,7 @@ def compute_insight(
 def _entity_row(
     table: ResearchTable, e: Entity, spec: InsightSpec, show_spec: MeasureSpec | None
 ) -> InsightRow:
-    extra: dict[str, Any] = {p.measure: e.measures.get(p.measure) for p in spec.where}
+    extra: dict[str, Any] = {p.measure: e.measures.get(p.measure) for p in spec.where if p.measure}
     extra["group"] = e.category
     if "quartile_pair" in spec.show and len(spec.where) >= 2:
         a, b = spec.where[0].measure, spec.where[1].measure
@@ -469,8 +511,8 @@ def group_values(table: ResearchTable, dimension: str, e: Entity) -> list[str]:
     if not v:
         return []
     spec = table.map.dimensions.get(dimension)
-    if spec is not None and spec.split:
-        return [part.strip() for part in v.split(spec.split) if part.strip()]
+    if spec is not None and spec.split and spec.attribute == "person":
+        return spec.members(v)
     return [v]
 
 
@@ -517,13 +559,22 @@ def _group_by(table: ResearchTable, spec: InsightSpec):
             vl = fmt_measure(value, mspec) + (
                 " pts" if g.aggregate == "dispersion" and mspec and not mspec.unit else ""
             )
-        rows.append(InsightRow(None, label, None, value, vl, {"count": cnt, "total": total}))
+        rows.append(
+            InsightRow(
+                None,
+                _joined(table, g.dimension, label),
+                None,
+                value,
+                vl,
+                {"count": cnt, "total": total, "raw": label},
+            )
+        )
     ctx: dict[str, Any] = {"groups": fmt_count(considered), "min_group": threshold}
     numbers: dict[str, Any] = {"groups": considered}
     if scored:
         top = scored[0]
         ctx["group"] = {
-            "label": top[0],
+            "label": _phrase(table, g.dimension, top[0]),
             "value": rows[0].value_label if rows else top[1],
             "count": top[2],
             "total": top[3],
@@ -532,12 +583,22 @@ def _group_by(table: ResearchTable, spec: InsightSpec):
         if g.aggregate == "count_where":
             best = max(scored, key=lambda t: t[2] / t[3])
             ctx["hit"] = {
-                "label": best[0],
+                "label": _phrase(table, g.dimension, best[0]),
                 "value": f"{100 * best[2] / best[3]:.0f}%",
                 "count": best[2],
                 "total": best[3],
             }
     return rows, len(scored), ctx, numbers
+
+
+def _joined(table: ResearchTable, dimension: str, value: str) -> str:
+    spec = table.map.dimensions.get(dimension)
+    return spec.joined(value) if spec else value
+
+
+def _phrase(table: ResearchTable, dimension: str, value: str) -> str:
+    spec = table.map.dimensions.get(dimension)
+    return spec.phrase(value) if spec else value
 
 
 def _across_versions(table: ResearchTable, spec: InsightSpec, snapshots: list[Snapshot]):

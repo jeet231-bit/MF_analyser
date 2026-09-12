@@ -37,8 +37,8 @@ export function InsightsPage({ actions, runId }: { actions: ResearchActions; run
         }
       />
       {body.sections.map((section, i) => (
-        <section key={section} aria-label={sectionTitle(section)}>
-          <SectionHeader icon={SECTION_ICONS[i % SECTION_ICONS.length]} title={sectionTitle(section)} sub={`${bySection.get(section)?.length ?? 0} cards`} />
+        <section key={section} aria-label={body.sectionLabels?.[section] ?? sectionTitle(section)}>
+          <SectionHeader icon={SECTION_ICONS[i % SECTION_ICONS.length]} title={body.sectionLabels?.[section] ?? sectionTitle(section)} sub={`${bySection.get(section)?.length ?? 0} cards`} />
           <div className="grid gap-[18px] md:grid-cols-12">
             {(bySection.get(section) ?? []).map((ins) => (
               <InsightCard key={ins.key} insight={ins} actions={actions} />

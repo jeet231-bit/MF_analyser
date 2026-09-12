@@ -247,6 +247,7 @@ export interface Insight {
 
 export interface InsightsResponse extends Envelope {
   sections: string[];
+  sectionLabels?: Record<string, string>;
   insights: Insight[];
   footer: string | null;
 }

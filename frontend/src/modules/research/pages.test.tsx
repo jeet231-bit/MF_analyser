@@ -90,8 +90,8 @@ describe("InsightsPage", () => {
     mockApi({ "GET /api/research/insights": insights });
     const actions = makeActions();
     render(<InsightsPage actions={actions} runId="run00001" />);
-    expect(await screen.findByRole("heading", { name: "Winning" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Cost" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Who is winning" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Cost" })).toBeInTheDocument(); // no label configured: the key, capitalised
     const card = screen.getByRole("article", { name: "Best on long-term rank" });
     expect(within(card).getByText(/leads its category/)).toBeInTheDocument();
     expect(within(card).getByText("37.20")).toBeInTheDocument();

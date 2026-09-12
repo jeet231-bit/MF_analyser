@@ -1,6 +1,6 @@
 # Findings in the master workbook
 
-This note is for the research team. It lists what the analyser found in the Equity MF Analyser master while it was being interpreted, checked and reconciled against Excel's own results, cell by cell. Four things came up. Three were defects in the workbook and are fixed; one is a data gap that the workbook handles as designed but that is worth knowing about.
+This note is for the research team. It lists what the analyser found in the Equity MF Analyser master while it was being interpreted, checked and reconciled against Excel's own results, cell by cell. Five things came up. Three were defects in the workbook and are fixed; two are data gaps that the workbook handles as designed but that are worth knowing about.
 
 Each item says what it was, what it affected, and where it stands now.
 
@@ -37,6 +37,36 @@ Each item says what it was, what it affected, and where it stands now.
 This is not a calculation error. The analyser reproduces exactly what Excel does here (it initially did not, and was corrected to match). It is a data gap: the two funds need CY Returns rows, or they should be excluded from the category, for the category averages to appear.
 
 **Status: open, for the research team to decide.** No change was made to the master.
+
+## 5. First NAV: 34 funds have no first-NAV date, so their "--" cannot be explained
+
+**What it is.** The research console explains every unrated fund: 126 categories have fewer than four ranked funds (the workbook's own rule), 67 funds sit outside the Universe flag, and the rest show "--" for part of the composite. For that last group the console compares the fund's first-NAV date (First NAV, column B) with the start of the earliest bull phase (11 February 2016, from the Bull-Bear Returns header): a fund launched after that date is too young to rate, a fund launched before it with "--" is a data gap. On the current master 1,605 unrated funds are too young and none is a data gap.
+
+Thirty-four funds cannot be classified either way: their First NAV row reads "--" for the date while their composite also reads "--". They are seventeen schemes, both plans each (Direct and Regular, or ETF and index fund):
+
+- Bank of India Value Fund
+- DSP CRISIL-IBX Financial Services 3-6 Months Debt Index Fund
+- ICICI Prudential Dynamic Asset Allocation Passive FOF
+- Invesco India Pharma and Healthcare Fund
+- ITI Multi Asset Allocation Fund
+- JioBlackRock Balanced Advantage Fund
+- Mirae Asset CRISIL-IBX Financial Services 3-6 Months Debt Index Fund
+- Motilal Oswal Quality Fund
+- Navi Nifty REITs & Realty Index Fund
+- Nippon India Income Plus Arbitrage Omni Fund of Fund
+- quant Income Plus Arbitrage Active FoF
+- Quantum Flexi Cap Fund
+- SBI Balanced Hybrid Fund
+- The Wealth Company Multi Cap Fund
+- UTI Balanced Hybrid Fund
+- UTI BSE India Sector Leaders (the ETF and both plans of the index fund)
+- Zerodha Life Cycle Fund 2031 (Direct plan only)
+
+Most of these names look like recent launches, which would make them "too young" rather than incomplete, but the workbook cannot say so until a first-NAV date is entered.
+
+**What it affects.** Nothing in the rankings: these funds are unrated either way. It affects the coverage explanation on the dashboard ("34 funds have a missing composite and no first NAV date on record") and the Insights page, where the "Cannot tell young from incomplete" card lists them.
+
+**Status: open, for the research team.** Entering the first-NAV date for these seventeen schemes on the First NAV sheet closes the item; the card empties by itself on the next upload.
 
 ## Smaller observations
 

@@ -169,7 +169,21 @@ PERF: dict[str, tuple[float, ...]] = {
     f[0]: (10 + i * 1.5, 8 + i * 1.1, 20 + i, 15 + i * 0.5, -8 + i * 0.3, -5 + i * 0.2)
     for i, f in enumerate(FUNDS)
 }
-PERF_HEADERS = ["Name", "1Y", "3Y", "Bull 2020-21", "Bull 2022-24", "Bear 2020", "Bear 2022"]
+PERF_HEADERS = [
+    "Name",
+    "1Y",
+    "3Y",
+    "Bull 2020-21",
+    "Bull 2022-24",
+    "Bear 2020",
+    "Bear 2022",
+    "First date",
+]
+# First NAV as an Excel serial: everyone launched in 2015 except two 2024 launches; the fund
+# whose composite reads "--" (Gamma One - Dir) is old, so it is a data gap, not a young fund.
+INCEPTION: dict[str, int] = {f[0]: 42000 for f in FUNDS}
+INCEPTION["Delta Two - Dir"] = 45500
+INCEPTION["Alpha Three - Dir"] = 45400
 CATEGORIES = ["Direct-Alpha", "Regular-Alpha", "Direct-Beta"]
 GHOST_CATEGORY = "Direct-Ghost"  # in the averages table, with no fund behind it
 
@@ -269,8 +283,10 @@ def build_research_workbook(variant: str = "base") -> openpyxl.Workbook:
         perf.cell(row=FIRST + i, column=1, value=r[0])
         for c, v in enumerate(PERF[r[0]], start=2):
             perf.cell(row=FIRST + i, column=c, value=v)
+        perf.cell(row=FIRST + i, column=8, value=INCEPTION[r[0]])
     cat = wb.create_sheet("CatAvg")
     cat["A1"], cat["B1"] = "Category", "Average score"
+    cat["D1"] = "Phases from 11 Feb 2016 To 28 Aug 2018"  # the constant a coverage test reads
     for i, name in enumerate([*CATEGORIES, GHOST_CATEGORY], start=2):
         cat[f"A{i}"] = name
         cat[f"B{i}"] = (
@@ -304,7 +320,7 @@ def research_map() -> dict:
             "category": {"column": "E", "label": "Category"},
             "amc": {"column": "D", "label": "AMC"},
             "plan": {"column": "C", "label": "Plan"},
-            "manager": {"column": "F", "label": "Manager"},
+            "manager": {"column": "F", "label": "Manager", "split": ","},
         },
         "measures": [
             {"key": "score", "label": "Score", "role": "score", "column": "I", "primary": True},
@@ -316,6 +332,7 @@ def research_map() -> dict:
             {"key": "qrtl_expense", "label": "Expense quartile", "role": "quartile", "column": "O", "format": "integer", "higherIsBetter": False},
             {"key": "ret1y", "label": "1Y return", "role": "return", "sheet": "Perf", "column": "B", "keyColumn": "A", "unit": "%"},
             {"key": "ret3y", "label": "3Y return", "role": "return", "sheet": "Perf", "column": "C", "keyColumn": "A", "unit": "%"},
+            {"key": "inception", "label": "First NAV", "role": "factor", "sheet": "Perf", "column": "H", "keyColumn": "A", "format": "date", "higherIsBetter": False},
         ],
         "phases": {"sheet": "Perf", "keyColumn": "A", "headerRow": 1, "unit": "%",
                    "groups": [{"key": "bull", "label": "Bull", "columns": ["D", "E"]},
@@ -323,6 +340,9 @@ def research_map() -> dict:
         "periods": {"sheet": "Perf", "keyColumn": "A", "headerRow": 1, "columns": ["B", "C"], "unit": "%"},
         "categoryStats": {"sheet": "CatAvg", "keyColumn": "A", "rows": [2, 5], "headerRow": 1, "columns": ["B"]},
         "minGroupCount": 2,
+        "constants": {"since": {"cell": "CatAvg!D1", "parse": "firstDate"}},
+        "coverage": {"measure": "inception", "constant": "since"},
+        "sectionLabels": {"winning": "Who is winning", "cost": "Cost and scale"},
         "insights": [
             {"key": "best_score", "section": "winning", "eyebrow": "Leaders", "title": "Highest scores",
              "where": [{"measure": "score", "op": "notnull"}], "sort": {"measure": "score", "dir": "desc"}, "limit": 3,
@@ -357,6 +377,17 @@ def research_map() -> dict:
              "mode": "aggregate", "aggregate": {"measure": "corpus", "fn": "sum"},
              "where": [{"measure": "quartile", "op": "gte", "value": 3}], "limit": 3,
              "sentence": {"default": "{sum} sits in {count|fund|funds} ranked Q3 or Q4.", "zero": "No fund sits in Q3 or Q4."}},
+            {"key": "unrated_gap", "section": "coverage", "eyebrow": "Data gap", "title": "Old enough, still --",
+             "where": [{"measure": "score", "op": "isnull"}, {"measure": "inception", "op": "lt", "value": "$since"}],
+             "sort": {"measure": "inception", "dir": "asc"}, "limit": 5, "show": ["measure:inception"],
+             "sentence": {"default": "{count|fund|funds} older than {count?the|the} earliest phase still {count?shows|show} --.", "zero": "No old fund is unrated."}},
+            {"key": "unrated_young", "section": "coverage", "eyebrow": "Too young", "title": "First NAV after the earliest phase",
+             "where": [{"measure": "score", "op": "isnull"}, {"measure": "inception", "op": "gte", "value": "$since"}],
+             "limit": 5, "show": ["measure:inception"],
+             "sentence": {"default": "{count|fund is|funds are} too young to rate.", "zero": "Every unrated fund is old enough to rate."}},
+            {"key": "direct_leaders", "section": "winning", "eyebrow": "Direct", "title": "Direct-plan leaders",
+             "where": [{"dimension": "plan", "op": "eq", "value": "Direct"}, {"measure": "rank", "op": "eq", "value": 1}],
+             "limit": 5, "show": ["measure:score"], "sentence": "{count|direct fund leads|direct funds lead} a category."},
             {"key": "dispersion", "section": "houses", "eyebrow": "Selection", "title": "Widest dispersion",
              "mode": "groupBy", "groupBy": {"dimension": "category", "aggregate": "dispersion", "measure": "ret3y", "minMembers": 3}, "limit": 3,
              "sentence": "{group.label} spans {group.value} on {measure.label}.", "sort": {"measure": "ret3y", "dir": "desc"}},
@@ -364,7 +395,7 @@ def research_map() -> dict:
         "narratives": {
             "universe": [{"default": "{rated} of {total} funds are rated."},
                          {"default": "{unranked} of {categories} categories {unranked?has|have} fewer than {unranked_below} funds ({unrated_small|fund|funds})."},
-                         {"default": "{unrated_other|fund is|funds are} unrated for missing data."}],
+                         {"default": "{unrated_other|fund is|funds are} unrated for missing data: {unrated_young} too young (first NAV after {coverage_since}) and {unrated_gap} with a data gap."}],
             "dashboard": [{"default": "{moved|fund|funds} changed rank since {previous}: {up} up, {down} down.", "zero": "No fund changed rank since {previous}."},
                           {"default": "{repairs} of those {repairs?is a data repair|are data repairs}.", "zero": "None of those moves is a data repair.", "requires": ["moved"]},
                           {"default": "{held_q1|fund has|funds have} held Q1 across all {versions} genuine uploads.", "zero": "No fund has held Q1 across all {versions} genuine uploads."}],

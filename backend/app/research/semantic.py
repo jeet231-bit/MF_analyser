@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field, ValidationError
 from app.model.schema import WorkbookLogicModel
 
 Role = Literal["score", "rank", "quartile", "return", "factor"]
-Op = Literal["eq", "ne", "lt", "lte", "gt", "gte", "in", "top", "bottom", "notnull"]
+Op = Literal["eq", "ne", "lt", "lte", "gt", "gte", "in", "top", "bottom", "notnull", "isnull"]
 # {name} · {name|one|many} renders "N one/many" · {name?one|many} renders just the word.
 SENTENCE_PLACEHOLDER = re.compile(
     r"\{([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?)(?:([|?])([^{}|]*)\|([^{}|]*))?\}"
@@ -37,7 +37,7 @@ INSIGHT_PLACEHOLDERS = {
     "hit.label", "hit.value", "hit.count", "hit.total", "measure.label",
 }  # fmt: skip
 NARRATIVE_PLACEHOLDERS: dict[str, set[str]] = {
-    "universe": {"total", "rated", "unrated", "categories", "unranked", "unranked_below", "unrated_small", "unrated_other", "outside", "as_of"},
+    "universe": {"total", "rated", "unrated", "categories", "unranked", "unranked_below", "unrated_small", "unrated_other", "unrated_young", "unrated_gap", "unrated_unknown", "coverage_since", "outside", "as_of"},
     "dashboard": {"moved", "up", "down", "repairs", "held_q1", "versions", "previous", "current", "rated", "categories"},
     "movement": {"moved", "up", "down", "repairs", "into_q1", "out_of_q1", "entries", "exits", "previous", "current"},
     "categories": {"categories", "unranked", "unranked_below", "eligible", "min_group", "widest.label", "widest.value", "best.label", "best.value", "measure.label"},
@@ -120,8 +120,28 @@ class DimensionSpec(BaseModel):
     keyColumn: str | None = None
     split: str | None = Field(
         default=None,
-        description="separator that turns one cell into several group members (insights only)",
+        description="separator between the members of one cell (a management team); with "
+        "attribute 'team' the cell stays one group rendered as 'the team of A, B and C', with "
+        "'person' each member is a group of its own",
     )
+    attribute: Literal["team", "person"] = "team"
+
+    def members(self, value: str) -> list[str]:
+        if not self.split:
+            return [value]
+        return [p.strip() for p in value.split(self.split) if p.strip()] or [value]
+
+    def joined(self, value: str) -> str:
+        """'A, B and C' for a multi-member cell, the value itself otherwise."""
+        parts = self.members(value)
+        if len(parts) < 2:
+            return parts[0] if parts else value
+        return ", ".join(parts[:-1]) + " and " + parts[-1]
+
+    def phrase(self, value: str) -> str:
+        """The label a sentence uses: 'the team of A, B and C' for a multi-member cell."""
+        parts = self.members(value)
+        return f"the team of {self.joined(value)}" if len(parts) >= 2 else value
 
 
 class MeasureSpec(BaseModel):
@@ -175,7 +195,11 @@ class QuartileRule(BaseModel):
 
 
 class Predicate(BaseModel):
-    measure: str
+    """A test on a measure (numbers) or a dimension (text). ``value`` may be a literal or
+    ``"$name"``, a constant declared under ``research.constants`` and read from a cell."""
+
+    measure: str | None = None
+    dimension: str | None = None
     op: Op = "eq"
     value: Any = None
     fraction: float = Field(
@@ -232,6 +256,19 @@ class InsightSpec(BaseModel):
         return sentences_of(self.sentence)
 
 
+class ConstantSpec(BaseModel):
+    cell: str = Field(description="'Sheet!A1' holding the value")
+    parse: Literal["number", "firstDate", "lastDate"] = "number"
+
+
+class CoverageSpec(BaseModel):
+    """Why funds are unrated: an inception-date measure against a constant (the earliest phase
+    start). Younger funds are too young to rate; older ones with '--' are a data gap."""
+
+    measure: str
+    constant: str
+
+
 class Finding(BaseModel):
     title: str
     detail: str = ""
@@ -251,6 +288,9 @@ class ResearchMap(BaseModel):
         description="superlatives over groups (AMC, manager, category) ignore groups with fewer "
         "rated members than this, so tiny or exotic groups never top a league table",
     )
+    constants: dict[str, ConstantSpec] = Field(default_factory=dict)
+    coverage: CoverageSpec | None = None
+    sectionLabels: dict[str, str] = Field(default_factory=dict)
     insights: list[InsightSpec] = Field(default_factory=list)
     narratives: dict[str, Any] = Field(default_factory=dict)
     footer: str | None = None
@@ -292,6 +332,11 @@ def parse_map(raw: Any) -> tuple[ResearchMap | None, list[str]]:
             problems.append(f"measures: no measure with role '{role}' (a primary one is needed)")
     if "category" not in rmap.dimensions:
         problems.append("dimensions: a 'category' dimension is required")
+    if rmap.coverage:
+        if rmap.measure(rmap.coverage.measure) is None:
+            problems.append(f"coverage: measure '{rmap.coverage.measure}' is not declared")
+        if rmap.coverage.constant not in rmap.constants:
+            problems.append(f"coverage: constant '{rmap.coverage.constant}' is not declared")
     for i, ins in enumerate(rmap.insights):
         problems.extend(_check_insight(rmap, i, ins))
     for name, raw in rmap.narratives.items():
@@ -316,11 +361,27 @@ def parse_map(raw: Any) -> tuple[ResearchMap | None, list[str]]:
 def _check_insight(rmap: ResearchMap, i: int, ins: InsightSpec) -> list[str]:
     where = f"insights[{i}] '{ins.key}'"
     problems: list[str] = []
-    refs = [p.measure for p in ins.where]
+    preds = (
+        list(ins.where)
+        + (list(ins.groupBy.where) if ins.groupBy else [])
+        + (list(ins.across.where) if ins.across else [])
+    )
+    for p in preds:
+        if (p.measure is None) == (p.dimension is None):
+            problems.append(f"{where}: a predicate needs exactly one of measure or dimension")
+        if p.dimension is not None and p.dimension not in rmap.dimensions:
+            problems.append(f"{where}: dimension '{p.dimension}' is not declared")
+        if (
+            isinstance(p.value, str)
+            and p.value.startswith("$")
+            and p.value[1:] not in rmap.constants
+        ):
+            problems.append(f"{where}: constant '{p.value}' is not declared under constants")
+    refs = [p.measure for p in ins.where if p.measure]
     if ins.sort:
         refs.append(ins.sort.measure)
     if ins.groupBy:
-        refs += [p.measure for p in ins.groupBy.where]
+        refs += [p.measure for p in ins.groupBy.where if p.measure]
         if ins.groupBy.measure:
             refs.append(ins.groupBy.measure)
         if ins.groupBy.dimension not in rmap.dimensions:
@@ -330,10 +391,10 @@ def _check_insight(rmap: ResearchMap, i: int, ins: InsightSpec) -> list[str]:
     if ins.aggregate:
         refs.append(ins.aggregate.measure)
     if ins.across:
-        refs += [p.measure for p in ins.across.where]
+        refs += [p.measure for p in ins.across.where if p.measure]
         primary = {m.key for r in ("score", "rank", "quartile") if (m := rmap.primary(r))}  # type: ignore[arg-type]
         for p in ins.across.where:
-            if p.measure not in primary and rmap.measure(p.measure) is not None:
+            if p.measure and p.measure not in primary and rmap.measure(p.measure) is not None:
                 problems.append(
                     f"{where}: across.where can only test the primary score, rank or quartile "
                     f"(version snapshots hold those), not '{p.measure}'"
@@ -393,6 +454,9 @@ class ResolvedMap(BaseModel):
     phases_ok: bool = False
     periods_ok: bool = False
     category_stats_ok: bool = False
+    constant_cells: dict[str, tuple[str, int, int]] = Field(
+        default_factory=dict
+    )  # name -> sheet,row,col
 
     @property
     def configured(self) -> bool:
@@ -556,6 +620,23 @@ def resolve_map(
         if labels is not None and ok:
             resolved.category_stat_labels = labels
             resolved.category_stats_ok = True
+    for name, spec in rmap.constants.items():
+        if "!" not in spec.cell:
+            problems.append(f"constants.{name}: '{spec.cell}' is not 'Sheet!A1'")
+            continue
+        sheet_name, addr = spec.cell.rsplit("!", 1)
+        sheet_name = sheet_name.strip("'")
+        if sheet_name not in in_scope:
+            problems.append(sheet_problem(f"constants.{name}", sheet_name))
+            continue
+        try:
+            from app.model.formula.refs import parse_a1_cell
+
+            r, c = parse_a1_cell(addr)
+        except Exception:  # noqa: BLE001
+            problems.append(f"constants.{name}: '{addr}' is not a cell address")
+            continue
+        resolved.constant_cells[name] = (sheet_name, r, c)
     for role in ("score", "rank", "quartile"):
         prim = rmap.primary(role)  # type: ignore[arg-type]
         if prim is not None and prim.key not in resolved.measures:

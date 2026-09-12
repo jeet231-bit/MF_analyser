@@ -95,7 +95,7 @@ def test_not_configured_paths(client: TestClient, config) -> None:
     assert body["configured"] is True
     joined = " | ".join(body["problems"])
     assert "measures[7] 'ret1y': column ZZ is outside sheet 'Perf'" in joined
-    assert "measures[9] 'ghost': sheet 'Nope' is not in scope" in joined
+    assert "measures[10] 'ghost': sheet 'Nope' is not in scope" in joined
     cfg = client.get("/api/research/config").json()
     assert {m["key"]: m["resolved"] for m in cfg["measures"]}["ret1y"] is False
 
@@ -125,7 +125,7 @@ def test_summary_counts_and_distribution(client: TestClient, config) -> None:
     assert body["universe"]["unrated_missing_data"] == 1  # Gamma One - Dir reads "--"
     assert body["universe_narrative"] == (
         "8 of 12 funds are rated. 1 of 3 categories has fewer than 4 funds (3 funds). "
-        "1 fund is unrated for missing data."
+        "1 fund is unrated for missing data: 0 too young (first NAV after 11 Feb 2016) and 1 with a data gap."
     )
     assert body["footer"] == "Test console · confidential"
 
@@ -265,16 +265,30 @@ def test_insights_compute_sentences(client: TestClient, config) -> None:
     _upload(client, "master-old.xlsx", variant="repair")
     _upload(client, "master.xlsx")
     body = client.get("/api/research/insights").json()
-    assert body["sections"] == ["winning", "houses", "cost"]
+    assert body["sections"] == ["winning", "houses", "cost", "coverage"]
+    assert body["sectionLabels"] == {"winning": "Who is winning", "cost": "Cost and scale"}
     ins = {i["key"]: i for i in body["insights"]}
     assert all(i["problems"] == [] for i in ins.values()), [i["problems"] for i in ins.values()]
     assert ins["best_score"]["sentence"] == "11 funds carry a score; Beta One leads at 88.00."
     assert [r["label"] for r in ins["best_score"]["rows"]] == ["Beta One", "Beta One", "Alpha One"]
     assert ins["held_q1"]["sentence"].endswith("in all 2 genuine uploads.")
     assert ins["held_q1"]["count"] >= 1 and ins["held_q1"]["status"] == "ok"
-    # Teams are kept as the master lists them unless the dimension declares a split.
-    assert "B. Sen, E. Roy" in [r["label"] for r in ins["team_league"]["rows"]]
-    assert ins["team_league"]["sentence"].endswith("manages 1 Q1 fund.")
+    # Teams stay one group (attribute "team"); rows and sentences render the members readably.
+    assert "B. Sen and E. Roy" in [r["label"] for r in ins["team_league"]["rows"]]
+    assert ins["team_league"]["sentence"] in (
+        "B. Sen manages 1 Q1 fund.",
+        "The team of B. Sen and E. Roy manages 1 Q1 fund.",
+    )
+    # Coverage: the one "--" fund is old (a data gap), no fund is too young; predicates may test
+    # dimensions and constants read from cells.
+    assert ins["unrated_gap"]["sentence"] == "1 fund older than the earliest phase still shows --."
+    assert [r["label"] for r in ins["unrated_gap"]["rows"]] == ["Gamma One"]
+    assert ins["unrated_gap"]["rows"][0]["valueLabel"] == "27 Dec 2014"
+    assert ins["unrated_young"]["count"] == 0 and ins["unrated_young"]["status"] == "ok"
+    assert ins["unrated_young"]["sentence"] == "Every unrated fund is old enough to rate."
+    assert ins["direct_leaders"]["count"] >= 1 and all(
+        r["sub"].startswith("Direct") for r in ins["direct_leaders"]["rows"]
+    )
     # A filter insight with a minimum category size counts only the eligible categories.
     assert ins["leaders"]["sentence"] == (
         "Across the 2 categories with 4 or more rated funds, Beta One leads Direct-Alpha."
@@ -294,7 +308,7 @@ def test_insights_compute_sentences(client: TestClient, config) -> None:
     assert {i["section"] for i in only["insights"]} == {"cost"}
 
     split = research_map()
-    split["dimensions"]["manager"]["split"] = ","
+    split["dimensions"]["manager"]["attribute"] = "person"
     config(split)
     ins = {i["key"]: i for i in client.get("/api/research/insights").json()["insights"]}
     labels = [r["label"] for r in ins["team_league"]["rows"]]
@@ -308,6 +322,9 @@ def test_insights_compute_sentences(client: TestClient, config) -> None:
     }
     broken["insights"][1]["across"]["where"][0]["measure"] = "ret1y"
     broken["narratives"]["fund"] = [{"default": "{label}", "requires": ["nothing"]}]
+    broken["insights"][4]["where"][0] = {"dimension": "nope", "op": "eq", "value": "x"}
+    broken["insights"][5]["where"] = [{"measure": "score", "op": "gt", "value": "$ghost"}]
+    broken["coverage"] = {"measure": "inception", "constant": "ghost"}
     config(broken)
     cfg = client.get("/api/research/config").json()
     joined = " | ".join(cfg["problems"])
@@ -316,6 +333,9 @@ def test_insights_compute_sentences(client: TestClient, config) -> None:
     assert "unknown sentence placeholder {bogus}" in joined
     assert "across.where can only test the primary score, rank or quartile" in joined
     assert "narratives.fund: unknown placeholder {nothing}" in joined
+    assert "dimension 'nope' is not declared" in joined
+    assert "constant '$ghost' is not declared under constants" in joined
+    assert "coverage: constant 'ghost' is not declared" in joined
 
 
 def test_snapshots_make_same_month_uploads_one_genuine_version(client: TestClient, config) -> None:

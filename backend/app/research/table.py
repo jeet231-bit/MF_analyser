@@ -5,11 +5,14 @@ universe summary. Cached per (version, run) like the engine's own caches."""
 from __future__ import annotations
 
 import math
+import re
 import statistics
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
+from openpyxl.utils.datetime import to_excel
 from sqlalchemy.orm import Session
 
 from app.dashboard_config import load_dashboard_config
@@ -61,6 +64,7 @@ class ResearchTable:
     summary: dict[str, Any]
     quantiles: dict[str, tuple[float, float]] = field(default_factory=dict)  # measure -> (q1, q3)
     as_of: Any = None
+    constants: dict[str, float | None] = field(default_factory=dict)  # declared constants, resolved
     _sorted: dict[str, list[float]] = field(default_factory=dict, repr=False)
 
     @property
@@ -287,11 +291,26 @@ def build_table(
             dist[qi] += 1
     # Why the rest are unrated: a category too small for the workbook's rule, or missing data.
     small = {c.key for c in categories.values() if c.count and c.unranked}
+    # The unrated set partitions into: outside the universe flag; a missing composite (score
+    # "--", whatever the category size), which coverage splits further; and, for the rest, a
+    # category too small for the workbook's quartile rule.
+    skey = rmap.primary("score")
+    skey = skey.key if skey and skey.key in resolved.measures else None
     unrated = [e for e in entities if not qkey or e.measures.get(qkey) is None]
     outside = [e for e in unrated if universe is not None and not inside.get(e.key, False)]
     outside_keys = {e.key for e in outside}
-    unrated_small = sum(1 for e in unrated if e.category in small and e.key not in outside_keys)
-    unrated_other = len(unrated) - unrated_small - len(outside)
+    composite_missing = [
+        e
+        for e in unrated
+        if e.key not in outside_keys and e.measures.get(skey if skey else (qkey or "")) is None
+    ]
+    missing_keys = {e.key for e in composite_missing}
+    unrated_small = sum(
+        1
+        for e in unrated
+        if e.category in small and e.key not in outside_keys and e.key not in missing_keys
+    )
+    unrated_other = len(composite_missing)
     primary_keys = [k for k in (rmap.primary(r) for r in ("score", "rank", "quartile")) if k]
     complete = sum(
         1
@@ -301,6 +320,25 @@ def build_table(
         )
         and all(e.measures.get(k) is not None for k in return_keys)
     )
+    constants: dict[str, float | None] = {}
+    for name, (sheet_name, r, c) in resolved.constant_cells.items():
+        try:
+            constants[name] = parse_constant(sv(sheet_name).value(r, c), rmap.constants[name].parse)
+        except Exception:  # noqa: BLE001 - a broken constant reads as unavailable
+            constants[name] = None
+    # Coverage: why the "--" funds are unrated (too young, or a data gap).
+    unrated_young = unrated_gap = unrated_unknown = 0
+    cov = rmap.coverage
+    if cov and cov.measure in resolved.measures and constants.get(cov.constant) is not None:
+        since = constants[cov.constant]
+        for e in composite_missing:
+            inception = e.measures.get(cov.measure)
+            if inception is None:
+                unrated_unknown += 1
+            elif inception >= since:  # type: ignore[operator]
+                unrated_young += 1
+            else:
+                unrated_gap += 1
     as_of = None
     if ent.asOf and "!" in ent.asOf:
         sheet_name, addr = ent.asOf.rsplit("!", 1)
@@ -329,11 +367,37 @@ def build_table(
             "unrated_small_categories": unrated_small,
             "unrated_missing_data": unrated_other,
             "outside_universe": len(outside),
+            "unrated_young": unrated_young,
+            "unrated_gap": unrated_gap,
+            "unrated_unknown": unrated_unknown,
             "stats_only_categories": sum(1 for c in categories.values() if c.count == 0),
         },
         as_of=as_of,
+        constants=constants,
     )
     return table
+
+
+_DATE_TOKEN = re.compile(r"\b(\d{1,2})[ -]([A-Za-z]{3,9})[ -](\d{4})\b")
+
+
+def parse_constant(value: Any, parse: str) -> float | None:
+    """A constant read from a cell: a number as is, or the first / last 'dd Mon yyyy' date in a
+    text such as '11 Feb 2016 To 28 Aug 2018', returned as an Excel serial."""
+    if parse == "number":
+        return _number(value)
+    if not isinstance(value, str):
+        return _number(value)
+    hits = _DATE_TOKEN.findall(value)
+    if not hits:
+        return None
+    d, mon, y = hits[0] if parse == "firstDate" else hits[-1]
+    for fmt in ("%d %b %Y", "%d %B %Y"):
+        try:
+            return float(to_excel(datetime.strptime(f"{d} {mon} {y}", fmt)))
+        except ValueError:
+            continue
+    return None
 
 
 # ---- cache and access ---------------------------------------------------------------------

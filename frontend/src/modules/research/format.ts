@@ -1,5 +1,5 @@
 import type { MeasureMeta } from "@/api/research";
-import { formatNumber, type FormatSettings } from "@/lib/format";
+import { formatDate, formatNumber, serialToIsoDate, type FormatSettings } from "@/lib/format";
 
 /** Indian currency for amounts held in crore: ₹39.1 lakh crore, ₹86,785 crore, ₹45.3 crore. */
 export function formatInrCrore(value: number, grouping: FormatSettings["grouping"] = "indian"): string {
@@ -25,6 +25,10 @@ export function formatMeasure(
   if (!Number.isFinite(value)) return "—";
   if (!meta) return formatNumber(value, { grouping: settings.grouping, decimals: Number.isInteger(value) ? 0 : settings.decimals });
   if (meta.format === "inr_crore") return formatInrCrore(value, settings.grouping);
+  if (meta.format === "date") {
+    const iso = serialToIsoDate(value);
+    return iso ? formatDate(iso) : String(value);
+  }
   const decimals = meta.decimals ?? (meta.format === "integer" || meta.role === "rank" || meta.role === "quartile" ? 0 : settings.decimals);
   if (meta.format === "percent") return `${formatNumber(value * 100, { grouping: settings.grouping, decimals })}%`;
   const text = formatNumber(value, { grouping: settings.grouping, decimals });

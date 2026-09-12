@@ -21,6 +21,7 @@ describe("research formatting", () => {
     expect(formatMeasure(122954, by.corpus, settings)).toBe("₹1.2 lakh crore");
     expect(formatMeasure(null, by.rank, settings, "--")).toBe("--");
     expect(formatMeasure(null, by.rank, settings)).toBe("—");
+    expect(formatMeasure(42411, { role: "factor", format: "date", unit: null }, settings)).toBe("11 Feb 2016");
     expect(formatRankDelta(4)).toEqual({ text: "▲ 4", direction: "up" });
     expect(formatRankDelta(-16)).toEqual({ text: "▼ 16", direction: "down" });
     expect(formatRankDelta(null).text).toBe("—");

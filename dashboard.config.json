@@ -99,8 +99,9 @@
       "manager": {
         "column": "AC",
         "label": "Management team",
-        "split": null,
-        "note": "The master lists comma-joined teams. Set split to \",\" for per-person attribution in insights."
+        "split": ",",
+        "attribute": "team",
+        "note": "The master lists comma-joined teams. attribute 'team' keeps each team as one group (rendered 'the team of A, B and C'); 'person' attributes every fund to each member."
       },
       "universe": {
         "column": "A",
@@ -427,6 +428,16 @@
         "sheet": "Summary-Performance",
         "keyColumn": "C",
         "unit": "%"
+      },
+      {
+        "key": "inception",
+        "label": "First NAV date",
+        "role": "factor",
+        "sheet": "First NAV",
+        "column": "B",
+        "keyColumn": "A",
+        "format": "date",
+        "higherIsBetter": false
       }
     ],
     "phases": {
@@ -814,6 +825,100 @@
           "default": "{sum} sits in {count|fund|funds} ranked Q3 or Q4, and a small number of large funds carries most of it.",
           "zero": "No rated fund sits in Q3 or Q4 this month."
         }
+      },
+      {
+        "key": "unrated_young",
+        "section": "coverage",
+        "eyebrow": "Too young to rate",
+        "title": "First NAV after the earliest bull phase",
+        "where": [
+          {
+            "dimension": "universe",
+            "op": "eq",
+            "value": "Yes"
+          },
+          {
+            "measure": "score",
+            "op": "isnull"
+          },
+          {
+            "measure": "inception",
+            "op": "gte",
+            "value": "$earliest_phase_start"
+          }
+        ],
+        "sort": {
+          "measure": "inception",
+          "dir": "desc"
+        },
+        "limit": 5,
+        "show": [
+          "measure:inception"
+        ],
+        "sentence": {
+          "default": "{count|fund is|funds are} unrated because {count?its|their} first NAV postdates the earliest bull phase: too young to rate, not a data gap.",
+          "zero": "Every unrated fund in the universe is old enough to rate."
+        }
+      },
+      {
+        "key": "unrated_gap",
+        "section": "coverage",
+        "eyebrow": "Data gap",
+        "title": "Old enough to rate, still \"--\"",
+        "where": [
+          {
+            "dimension": "universe",
+            "op": "eq",
+            "value": "Yes"
+          },
+          {
+            "measure": "score",
+            "op": "isnull"
+          },
+          {
+            "measure": "inception",
+            "op": "lt",
+            "value": "$earliest_phase_start"
+          }
+        ],
+        "sort": {
+          "measure": "inception",
+          "dir": "asc"
+        },
+        "limit": 5,
+        "show": [
+          "measure:inception"
+        ],
+        "sentence": {
+          "default": "{count|fund|funds} older than the earliest bull phase still {count?shows|show} \"--\" for part of the composite: a data gap to close in the master, listed for the research team in docs/MASTER_FINDINGS.md.",
+          "zero": "No fund old enough to rate is left unrated: every \"--\" is a young fund."
+        }
+      },
+      {
+        "key": "unrated_unknown",
+        "section": "coverage",
+        "eyebrow": "No first NAV date",
+        "title": "Cannot tell young from incomplete",
+        "where": [
+          {
+            "dimension": "universe",
+            "op": "eq",
+            "value": "Yes"
+          },
+          {
+            "measure": "score",
+            "op": "isnull"
+          },
+          {
+            "measure": "inception",
+            "op": "isnull"
+          }
+        ],
+        "limit": 5,
+        "sentence": {
+          "default": "{count|fund has|funds have} a missing composite and no first NAV date on record, so the platform cannot say whether {count?it is|they are} too young or incomplete: listed for the research team in docs/MASTER_FINDINGS.md.",
+          "zero": "Every fund with a missing composite has a first NAV date on record."
+        }
       }
     ],
     "narratives": {
@@ -822,11 +927,14 @@
           "default": "{rated} of {total} funds are rated."
         },
         {
-          "default": "{unranked} of {categories} categories {unranked?has|have} fewer than {unranked_below} ranked funds and {unranked?is|are} left unranked by the workbook's own rule ({unrated_small|fund|funds}).",
+          "default": "{unranked} of {categories} categories {unranked?has|have} fewer than {unranked_below} ranked funds and {unranked?is|are} left unranked by the workbook's own rule ({unrated_small|fund|funds} unrated for that reason alone).",
           "zero": "Every category has at least {unranked_below} ranked funds, so none is left unranked by the workbook rule."
         },
         {
-          "default": "{unrated_other|fund is|funds are} unrated because the master shows \"--\" for part of the composite."
+          "default": "{unrated_other|fund shows|funds show} \"--\" for part of the composite: {unrated_young} too young to rate (first NAV after {coverage_since}) and {unrated_gap} with a data gap."
+        },
+        {
+          "default": "{unrated_unknown|fund has|funds have} a missing composite and no first NAV date on record."
         },
         {
           "default": "{outside|fund sits|funds sit} outside the universe flag."
@@ -922,8 +1030,30 @@
         "title": "Alphagrep Multi Asset Allocation absent from CY Returns",
         "detail": "Both plans show #N/A on Report, so the two Multi Asset category averages read \"--\".",
         "status": "open"
+      },
+      {
+        "title": "34 funds have no first NAV date on First NAV",
+        "detail": "Their First Date reads \"--\" and their composite is \"--\", so they cannot be told apart from young launches. Seventeen schemes, both plans each; see docs/MASTER_FINDINGS.md.",
+        "status": "open"
       }
     ],
-    "minGroupCount": 10
+    "minGroupCount": 10,
+    "constants": {
+      "earliest_phase_start": {
+        "cell": "Bull-Bear Returns!W9",
+        "parse": "firstDate"
+      }
+    },
+    "coverage": {
+      "measure": "inception",
+      "constant": "earliest_phase_start"
+    },
+    "sectionLabels": {
+      "winning": "Who is winning",
+      "behaviour": "How they behave",
+      "houses": "Houses and managers",
+      "cost": "Cost and scale",
+      "coverage": "Rating coverage"
+    }
   }
 }

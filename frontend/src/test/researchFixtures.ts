@@ -203,6 +203,7 @@ export const movementUnavailable: MovementResponse = { ...envelope, available: f
 export const insights: InsightsResponse = {
   ...envelope,
   sections: ["winning", "cost"],
+  sectionLabels: { winning: "Who is winning" },
   insights: [
     {
       key: "best_long_term",
