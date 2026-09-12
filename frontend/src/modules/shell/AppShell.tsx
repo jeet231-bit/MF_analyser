@@ -10,7 +10,7 @@ export function AppShell({ rail, topBar, children }: { rail: ReactNode; topBar: 
       {rail}
       <div className="min-w-0 pl-[var(--rail-w)]">
         {topBar}
-        <main className="mx-auto min-w-0 max-w-[1320px] px-3.5 pb-12 pt-[18px] md:px-[26px] md:pb-14 md:pt-[22px]">{children}</main>
+        <main className="mx-auto min-w-0 max-w-[1320px] px-[14px] pb-[48px] pt-[18px] md:px-[26px] md:pb-[56px] md:pt-[22px]">{children}</main>
       </div>
     </div>
   );

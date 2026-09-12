@@ -89,7 +89,7 @@ export function MovementPage({ actions, footer, scope, scopeBar }: { actions: Re
         <StatCard label="Moved down" value={<span className="text-negative">{formatCount(m.down!)}</span>} note={m.avg_down ? `avg ▼ ${m.avg_down} places` : undefined} />
         <StatCard label="Quartile changes" value={formatCount(qc.total)} note={`${qc.into_q1} into Q1, ${qc.out_of_q1} out of Q1`} />
       </div>
-      <Narrative text={m.narrative} className="mb-4" />
+      <Narrative text={m.narrative} className="mb-[16px]" />
       {m.repairs && m.repairs.length > 0 && (
         <Note className="mb-[18px]">
           <b className="text-ink">
@@ -107,7 +107,7 @@ export function MovementPage({ actions, footer, scope, scopeBar }: { actions: Re
         </RCard>
       </div>
       {(m.entries!.length > 0 || m.exits!.length > 0) && (
-        <p className="m-0 mt-4 text-xs text-muted">
+        <p className="m-0 mt-[16px] text-xs text-muted">
           {formatCount(m.entries!.length)} funds are new to the universe and {formatCount(m.exits!.length)} have left it.
         </p>
       )}

@@ -62,12 +62,12 @@ export function AdminPage({
             ) : (
               <ul className="m-0 list-none p-0">
                 {findings.map((f) => (
-                  <li key={f.title} className="flex items-center gap-3 border-b border-hairline py-2.5 last:border-b-0">
+                  <li key={f.title} className="flex items-center gap-[12px] border-b border-hairline py-[10px] last:border-b-0">
                     <div className="min-w-0 flex-1">
                       <div className="text-[13px] font-semibold text-ink">{f.title}</div>
                       <div className="text-[11.5px] text-muted">{f.detail}</div>
                     </div>
-                    <span className={`rounded-[7px] border border-hairline px-[11px] py-1.5 text-xs font-semibold ${f.status === "fixed" ? "text-positive" : "text-warning"}`}>{f.status === "fixed" ? "Fixed" : "Open"}</span>
+                    <span className={`rounded-[7px] border border-hairline px-[11px] py-[6px] text-xs font-semibold ${f.status === "fixed" ? "text-positive" : "text-warning"}`}>{f.status === "fixed" ? "Fixed" : "Open"}</span>
                   </li>
                 ))}
               </ul>
@@ -80,20 +80,20 @@ export function AdminPage({
           {config.data ? (
             <div className="text-[12.5px]">
               {config.data.problems.length > 0 && (
-                <ul className="m-0 mb-3 list-disc rounded-sm border border-warning/40 bg-surface-lifted py-2 pl-6 pr-3 text-xs text-warning" aria-label="Column map problems">
+                <ul className="m-0 mb-[12px] list-disc rounded-sm border border-warning/40 bg-surface-lifted py-[8px] pl-[24px] pr-[12px] text-xs text-warning" aria-label="Column map problems">
                   {config.data.problems.map((p) => (
                     <li key={p}>{p}</li>
                   ))}
                 </ul>
               )}
               {config.data.entity && (
-                <div className="flex justify-between gap-2 border-b border-hairline py-2">
+                <div className="flex justify-between gap-[8px] border-b border-hairline py-[8px]">
                   <span className="font-semibold text-ink">Identity</span>
                   <span className="tabular text-muted">{config.data.entity.key}</span>
                 </div>
               )}
               {(config.data.dimensions ?? []).map((d) => (
-                <div key={d.key} className="flex justify-between gap-2 border-b border-hairline py-2">
+                <div key={d.key} className="flex justify-between gap-[8px] border-b border-hairline py-[8px]">
                   <span className="font-semibold text-ink">
                     {d.label}
                     {d.split ? <span className="font-normal text-muted"> · split on “{d.split}”</span> : null}
@@ -102,7 +102,7 @@ export function AdminPage({
                 </div>
               ))}
               {(config.data.measures ?? []).map((m) => (
-                <div key={m.key} className="flex justify-between gap-2 border-b border-hairline py-2 last:border-b-0">
+                <div key={m.key} className="flex justify-between gap-[8px] border-b border-hairline py-[8px] last:border-b-0">
                   <span className="text-ink">
                     {m.label}
                     <span className="text-muted"> · {m.role}</span>
@@ -110,7 +110,7 @@ export function AdminPage({
                   <span className={`tabular ${m.resolved ? "text-muted" : "text-negative"}`}>{m.ref}</span>
                 </div>
               ))}
-              {config.data.minGroupCount !== undefined && <p className="m-0 mt-3 text-xs text-muted">League tables ignore groups with fewer than {config.data.minGroupCount} rated funds (minGroupCount).</p>}
+              {config.data.minGroupCount !== undefined && <p className="m-0 mt-[12px] text-xs text-muted">League tables ignore groups with fewer than {config.data.minGroupCount} rated funds (minGroupCount).</p>}
             </div>
           ) : (
             <Skeleton rows={1} />
@@ -120,10 +120,10 @@ export function AdminPage({
 
       {summary?.configured && summary.universe_all && (
         <RCard className="mb-[18px]" title="Rating coverage" sub="Why every unrated fund is unrated · the same partition the dashboard strip and the coverage cards use" data-testid="coverage-detail">
-          <Narrative text={summary.universe_narrative} className="mb-3" />
+          <Narrative text={summary.universe_narrative} className="mb-[12px]" />
           <CoverageTable universe={summary.universe_all} />
           {actions && (
-            <LinkButton className="mt-3" onClick={actions.openInsights}>
+            <LinkButton className="mt-[12px]" onClick={actions.openInsights}>
               Open the coverage cards →
             </LinkButton>
           )}
@@ -132,7 +132,7 @@ export function AdminPage({
       {viewer && (
         <RCard className="mb-[18px]" title="Your name" sub="Used for the greeting. Kept in this browser until sign-in exists; then it comes from your account.">
           <form
-            className="flex flex-wrap items-center gap-2"
+            className="flex flex-wrap items-center gap-[8px]"
             onSubmit={(e) => {
               e.preventDefault();
               viewer.setName(nameDraft);
@@ -140,7 +140,7 @@ export function AdminPage({
           >
             <input
               aria-label="Your name"
-              className="rounded-[9px] border border-hairline bg-surface-lifted px-3 py-2 text-[13px] text-ink"
+              className="rounded-[9px] border border-hairline bg-surface-lifted px-[12px] py-[8px] text-[13px] text-ink"
               placeholder={viewer.name ?? "First name"}
               value={nameDraft}
               onChange={(e) => setNameDraft(e.target.value)}
@@ -183,15 +183,15 @@ function CoverageTable({ universe: u }: { universe: NonNullable<ResearchSummary[
       <tbody>
         {rows.map(([label, n, why]) => (
           <tr key={label} className="border-b border-hairline last:border-b-0">
-            <td className="py-2 pr-3 font-semibold text-ink">{label}</td>
-            <td className="tabular py-2 pr-3 text-right text-ink">{formatCount(n)}</td>
-            <td className="py-2 text-muted">{why}</td>
+            <td className="py-[8px] pr-[12px] font-semibold text-ink">{label}</td>
+            <td className="tabular py-[8px] pr-[12px] text-right text-ink">{formatCount(n)}</td>
+            <td className="py-[8px] text-muted">{why}</td>
           </tr>
         ))}
         <tr>
-          <td className="pt-2 font-semibold text-muted">Universe</td>
-          <td className="tabular pt-2 pr-3 text-right font-semibold text-ink">{formatCount(u.total)}</td>
-          <td className="pt-2 text-muted">funds on the master</td>
+          <td className="pt-[8px] font-semibold text-muted">Universe</td>
+          <td className="tabular pt-[8px] pr-[12px] text-right font-semibold text-ink">{formatCount(u.total)}</td>
+          <td className="pt-[8px] text-muted">funds on the master</td>
         </tr>
       </tbody>
     </table>

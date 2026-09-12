@@ -45,7 +45,7 @@ export function Rail({ displayName, mode, model, activeItem, activeSheet, onNavi
   const groups = buildWorkbookNav(model, anomalyCount);
   const adminDot = openFindings > 0 || anomalyCount > 0;
   const label = (text: string, extra?: string) => (
-    <span className="rail-label flex min-w-0 flex-1 items-center gap-2">
+    <span className="rail-label flex min-w-0 flex-1 items-center gap-[8px]">
       <span className="truncate">{text}</span>
       {extra && <span className="tabular ml-auto text-[10.5px] text-rail-label">{extra}</span>}
     </span>
@@ -66,7 +66,7 @@ export function Rail({ displayName, mode, model, activeItem, activeSheet, onNavi
     >
       <Icon name={icon} />
       {label(item.label, item.count !== undefined ? item.count.toLocaleString("en-IN") : item.badge !== undefined ? String(item.badge) : undefined)}
-      {item.dot && <span className="rail-label ml-auto h-1.5 w-1.5 flex-none rounded-full bg-warning" aria-label="needs attention" />}
+      {item.dot && <span className="rail-label ml-auto h-[6px] w-[6px] flex-none rounded-full bg-warning" aria-label="needs attention" />}
     </button>
   );
 
@@ -75,13 +75,13 @@ export function Rail({ displayName, mode, model, activeItem, activeSheet, onNavi
       aria-label="Main"
       data-pinned={pinned || undefined}
       className={cn(
-        "group/rail fixed inset-y-0 left-0 z-40 flex w-[var(--rail-w)] flex-col gap-1 overflow-y-auto overflow-x-hidden bg-rail px-3 py-3.5 text-rail-ink transition-[width] duration-200",
+        "group/rail fixed inset-y-0 left-0 z-40 flex w-[var(--rail-w)] flex-col gap-[4px] overflow-y-auto overflow-x-hidden bg-rail px-[12px] py-[14px] text-rail-ink transition-[width] duration-200",
         "hover:w-[var(--rail-open)] hover:shadow-[14px_0_40px_rgba(0,0,0,0.16)] data-[pinned]:w-[var(--rail-open)] data-[pinned]:shadow-[14px_0_40px_rgba(0,0,0,0.16)]",
         "[&_.rail-label]:pointer-events-none [&_.rail-label]:opacity-0 hover:[&_.rail-label]:pointer-events-auto hover:[&_.rail-label]:opacity-100 data-[pinned]:[&_.rail-label]:pointer-events-auto data-[pinned]:[&_.rail-label]:opacity-100",
       )}
     >
-      <div className="flex items-center gap-[11px] whitespace-nowrap px-1.5 pb-3.5 pt-1">
-        <div className="grid h-8 w-8 flex-none place-items-center rounded-[10px] bg-accent font-heading text-sm font-bold text-white" aria-hidden>
+      <div className="flex items-center gap-[11px] whitespace-nowrap px-[6px] pb-[14px] pt-[4px]">
+        <div className="grid h-[32px] w-[32px] flex-none place-items-center rounded-[10px] bg-accent font-heading text-sm font-bold text-white" aria-hidden>
           {(displayName ?? "M").slice(0, 1).toUpperCase()}
         </div>
         <div className="rail-label min-w-0">
@@ -96,7 +96,7 @@ export function Rail({ displayName, mode, model, activeItem, activeSheet, onNavi
         <div className="flex flex-col gap-[3px]">
           {groups.map((group, gi) => (
             <div key={group.label ?? gi} className="flex flex-col gap-[3px]">
-              {group.label && <div className="rail-label mb-1 mt-3.5 h-3 whitespace-nowrap px-2.5 text-[9.5px] font-bold uppercase tracking-[0.14em] text-rail-label">{group.label}</div>}
+              {group.label && <div className="rail-label mb-[4px] mt-[14px] h-[12px] whitespace-nowrap px-[10px] text-[9.5px] font-bold uppercase tracking-[0.14em] text-rail-label">{group.label}</div>}
               {group.items.map((item) =>
                 entry(
                   item,
@@ -109,7 +109,7 @@ export function Rail({ displayName, mode, model, activeItem, activeSheet, onNavi
         </div>
       )}
 
-      <div className="mt-auto flex flex-col gap-[3px] border-t border-rail-line pt-3">
+      <div className="mt-auto flex flex-col gap-[3px] border-t border-rail-line pt-[12px]">
         {entry({ id: "upload", label: "Upload version", enabled: true, sheets: [] }, activeItem === "upload", "upload")}
         {entry({ id: "admin", label: "Admin", enabled: true, sheets: [], dot: adminDot }, activeItem === "admin", "admin")}
         <button

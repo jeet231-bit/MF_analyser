@@ -43,8 +43,8 @@ export function ScopeBar({ scope, description, options, onApply, versions, versi
   const dims = options?.dims ?? [];
   const bands = options?.bands ?? [];
   const quartileValue = QUARTILE_CHOICES.find((c) => c.quartile.join(",") === [...draft.quartile].sort().join(","))?.value ?? "";
-  const fieldClass = "w-full rounded-[9px] border border-hairline bg-surface-lifted px-2.5 py-2 text-[13px] text-ink";
-  const labelClass = "mb-1 block text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted";
+  const fieldClass = "w-full rounded-[9px] border border-hairline bg-surface-lifted px-[10px] py-[8px] text-[13px] text-ink";
+  const labelClass = "mb-[4px] block text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted";
 
   return (
     <section className={cn("mb-[18px] overflow-hidden rounded-lg border border-hairline bg-surface", applied && "border-accent/40")} aria-label="Scope">
@@ -52,14 +52,14 @@ export function ScopeBar({ scope, description, options, onApply, versions, versi
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-[11px] px-4 py-[11px] text-left"
+        className="flex w-full items-center gap-[11px] px-[16px] py-[11px] text-left"
       >
-        <span className="grid h-7 w-7 flex-none place-items-center rounded-[9px] bg-accent-soft text-accent" aria-hidden>
+        <span className="grid h-[28px] w-[28px] flex-none place-items-center rounded-[9px] bg-accent-soft text-accent" aria-hidden>
           <Icon name="scope" className="inline-block h-[15px] w-[15px] [&>svg]:h-full [&>svg]:w-full" />
         </span>
         <span className="min-w-0">
           <span className="block text-[10.5px] font-bold uppercase tracking-[0.1em] text-muted">Scope</span>
-          <span className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink-2" data-testid="scope-description">
+          <span className="flex flex-wrap items-center gap-[6px] text-[12.5px] text-ink-2" data-testid="scope-description">
             {(description ?? ["All funds"]).map((part, i) => (
               <span key={`${part}-${i}`} className={cn(i === 0 && "font-semibold text-ink")}>
                 {i > 0 && <span className="text-muted"> · </span>}
@@ -72,7 +72,7 @@ export function ScopeBar({ scope, description, options, onApply, versions, versi
       </button>
       {open && (
         <form
-          className={cn("grid gap-[13px] border-t border-hairline p-4", compact ? "md:grid-cols-3" : "md:grid-cols-3 lg:grid-cols-5")}
+          className={cn("grid gap-[13px] border-t border-hairline p-[16px]", compact ? "md:grid-cols-3" : "md:grid-cols-3 lg:grid-cols-5")}
           onSubmit={(e) => {
             e.preventDefault();
             onApply(draft);
@@ -140,7 +140,7 @@ export function ScopeBar({ scope, description, options, onApply, versions, versi
             <span className={labelClass}>Text match</span>
             <input className={fieldClass} type="search" placeholder="fund, category or AMC" value={draft.q ?? ""} onChange={(e) => setDraft({ ...draft, q: e.target.value || undefined })} />
           </label>
-          <div className="col-span-full flex flex-wrap items-center gap-2 pt-1">
+          <div className="col-span-full flex flex-wrap items-center gap-[8px] pt-[4px]">
             <Button type="submit" variant="primary">
               Apply scope
             </Button>

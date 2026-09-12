@@ -59,8 +59,8 @@ export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { 
       />
       {scopeBar}
 
-      <div className="mb-4 flex flex-wrap items-center gap-[7px] rounded-lg border border-hairline bg-surface px-3.5 py-3" role="group" aria-label="Analyse funds by">
-        <span className="mr-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-muted">Analyse funds by</span>
+      <div className="mb-[16px] flex flex-wrap items-center gap-[7px] rounded-lg border border-hairline bg-surface px-[14px] py-[12px]" role="group" aria-label="Analyse funds by">
+        <span className="mr-[4px] text-[10.5px] font-bold uppercase tracking-[0.1em] text-muted">Analyse funds by</span>
         <Chip pressed={!query.groupBy} onClick={() => update({ groupBy: undefined })}>
           None
         </Chip>
@@ -71,8 +71,8 @@ export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { 
         ))}
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <label className="flex min-w-[200px] flex-1 items-center gap-2 rounded-[9px] border border-hairline bg-surface px-3">
+      <div className="mb-[16px] flex flex-wrap items-center gap-[8px]">
+        <label className="flex min-w-[200px] flex-1 items-center gap-[8px] rounded-[9px] border border-hairline bg-surface px-[12px]">
           <span className="text-muted" aria-hidden>
             ⌕
           </span>
@@ -86,7 +86,7 @@ export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { 
           />
         </label>
         {body.facets.category && (
-          <Select aria-label="Category" value={query.category ?? ""} onChange={(e) => update({ category: e.target.value || undefined })} className="py-2">
+          <Select aria-label="Category" value={query.category ?? ""} onChange={(e) => update({ category: e.target.value || undefined })} className="py-[8px]">
             <option value="">All categories</option>
             {body.facets.category.map((c) => (
               <option key={c} value={c}>
@@ -96,7 +96,7 @@ export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { 
           </Select>
         )}
         {body.facets.amc && (
-          <Select aria-label="AMC" value={query.amc ?? ""} onChange={(e) => update({ amc: e.target.value || undefined })} className="py-2">
+          <Select aria-label="AMC" value={query.amc ?? ""} onChange={(e) => update({ amc: e.target.value || undefined })} className="py-[8px]">
             <option value="">All AMCs</option>
             {body.facets.amc.map((c) => (
               <option key={c} value={c}>
@@ -106,7 +106,7 @@ export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { 
           </Select>
         )}
         {body.facets.plan && (
-          <div role="group" aria-label="Plan" className="flex gap-1.5">
+          <div role="group" aria-label="Plan" className="flex gap-[6px]">
             <Chip pressed={!query.plan} onClick={() => update({ plan: undefined })}>
               All
             </Chip>
@@ -130,7 +130,7 @@ export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { 
 
       <FundsTable body={body} columns={columns} rankKey={rankKey} qKey={qKey} onSort={sortable} onOpen={actions.openFund} settings={settings} />
 
-      <p className="m-0 mt-3 flex flex-wrap items-center gap-3 px-0.5 text-xs text-muted">
+      <p className="m-0 mt-[12px] flex flex-wrap items-center gap-[12px] px-[2px] text-xs text-muted">
         <span>
           Showing {body.total === 0 ? 0 : formatCount(start + 1)}–{formatCount(end)} of {formatCount(body.total)}
         </span>
@@ -164,7 +164,7 @@ function FundsTable({
       key={label}
       scope="col"
       aria-sort={key && body.sort === key ? (body.dir === "asc" ? "ascending" : "descending") : undefined}
-      className={cn("sticky top-0 whitespace-nowrap border-b border-hairline bg-surface-lifted px-3.5 py-[11px] text-left font-heading text-[10.5px] font-semibold uppercase tracking-[0.07em] text-muted", numeric && "text-right")}
+      className={cn("sticky top-0 whitespace-nowrap border-b border-hairline bg-surface-lifted px-[14px] py-[11px] text-left font-heading text-[10.5px] font-semibold uppercase tracking-[0.07em] text-muted", numeric && "text-right")}
     >
       {key ? (
         <button type="button" onClick={onSort(key, dirDefault)} className="font-heading uppercase hover:text-accent">
@@ -182,23 +182,23 @@ function FundsTable({
 
   const row = (r: EntityRow) => (
     <tr key={r.key} onClick={() => onOpen(r.key)} className="cursor-pointer border-b border-hairline last:border-b-0 hover:bg-surface-lifted">
-      <td className="whitespace-nowrap px-3.5 py-[11px]">
+      <td className="whitespace-nowrap px-[14px] py-[11px]">
         <div className="font-semibold text-ink">{r.label}</div>
         <div className="text-[11.5px] text-muted">{r.sub}</div>
       </td>
-      <td className="whitespace-nowrap px-3.5 py-[11px] text-ink-2">{r.dims.category ?? "—"}</td>
+      <td className="whitespace-nowrap px-[14px] py-[11px] text-ink-2">{r.dims.category ?? "—"}</td>
       {columns.map((m) =>
         m.key === qKey ? (
-          <td key={m.key} className="px-3.5 py-[11px]">
+          <td key={m.key} className="px-[14px] py-[11px]">
             <QuartilePill q={r.measures[m.key]} />
           </td>
         ) : (
-          <td key={m.key} className="tabular whitespace-nowrap px-3.5 py-[11px] text-right text-ink">
+          <td key={m.key} className="tabular whitespace-nowrap px-[14px] py-[11px] text-right text-ink">
             {formatMeasure(r.measures[m.key], m, settings, r.raw[m.key])}
           </td>
         ),
       )}
-      <td className={cn("tabular whitespace-nowrap px-3.5 py-[11px] text-right font-semibold", deltaClass(r))}>{r.delta?.new ? "new" : formatRankDelta(r.delta?.rank).text}</td>
+      <td className={cn("tabular whitespace-nowrap px-[14px] py-[11px] text-right font-semibold", deltaClass(r))}>{r.delta?.new ? "new" : formatRankDelta(r.delta?.rank).text}</td>
     </tr>
   );
 
@@ -216,7 +216,7 @@ function FundsTable({
         <tbody>
           {body.rows.length === 0 && (
             <tr>
-              <td colSpan={columns.length + 3} className="px-3.5 py-6 text-center text-muted">
+              <td colSpan={columns.length + 3} className="px-[14px] py-[24px] text-center text-muted">
                 No fund matches this filter.
               </td>
             </tr>
@@ -227,11 +227,11 @@ function FundsTable({
                 if (members.length === 0) return null;
                 return [
                   <tr key={`g-${g.key}`} className="bg-surface-lifted" data-testid="group-row">
-                    <td className="px-3.5 py-2 font-heading text-xs font-semibold text-ink" colSpan={2}>
+                    <td className="px-[14px] py-[8px] font-heading text-xs font-semibold text-ink" colSpan={2}>
                       {g.label} <span className="tabular font-normal text-muted">· {formatCount(g.count)} funds</span>
                     </td>
                     {columns.map((m) => (
-                      <td key={m.key} className="tabular px-3.5 py-2 text-right text-xs font-semibold text-ink-2">
+                      <td key={m.key} className="tabular px-[14px] py-[8px] text-right text-xs font-semibold text-ink-2">
                         {m.key === qKey ? (g.subtotals.q1 !== undefined ? `${g.subtotals.q1} Q1` : "") : m.key === rankKey ? "" : subtotal(g.subtotals[m.key], m, settings)}
                       </td>
                     ))}

@@ -75,15 +75,15 @@ export function DashboardPage({
       {s.executive && (
         <section
           aria-label="Executive summary"
-          className="mb-[18px] rounded-xl border border-hero-line px-[22px] py-5 text-hero-ink"
+          className="mb-[18px] rounded-xl border border-hero-line px-[22px] py-[20px] text-hero-ink"
           style={{ background: "linear-gradient(118deg, var(--hero-a) 0%, var(--hero) 62%)" }}
         >
           <div className="mb-[11px] flex items-center gap-[11px]">
             <span className="grid h-[30px] w-[30px] flex-none place-items-center rounded-[10px] bg-hero-link/20 text-hero-link" aria-hidden>
-              <Icon name="spark" className="inline-block h-4 w-4 [&>svg]:h-full [&>svg]:w-full" />
+              <Icon name="spark" className="inline-block h-[16px] w-[16px] [&>svg]:h-full [&>svg]:w-full" />
             </span>
             <h2 className="m-0 font-heading text-[11.5px] font-bold uppercase tracking-[0.11em]">Executive summary</h2>
-            <span className="ml-auto whitespace-nowrap rounded-full border border-hero-line px-3 py-1 text-[11px] text-hero-muted">
+            <span className="ml-auto whitespace-nowrap rounded-full border border-hero-line px-[12px] py-[4px] text-[11px] text-hero-muted">
               {scopeText}
               {asOf ? ` · as of ${asOf}` : ""}
             </span>
@@ -95,11 +95,11 @@ export function DashboardPage({
       {s.kpis && s.kpis.length > 0 && (
         <div className="mb-[18px] grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4" data-testid="kpi-row">
           {s.kpis.map((k) => (
-            <div key={k.label} className="relative overflow-hidden rounded-xl border border-hairline bg-surface px-5 py-[19px]">
+            <div key={k.label} className="relative overflow-hidden rounded-xl border border-hairline bg-surface px-[20px] py-[19px]">
               <span className={cn("absolute inset-x-0 top-0 h-[3px]", KPI_TONES[k.tone] ?? "bg-accent")} aria-hidden />
               <div className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-muted">{k.label}</div>
-              <div className="tabular mt-1.5 font-heading text-[30px] font-semibold leading-[1.1] tracking-[-0.025em] text-ink">{k.value}</div>
-              {k.note && <div className="mt-1 text-xs text-muted">{k.note}</div>}
+              <div className="tabular mt-[6px] font-heading text-[30px] font-semibold leading-[1.1] tracking-[-0.025em] text-ink">{k.value}</div>
+              {k.note && <div className="mt-[4px] text-xs text-muted">{k.note}</div>}
             </div>
           ))}
         </div>
@@ -112,18 +112,18 @@ export function DashboardPage({
           sub={`Composite quartile within category · ${formatCount(u.rated)} rated funds`}
           action={<LinkButton onClick={actions.openCategories}>Break down</LinkButton>}
         >
-          <QuartileBar counts={s.quartiles ?? {}} className="mb-3 mt-1" />
+          <QuartileBar counts={s.quartiles ?? {}} className="mb-[12px] mt-[4px]" />
           <QuartileLegend />
-          <Narrative text={s.distribution_narrative} className="mt-4" />
+          <Narrative text={s.distribution_narrative} className="mt-[16px]" />
           {(u.median_category_rated !== undefined || u.largest_category) && (
-            <div className="mt-3.5 grid grid-cols-2 gap-2.5">
+            <div className="mt-[14px] grid grid-cols-2 gap-[10px]">
               <div className="rounded-md border border-hairline bg-surface-lifted px-[13px] py-[11px]">
                 <div className="text-[11px] font-semibold text-muted">Median ranked category</div>
-                <div className="tabular mt-0.5 font-heading text-lg font-semibold text-ink">{formatCount(u.median_category_rated ?? 0)} funds</div>
+                <div className="tabular mt-[2px] font-heading text-lg font-semibold text-ink">{formatCount(u.median_category_rated ?? 0)} funds</div>
               </div>
               <div className="rounded-md border border-hairline bg-surface-lifted px-[13px] py-[11px]" title={u.largest_category?.key}>
                 <div className="text-[11px] font-semibold text-muted">Largest category</div>
-                <div className="tabular mt-0.5 font-heading text-lg font-semibold text-ink">{formatCount(u.largest_category?.rated ?? 0)} funds</div>
+                <div className="tabular mt-[2px] font-heading text-lg font-semibold text-ink">{formatCount(u.largest_category?.rated ?? 0)} funds</div>
               </div>
             </div>
           )}
@@ -144,8 +144,8 @@ export function DashboardPage({
       </div>
 
       {s.coverage_narrative && (
-        <div className="mt-[18px] flex flex-wrap items-center gap-2.5 rounded-lg border border-hairline bg-surface-lifted px-4 py-[11px] text-[12.5px] text-muted" data-testid="coverage-strip">
-          <span className="flex h-[7px] w-[170px] flex-none gap-0.5 overflow-hidden rounded-sm" role="img" aria-label={`Coverage: ${formatCount(all.rated)} rated, ${formatCount(all.total - all.rated)} not rated`}>
+        <div className="mt-[18px] flex flex-wrap items-center gap-[10px] rounded-lg border border-hairline bg-surface-lifted px-[16px] py-[11px] text-[12.5px] text-muted" data-testid="coverage-strip">
+          <span className="flex h-[7px] w-[170px] flex-none gap-[2px] overflow-hidden rounded-sm" role="img" aria-label={`Coverage: ${formatCount(all.rated)} rated, ${formatCount(all.total - all.rated)} not rated`}>
             <span className="bg-q1" style={{ flex: all.rated }} />
             <span className="bg-hairline" style={{ flex: Math.max(all.total - all.rated, 0) }} />
           </span>
@@ -194,7 +194,7 @@ function WatchlistCard({ actions, className }: { actions: ResearchActions; class
           })}
         </div>
       )}
-      <LinkButton className="mt-3" onClick={() => actions.openFunds({})}>
+      <LinkButton className="mt-[12px]" onClick={() => actions.openFunds({})}>
         Add a fund →
       </LinkButton>
     </RCard>

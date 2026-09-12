@@ -60,12 +60,12 @@ export function FundDetailPage({ fundKey, actions, footer }: { fundKey: string; 
       type="button"
       disabled={!target}
       onClick={target ? () => setTrace(target) : undefined}
-      className={cn("rounded-xl border border-hairline bg-surface px-4 py-3.5 text-left", target && "hover:border-accent")}
+      className={cn("rounded-xl border border-hairline bg-surface px-[16px] py-[14px] text-left", target && "hover:border-accent")}
       aria-label={target ? `${label}: ${value}. Trace this number` : undefined}
     >
       <div className="text-[11.5px] font-medium text-muted">{label}</div>
-      <div className="tabular mt-0.5 font-heading text-[27px] font-semibold leading-[1.15] tracking-[-0.02em] text-ink">{value}</div>
-      {note && <div className={cn("mt-0.5 text-xs font-semibold", tone === "up" ? "text-positive" : tone === "down" ? "text-negative" : "text-muted")}>{note}</div>}
+      <div className="tabular mt-[2px] font-heading text-[27px] font-semibold leading-[1.15] tracking-[-0.02em] text-ink">{value}</div>
+      {note && <div className={cn("mt-[2px] text-xs font-semibold", tone === "up" ? "text-positive" : tone === "down" ? "text-negative" : "text-muted")}>{note}</div>}
     </button>
   );
 
@@ -73,7 +73,7 @@ export function FundDetailPage({ fundKey, actions, footer }: { fundKey: string; 
     <div>
       <PageHead
         back={
-          <LinkButton onClick={() => actions.openFunds({})} className="mb-1.5">
+          <LinkButton onClick={() => actions.openFunds({})} className="mb-[6px]">
             ← All funds
           </LinkButton>
         }
@@ -85,27 +85,27 @@ export function FundDetailPage({ fundKey, actions, footer }: { fundKey: string; 
           </Button>
         }
       />
-      <div className="-mt-3 mb-[18px] flex flex-wrap gap-1.5">
+      <div className="-mt-[12px] mb-[18px] flex flex-wrap gap-[6px]">
         {Object.entries(d.entity.dims)
           .filter(([, v]) => v)
           .map(([k, v]) => (
-            <span key={k} className="rounded-[6px] border border-hairline bg-surface-lifted px-2 py-[3px] text-[11.5px] text-ink-2">
+            <span key={k} className="rounded-[6px] border border-hairline bg-surface-lifted px-[8px] py-[3px] text-[11.5px] text-ink-2">
               {v}
             </span>
           ))}
-        <span className="rounded-[6px] border border-hairline bg-surface-lifted px-2 py-[3px] text-[11.5px] text-ink-2">Row {d.row}</span>
+        <span className="rounded-[6px] border border-hairline bg-surface-lifted px-[8px] py-[3px] text-[11.5px] text-ink-2">Row {d.row}</span>
       </div>
-      <Narrative text={d.narrative} className="mb-4" />
+      <Narrative text={d.narrative} className="mb-[16px]" />
 
       <div className="mb-[18px] grid gap-[18px] md:grid-cols-[1.4fr_1fr]">
-        <div className="grid grid-cols-2 gap-3.5 md:grid-cols-3">
+        <div className="grid grid-cols-2 gap-[14px] md:grid-cols-3">
           {score && tile(score.label, score.display, score.categoryRank ? `rank ${score.categoryRank} of ${score.categoryCount} in category` : undefined, "muted", cellTarget(score.cell))}
           {secondaryScores.map((m) => tile(m.label, m.display, m.categoryRank ? `rank ${m.categoryRank} in category` : undefined, "muted", cellTarget(m.cell)))}
           {returns.map((m) => tile(m.label, m.display, m.categoryRank ? `rank ${m.categoryRank} of ${m.categoryCount}` : undefined, "muted", cellTarget(m.cell)))}
           {firstReturn && tile(`Category average · ${firstReturn.label}`, formatMeasure(categoryMean, firstReturn, settings), `${formatCount(d.category.rated)} funds rated`)}
         </div>
         <Hero eyebrow={rank?.label ?? "Rank"} big={rankValue !== null ? formatCount(rankValue) : "—"} bigSuffix={rankValue !== null ? `/ ${formatCount(d.category.rated)}` : undefined} sub={d.category.key ? `within ${d.category.key}` : undefined}>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-[8px]">
             <QuartilePill q={qValue} size="md" label={qValue !== null ? `Q${qValue} · ${["", "top quartile", "second quartile", "third quartile", "bottom quartile"][qValue]}` : "unranked"} />
             {d.delta !== null && (
               <span className={cn("text-[12.5px] font-semibold", delta.direction === "up" ? "text-hero-up" : delta.direction === "down" ? "text-negative" : "text-hero-muted")}>
@@ -123,7 +123,7 @@ export function FundDetailPage({ fundKey, actions, footer }: { fundKey: string; 
                 ))}
               </ol>
               {quartile?.cell && (
-                <button type="button" onClick={() => setTrace(cellTarget(quartile.cell))} className="mt-2 font-heading text-[12.5px] font-semibold text-hero-link hover:underline">
+                <button type="button" onClick={() => setTrace(cellTarget(quartile.cell))} className="mt-[8px] font-heading text-[12.5px] font-semibold text-hero-link hover:underline">
                   Trace this number →
                 </button>
               )}
@@ -143,7 +143,7 @@ export function FundDetailPage({ fundKey, actions, footer }: { fundKey: string; 
               highlight={p.me}
               name={
                 <>
-                  <span className={cn("tabular mr-2 inline-block min-w-[22px]", p.me ? "text-accent" : "text-muted")}>{p.rank ?? "—"}</span>
+                  <span className={cn("tabular mr-[8px] inline-block min-w-[22px]", p.me ? "text-accent" : "text-muted")}>{p.rank ?? "—"}</span>
                   {p.label}
                 </>
               }
@@ -159,9 +159,9 @@ export function FundDetailPage({ fundKey, actions, footer }: { fundKey: string; 
         </RCard>
         {d.history.length > 1 && (
           <RCard className="md:col-span-12" title="History" sub="Rank and quartile in every genuine monthly upload">
-            <ol className="m-0 flex list-none flex-wrap gap-2 p-0">
+            <ol className="m-0 flex list-none flex-wrap gap-[8px] p-0">
               {d.history.map((h) => (
-                <li key={h.version_id} className="min-w-[120px] rounded-sm border border-hairline bg-surface-lifted px-3 py-2">
+                <li key={h.version_id} className="min-w-[120px] rounded-sm border border-hairline bg-surface-lifted px-[12px] py-[8px]">
                   <div className="text-[11px] text-muted">{h.date ?? h.filename}</div>
                   <div className="tabular font-heading text-lg font-semibold text-ink">{h.rank ?? "—"}</div>
                   <QuartilePill q={h.quartile} />
@@ -176,7 +176,7 @@ export function FundDetailPage({ fundKey, actions, footer }: { fundKey: string; 
               <thead>
                 <tr>
                   {["Measure", "Value", "Rank in category", "Cell"].map((h, i) => (
-                    <th key={h} scope="col" className={cn("border-b border-hairline px-3 py-2 text-left font-heading text-[10.5px] font-semibold uppercase tracking-[0.07em] text-muted", i > 0 && "text-right")}>
+                    <th key={h} scope="col" className={cn("border-b border-hairline px-[12px] py-[8px] text-left font-heading text-[10.5px] font-semibold uppercase tracking-[0.07em] text-muted", i > 0 && "text-right")}>
                       {h}
                     </th>
                   ))}
@@ -185,10 +185,10 @@ export function FundDetailPage({ fundKey, actions, footer }: { fundKey: string; 
               <tbody>
                 {d.measures.map((m) => (
                   <tr key={m.key} className="border-b border-hairline last:border-b-0">
-                    <td className="px-3 py-2 text-ink-2">{m.label}</td>
-                    <td className="tabular px-3 py-2 text-right font-semibold text-ink">{m.role === "quartile" ? <QuartilePill q={m.value} /> : m.display}</td>
-                    <td className="tabular px-3 py-2 text-right text-muted">{m.categoryRank ? `${m.categoryRank} / ${m.categoryCount}` : "—"}</td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-[12px] py-[8px] text-ink-2">{m.label}</td>
+                    <td className="tabular px-[12px] py-[8px] text-right font-semibold text-ink">{m.role === "quartile" ? <QuartilePill q={m.value} /> : m.display}</td>
+                    <td className="tabular px-[12px] py-[8px] text-right text-muted">{m.categoryRank ? `${m.categoryRank} / ${m.categoryCount}` : "—"}</td>
+                    <td className="px-[12px] py-[8px] text-right">
                       {m.cell ? (
                         <button type="button" onClick={() => setTrace(cellTarget(m.cell))} className="tabular text-xs text-accent hover:underline" aria-label={`Trace ${m.label}`}>
                           {m.cell} →
