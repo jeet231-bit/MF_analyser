@@ -4,14 +4,14 @@ import { cn } from "@/lib/cn";
 export type PillTone = "neutral" | "positive" | "warning" | "negative" | "accent";
 
 const tones: Record<PillTone, string> = {
-  neutral: "border-hairline text-muted",
-  positive: "border-positive/30 text-positive",
-  warning: "border-warning/30 text-warning",
-  negative: "border-negative/30 text-negative",
-  accent: "border-accent/30 text-accent",
+  neutral: "bg-surface-lifted text-muted",
+  positive: "bg-positive-soft text-positive",
+  warning: "bg-warning-soft text-warning",
+  negative: "bg-negative-soft text-negative",
+  accent: "bg-accent-soft text-accent",
 };
 
-/** Small status marker. Semantic tones are reserved for validation and deltas. */
+/** Small tinted status pill. Semantic tones are reserved for validation and deltas. */
 export function Pill({
   tone = "neutral",
   children,
@@ -26,12 +26,12 @@ export function Pill({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 font-heading text-xs font-medium",
+        "inline-flex items-center gap-[5px] whitespace-nowrap rounded-full px-[10px] py-[3px] font-heading text-[11.5px] font-bold",
         tones[tone],
         className,
       )}
     >
-      {dot && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" aria-hidden />}
+      {dot && <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-current" aria-hidden />}
       {children}
     </span>
   );

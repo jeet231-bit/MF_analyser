@@ -19,7 +19,7 @@ export function QuartilePill({ q, size = "sm", label, className }: { q: number |
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-[4px] whitespace-nowrap rounded-sm font-heading font-bold",
+        "inline-flex items-center gap-[4px] whitespace-nowrap rounded-full font-heading font-bold",
         size === "sm" ? "px-[8px] py-[2px] text-[11.5px]" : "px-[12px] py-[4px] text-[12.5px]",
         known ? quartileClass[q as number] : "bg-hairline text-muted",
         className,
@@ -83,7 +83,7 @@ export function PageHead({ title, sub, actions, back }: { title: ReactNode; sub?
 
 export function RCard({ title, sub, action, className, children, ...rest }: { title?: ReactNode; sub?: ReactNode; action?: ReactNode; className?: string; children: ReactNode; style?: CSSProperties; "data-testid"?: string }) {
   return (
-    <section className={cn("min-w-0 rounded-xl border border-hairline bg-surface px-[20px] py-[19px]", className)} {...rest}>
+    <section className={cn("min-w-0 rounded-xl bg-surface shadow-soft px-[20px] py-[19px]", className)} {...rest}>
       {(title || action) && (
         <header className="mb-[14px] flex items-start justify-between gap-[10px]">
           <div>
@@ -111,9 +111,9 @@ const toneClass = { up: "text-positive", down: "text-negative", muted: "text-mut
 /** The research stat tile: small label, 27 px figure, one line under it. */
 export function StatCard({ label, value, note, tone = "muted", className }: { label: string; value: ReactNode; note?: ReactNode; tone?: keyof typeof toneClass; className?: string }) {
   return (
-    <div className={cn("rounded-xl border border-hairline bg-surface px-[20px] py-[19px]", className)}>
-      <div className="text-[11.5px] font-medium text-muted">{label}</div>
-      <div className="tabular mt-[2px] font-heading text-[27px] font-semibold leading-[1.15] tracking-[-0.02em] text-ink" data-testid="stat-value">
+    <div className={cn("rounded-xl bg-surface shadow-soft px-[20px] py-[19px]", className)}>
+      <div className="text-[12.5px] font-semibold text-ink-2">{label}</div>
+      <div className="tabular mt-[4px] font-heading text-[27px] font-extrabold leading-[1.15] tracking-[-0.02em] text-ink" data-testid="stat-value">
         {value}
       </div>
       {note && <div className={cn("mt-[2px] text-xs font-semibold", toneClass[tone])}>{note}</div>}
@@ -124,7 +124,7 @@ export function StatCard({ label, value, note, tone = "muted", className }: { la
 export function Hero({ eyebrow, big, bigSuffix, sub, children, className }: { eyebrow: string; big: ReactNode; bigSuffix?: ReactNode; sub?: ReactNode; children?: ReactNode; className?: string }) {
   return (
     <div
-      className={cn("flex flex-col gap-[16px] rounded-xl border border-hero-line p-[22px] text-hero-ink", className)}
+      className={cn("flex flex-col gap-[16px] rounded-xl border border-hero-line shadow-soft p-[22px] text-hero-ink", className)}
       style={{ background: "linear-gradient(152deg, var(--hero-a) 0%, var(--hero) 58%)" }}
     >
       <div>
@@ -144,7 +144,7 @@ export function HeroTiles({ tiles }: { tiles: { value: ReactNode; label: string 
   return (
     <div className="grid gap-[8px]" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
       {tiles.map((t) => (
-        <div key={t.label} className="rounded-[11px] bg-hero-tile px-[12px] py-[11px]">
+        <div key={t.label} className="rounded-[14px] bg-hero-tile px-[12px] py-[11px] shadow-soft">
           <div className="tabular font-heading text-[19px] font-semibold leading-[1.1]">{t.value}</div>
           <div className="mt-[2px] text-[10.5px] text-hero-muted">{t.label}</div>
         </div>
@@ -158,7 +158,7 @@ export function Narrative({ text, className, onHero = false }: { text: string | 
   if (!text) return null;
   const parts = text.split(/(₹?\d[\d,.]*(?:\s?(?:lakh crore|crore|%))?)/g);
   return (
-    <p className={cn("m-0 text-[13px] leading-[1.55]", onHero ? "text-hero-muted" : "text-ink-2", className)}>
+    <p className={cn("m-0 text-[13px] leading-[1.55]", onHero ? "text-hero-ink/80" : "text-ink-2", className)}>
       {parts.map((p, i) =>
         i % 2 === 1 ? (
           <b key={i} className={cn("tabular font-semibold", onHero ? "text-hero-ink" : "text-ink")}>
@@ -175,7 +175,7 @@ export function Narrative({ text, className, onHero = false }: { text: string | 
 export function SectionHeader({ icon, title, sub }: { icon: string; title: string; sub?: string }) {
   return (
     <div className="mb-[16px] mt-[30px] flex items-center gap-[11px] first:mt-0">
-      <div className="grid h-[32px] w-[32px] flex-none place-items-center rounded-[10px] bg-accent-soft text-[15px] text-accent" aria-hidden>
+      <div className="grid h-[34px] w-[34px] flex-none place-items-center rounded-full bg-accent-soft text-[15px] text-accent" aria-hidden>
         {icon}
       </div>
       <div>
@@ -234,8 +234,8 @@ export function BarList({ rows, onSelect }: { rows: { key: string; label: string
             <span className="truncate text-[12.5px] text-ink-2">{r.label}</span>
           )}
           <span className="tabular text-[12.5px] font-semibold text-ink">{r.valueLabel}</span>
-          <span className="col-span-full flex h-[7px] overflow-hidden rounded-sm border border-hairline bg-surface-lifted">
-            <span className="block h-full rounded-[3px] bg-accent" style={{ width: max > 0 ? `${(Math.abs(r.value) / max) * 100}%` : "0%" }} />
+          <span className="col-span-full flex h-[8px] overflow-hidden rounded-full bg-surface-lifted">
+            <span className="block h-full rounded-full bg-highlight" style={{ width: max > 0 ? `${(Math.abs(r.value) / max) * 100}%` : "0%" }} />
           </span>
         </div>
       ))}
@@ -250,8 +250,8 @@ export function Chip({ pressed, children, onClick, className }: { pressed: boole
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        "rounded-[7px] border px-[11px] py-[6px] text-xs font-semibold transition-colors",
-        pressed ? "border-transparent bg-accent-soft text-accent" : "border-hairline bg-surface text-ink-2 hover:border-accent",
+        "rounded-full border px-[12px] py-[6px] text-xs font-semibold transition-colors",
+        pressed ? "border-transparent bg-accent text-white shadow-soft" : "border-hairline bg-surface text-ink-2 hover:border-accent hover:text-accent",
         className,
       )}
     >
@@ -315,7 +315,7 @@ export function PhaseBars({ phases, unit }: { phases: { group: string; groupLabe
 
 export function Note({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("flex items-start gap-[10px] rounded-r-[11px] border border-l-[3px] border-hairline border-l-accent bg-surface-lifted px-[15px] py-[12px] text-[12.5px] text-ink-2", className)}>
+    <div className={cn("flex items-start gap-[10px] rounded-[16px] bg-accent-soft px-[16px] py-[12px] text-[12.5px] text-ink-2", className)}>
       <span aria-hidden>◆</span>
       <div>{children}</div>
     </div>
@@ -344,7 +344,7 @@ export function Skeleton({ rows = 3 }: { rows?: number }) {
   return (
     <div aria-busy="true" className="space-y-[12px]">
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="h-[96px] animate-pulse rounded-xl border border-hairline bg-surface" />
+        <div key={i} className="h-[96px] animate-pulse rounded-xl bg-surface/70" />
       ))}
     </div>
   );

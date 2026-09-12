@@ -60,8 +60,8 @@ export function Rail({ displayName, mode, model, activeItem, activeSheet, onNavi
       aria-current={current ? "page" : undefined}
       onClick={() => (item.id.startsWith("sheet:") ? onNavigate("sheet", item.id.slice(6)) : onNavigate(item.id as PageId))}
       className={cn(
-        "flex h-[42px] w-full items-center gap-[13px] whitespace-nowrap rounded-[11px] px-[10px] text-left text-[13.5px] transition-colors",
-        current ? "bg-rail-active font-semibold text-white [&_svg]:text-hero-link" : "text-rail-muted hover:bg-rail-hover hover:text-white",
+        "flex h-[44px] w-full items-center gap-[13px] whitespace-nowrap rounded-full px-[12px] text-left text-[13.5px] transition-colors",
+        current ? "bg-rail-active font-bold text-rail-active-ink shadow-soft [&_svg]:text-rail-active-ink" : "text-rail-muted hover:bg-rail-hover hover:text-rail-ink",
       )}
     >
       <Icon name={icon} />
@@ -75,13 +75,13 @@ export function Rail({ displayName, mode, model, activeItem, activeSheet, onNavi
       aria-label="Main"
       data-pinned={pinned || undefined}
       className={cn(
-        "group/rail fixed inset-y-0 left-0 z-40 flex w-[var(--rail-w)] flex-col gap-[4px] overflow-y-auto overflow-x-hidden bg-rail px-[12px] py-[14px] text-rail-ink transition-[width] duration-200",
-        "hover:w-[var(--rail-open)] hover:shadow-[14px_0_40px_rgba(0,0,0,0.16)] data-[pinned]:w-[var(--rail-open)] data-[pinned]:shadow-[14px_0_40px_rgba(0,0,0,0.16)]",
+        "group/rail fixed bottom-[12px] left-[12px] top-[12px] z-40 flex w-[calc(var(--rail-w)-12px)] flex-col gap-[4px] overflow-y-auto overflow-x-hidden rounded-[28px] bg-rail px-[12px] py-[16px] text-rail-ink shadow-elevated transition-[width] duration-200",
+        "hover:w-[var(--rail-open)] data-[pinned]:w-[var(--rail-open)]",
         "[&_.rail-label]:pointer-events-none [&_.rail-label]:opacity-0 hover:[&_.rail-label]:pointer-events-auto hover:[&_.rail-label]:opacity-100 data-[pinned]:[&_.rail-label]:pointer-events-auto data-[pinned]:[&_.rail-label]:opacity-100",
       )}
     >
       <div className="flex items-center gap-[11px] whitespace-nowrap px-[6px] pb-[14px] pt-[4px]">
-        <div className="grid h-[32px] w-[32px] flex-none place-items-center rounded-[10px] bg-accent font-heading text-sm font-bold text-white" aria-hidden>
+        <div className="grid h-[40px] w-[40px] flex-none place-items-center rounded-[14px] bg-highlight font-heading text-[15px] font-extrabold text-rail" aria-hidden>
           {(displayName ?? "M").slice(0, 1).toUpperCase()}
         </div>
         <div className="rail-label min-w-0">
@@ -118,7 +118,7 @@ export function Rail({ displayName, mode, model, activeItem, activeSheet, onNavi
           aria-label={pinned ? "Collapse menu" : "Keep menu open"}
           title={pinned ? "Collapse menu" : "Keep menu open"}
           onClick={() => onPin(!pinned)}
-          className="flex h-[42px] w-full items-center gap-[13px] whitespace-nowrap rounded-[11px] px-[10px] text-left text-[13.5px] text-rail-label hover:bg-rail-hover hover:text-white"
+          className="flex h-[44px] w-full items-center gap-[13px] whitespace-nowrap rounded-full px-[12px] text-left text-[13.5px] text-rail-label hover:bg-rail-hover hover:text-rail-ink"
         >
           <Icon name="pin" />
           {label(pinned ? "Collapse menu" : "Keep menu open")}

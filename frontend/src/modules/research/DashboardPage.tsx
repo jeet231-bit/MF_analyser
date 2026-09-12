@@ -5,18 +5,18 @@ import { Button, EmptyState, ExportMenu } from "@/components";
 import { cn } from "@/lib/cn";
 import { formatCount, formatTimestamp } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
-import { Icon } from "@/modules/shell/icons";
+import { Icon, type IconName } from "@/modules/shell/icons";
 import type { ResearchActions } from "./types";
 import { BarList, ConfidentialFooter, LinkButton, MoverRow, Narrative, NotConfigured, PageHead, QuartileBar, QuartileLegend, QuartilePill, RCard, Skeleton } from "./ui";
 import { useWatchlist } from "./useWatchlist";
 
-const KPI_TONES: Record<string, string> = {
-  q1: "bg-q1",
-  q2: "bg-q2",
-  accent: "bg-accent",
-  violet: "bg-violet",
-  positive: "bg-positive",
-  warning: "bg-warning",
+const KPI_TONES: Record<string, { bubble: string; icon: IconName }> = {
+  q1: { bubble: "bg-accent-soft text-accent", icon: "funds" },
+  q2: { bubble: "bg-accent-soft text-accent", icon: "categories" },
+  accent: { bubble: "bg-highlight-soft text-warning", icon: "dashboard" },
+  violet: { bubble: "bg-violet/15 text-violet", icon: "insights" },
+  positive: { bubble: "bg-positive-soft text-positive", icon: "validation" },
+  warning: { bubble: "bg-warning-soft text-warning", icon: "admin" },
 };
 
 export function DashboardPage({
@@ -75,11 +75,11 @@ export function DashboardPage({
       {s.executive && (
         <section
           aria-label="Executive summary"
-          className="mb-[18px] rounded-xl border border-hero-line px-[22px] py-[20px] text-hero-ink"
+          className="mb-[18px] rounded-xl border border-hero-line shadow-soft px-[22px] py-[20px] text-hero-ink"
           style={{ background: "linear-gradient(118deg, var(--hero-a) 0%, var(--hero) 62%)" }}
         >
           <div className="mb-[11px] flex items-center gap-[11px]">
-            <span className="grid h-[30px] w-[30px] flex-none place-items-center rounded-[10px] bg-hero-link/20 text-hero-link" aria-hidden>
+            <span className="grid h-[32px] w-[32px] flex-none place-items-center rounded-full bg-hero-tile text-hero-link shadow-soft" aria-hidden>
               <Icon name="spark" className="inline-block h-[16px] w-[16px] [&>svg]:h-full [&>svg]:w-full" />
             </span>
             <h2 className="m-0 font-heading text-[11.5px] font-bold uppercase tracking-[0.11em]">Executive summary</h2>
@@ -88,17 +88,21 @@ export function DashboardPage({
               {asOf ? ` · as of ${asOf}` : ""}
             </span>
           </div>
-          <Narrative text={s.executive} onHero className="max-w-[88ch] text-[14.5px] leading-[1.62] text-hero-ink/85" />
+          <Narrative text={s.executive} onHero className="max-w-[88ch] text-[14.5px] leading-[1.62]" />
         </section>
       )}
 
       {s.kpis && s.kpis.length > 0 && (
         <div className="mb-[18px] grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4" data-testid="kpi-row">
           {s.kpis.map((k) => (
-            <div key={k.label} className="relative overflow-hidden rounded-xl border border-hairline bg-surface px-[20px] py-[19px]">
-              <span className={cn("absolute inset-x-0 top-0 h-[3px]", KPI_TONES[k.tone] ?? "bg-accent")} aria-hidden />
-              <div className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-muted">{k.label}</div>
-              <div className="tabular mt-[6px] font-heading text-[30px] font-semibold leading-[1.1] tracking-[-0.025em] text-ink">{k.value}</div>
+            <div key={k.label} className="rounded-xl bg-surface px-[20px] py-[18px] shadow-soft">
+              <div className="flex items-center gap-[10px]">
+                <span className={cn("grid h-[34px] w-[34px] flex-none place-items-center rounded-full", (KPI_TONES[k.tone] ?? KPI_TONES.accent).bubble)} aria-hidden>
+                  <Icon name={(KPI_TONES[k.tone] ?? KPI_TONES.accent).icon} className="inline-block h-[17px] w-[17px] [&>svg]:h-full [&>svg]:w-full" />
+                </span>
+                <div className="text-[13px] font-semibold text-ink-2">{k.label}</div>
+              </div>
+              <div className="tabular mt-[12px] font-heading text-[30px] font-extrabold leading-[1.1] tracking-[-0.025em] text-ink">{k.value}</div>
               {k.note && <div className="mt-[4px] text-xs text-muted">{k.note}</div>}
             </div>
           ))}
@@ -144,7 +148,7 @@ export function DashboardPage({
       </div>
 
       {s.coverage_narrative && (
-        <div className="mt-[18px] flex flex-wrap items-center gap-[10px] rounded-lg border border-hairline bg-surface-lifted px-[16px] py-[11px] text-[12.5px] text-muted" data-testid="coverage-strip">
+        <div className="mt-[18px] flex flex-wrap items-center gap-[10px] rounded-lg bg-surface shadow-soft-lifted px-[16px] py-[11px] text-[12.5px] text-muted" data-testid="coverage-strip">
           <span className="flex h-[7px] w-[170px] flex-none gap-[2px] overflow-hidden rounded-sm" role="img" aria-label={`Coverage: ${formatCount(all.rated)} rated, ${formatCount(all.total - all.rated)} not rated`}>
             <span className="bg-q1" style={{ flex: all.rated }} />
             <span className="bg-hairline" style={{ flex: Math.max(all.total - all.rated, 0) }} />

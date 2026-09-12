@@ -6,17 +6,17 @@ interface CardProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
   action?: ReactNode;
 }
 
-/** White surface with a hairline border. The single elevation level in the system. */
+/** White 24 px surface with a soft shadow. The single elevation level in the system. */
 export function Card({ title, action, className, children, ...rest }: CardProps) {
   return (
-    <section className={cn("rounded-md border border-hairline bg-surface", className)} {...rest}>
+    <section className={cn("rounded-xl bg-surface shadow-soft", className)} {...rest}>
       {(title || action) && (
-        <header className="flex items-center justify-between border-b border-hairline px-3 py-2">
-          {title && <h2 className="text-sm font-semibold text-ink">{title}</h2>}
+        <header className="flex items-center justify-between px-[20px] pb-[4px] pt-[18px]">
+          {title && <h2 className="font-heading text-[15px] font-bold text-ink">{title}</h2>}
           {action}
         </header>
       )}
-      <div className="p-3">{children}</div>
+      <div className="px-[20px] pb-[18px] pt-[12px]">{children}</div>
     </section>
   );
 }

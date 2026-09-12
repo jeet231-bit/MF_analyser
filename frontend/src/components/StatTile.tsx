@@ -12,41 +12,52 @@ export interface Delta {
 }
 
 const deltaTone: Record<DeltaDirection, string> = {
-  up: "text-positive",
-  down: "text-negative",
-  flat: "text-muted",
+  up: "bg-positive-soft text-positive",
+  down: "bg-negative-soft text-negative",
+  flat: "bg-surface-lifted text-muted",
 };
 
 const deltaGlyph: Record<DeltaDirection, string> = { up: "▲", down: "▼", flat: "•" };
 
-/** Label above a large tabular figure, with an optional delta line. */
+/** A label with an optional icon bubble, a large tabular figure, and a delta pill. */
 export function StatTile({
   label,
   value,
   delta,
   hint,
+  icon,
   className,
 }: {
   label: string;
   value: ReactNode;
   delta?: Delta;
   hint?: string;
+  icon?: ReactNode;
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-md border border-hairline bg-surface px-3 py-2", className)}>
-      <div className="text-xs font-medium text-muted">{label}</div>
-      <div className="tabular mt-1 font-heading text-2xl font-semibold text-ink" data-testid="stat-value">
-        {value}
+    <div className={cn("rounded-xl bg-surface px-[20px] py-[18px] shadow-soft", className)}>
+      <div className="flex items-center gap-[10px]">
+        {icon && (
+          <span className="grid h-[34px] w-[34px] flex-none place-items-center rounded-full bg-accent-soft text-accent" aria-hidden>
+            {icon}
+          </span>
+        )}
+        <div className="text-[13px] font-semibold text-ink-2">{label}</div>
       </div>
-      {delta && (
-        <div className={cn("tabular mt-0.5 text-xs", deltaTone[delta.direction])} data-testid="stat-delta">
-          <span aria-hidden>{deltaGlyph[delta.direction]} </span>
-          {formatNumber(Math.abs(delta.value), { decimals: delta.decimals ?? 2 })}
-          {delta.label ? ` ${delta.label}` : ""}
+      <div className="mt-[10px] flex flex-wrap items-baseline gap-[10px]">
+        <div className="tabular font-heading text-[26px] font-extrabold tracking-[-0.02em] text-ink" data-testid="stat-value">
+          {value}
         </div>
-      )}
-      {hint && !delta && <div className="mt-0.5 text-xs text-muted">{hint}</div>}
+        {delta && (
+          <span className={cn("tabular rounded-full px-[9px] py-[3px] text-[11.5px] font-bold", deltaTone[delta.direction])} data-testid="stat-delta">
+            <span aria-hidden>{deltaGlyph[delta.direction]} </span>
+            {formatNumber(Math.abs(delta.value), { decimals: delta.decimals ?? 2 })}
+            {delta.label ? ` ${delta.label}` : ""}
+          </span>
+        )}
+      </div>
+      {hint && !delta && <div className="mt-[4px] text-xs text-muted">{hint}</div>}
     </div>
   );
 }

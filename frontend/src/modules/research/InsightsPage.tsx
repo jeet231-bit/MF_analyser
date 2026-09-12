@@ -57,7 +57,7 @@ export function InsightCard({ insight: ins, actions }: { insight: Insight; actio
   const ranked = ins.rows.length > 0 && ins.rows.every((r) => r.key !== null);
   const drillKeys = ins.drill.keys ?? [];
   return (
-    <article className="flex min-w-0 flex-col rounded-xl border border-hairline bg-surface px-[20px] py-[19px] md:col-span-4" aria-label={ins.title}>
+    <article className="flex min-w-0 flex-col rounded-xl bg-surface shadow-soft px-[20px] py-[19px] md:col-span-4" aria-label={ins.title}>
       <div className="mb-[7px] text-[10.5px] font-bold uppercase tracking-[0.1em] text-accent">{ins.eyebrow}</div>
       <h3 className="m-0 mb-[7px] font-heading text-[15.5px] font-semibold tracking-[-0.01em] text-ink">{ins.title}</h3>
       {ins.status === "ok" && <Narrative text={ins.sentence} className="mb-[12px]" />}

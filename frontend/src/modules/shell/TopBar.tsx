@@ -23,15 +23,15 @@ export interface TopBarProps {
 export function TopBar({ mode, onMode, onSearch, version, validationLabel, theme, onToggleTheme, viewerInitials, viewerName, onOpenProfile }: TopBarProps) {
   const [query, setQuery] = useState("");
   return (
-    <header className="sticky top-0 z-30 flex flex-wrap items-center gap-[14px] border-b border-hairline bg-ground/90 px-[14px] py-[11px] backdrop-blur md:px-[26px]">
-      <div role="group" aria-label="View" className="flex flex-none gap-[3px] rounded-[11px] border border-hairline bg-surface p-[3px]">
+    <header className="sticky top-0 z-30 flex flex-wrap items-center gap-[14px] bg-ground/90 px-[14px] py-[12px] backdrop-blur md:px-[26px]">
+      <div role="group" aria-label="View" className="flex flex-none gap-[3px] rounded-full bg-surface p-[4px] shadow-soft">
         {(["research", "workbook"] as AppMode[]).map((m) => (
           <button
             key={m}
             type="button"
             aria-pressed={mode === m}
             onClick={() => onMode(m)}
-            className={cn("rounded-sm px-[15px] py-[6px] font-heading text-[12.5px] font-semibold", mode === m ? "bg-ink text-ground" : "text-muted hover:text-ink")}
+            className={cn("rounded-full px-[16px] py-[7px] font-heading text-[12.5px] font-bold", mode === m ? "bg-accent text-white" : "text-muted hover:text-ink")}
           >
             {m === "research" ? "Research" : "Workbook"}
           </button>
@@ -39,7 +39,7 @@ export function TopBar({ mode, onMode, onSearch, version, validationLabel, theme
       </div>
       <form
         role="search"
-        className="flex min-w-[120px] max-w-[460px] flex-1 items-center gap-[8px] rounded-[11px] border border-hairline bg-surface px-[13px]"
+        className="flex min-w-[120px] max-w-[460px] flex-1 items-center gap-[8px] rounded-full bg-surface px-[16px] shadow-soft"
         onSubmit={(e) => {
           e.preventDefault();
           if (query.trim()) onSearch(query.trim());
@@ -57,7 +57,7 @@ export function TopBar({ mode, onMode, onSearch, version, validationLabel, theme
       </form>
       <div className="ml-auto flex items-center gap-[8px]">
         {version && (
-          <span className="flex items-center gap-[8px] whitespace-nowrap rounded-[11px] border border-hairline bg-surface px-[12px] py-[6px] text-xs text-muted" data-testid="version-pill">
+          <span className="flex items-center gap-[8px] whitespace-nowrap rounded-full bg-surface px-[14px] py-[8px] text-xs text-muted shadow-soft" data-testid="version-pill">
             <span className={cn("h-[6px] w-[6px] flex-none rounded-full", version.status === "active" ? "bg-positive" : "bg-muted")} aria-hidden />
             <b className="font-semibold text-ink">{version.filename}</b> · {formatDate(version.uploaded_at)} · {version.status.replace("_", " ")}
             {validationLabel ? ` · ${validationLabel}` : ""}
@@ -68,7 +68,7 @@ export function TopBar({ mode, onMode, onSearch, version, validationLabel, theme
           onClick={onToggleTheme}
           aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
           title={theme === "dark" ? "Light theme" : "Dark theme"}
-          className="grid h-[36px] w-[36px] place-items-center rounded-[11px] border border-hairline bg-surface text-ink-2 hover:border-accent hover:text-accent"
+          className="grid h-[38px] w-[38px] place-items-center rounded-full bg-surface text-ink-2 shadow-soft hover:text-accent"
         >
           <Icon name="theme" className="inline-block h-[16px] w-[16px] [&>svg]:h-full [&>svg]:w-full" />
         </button>
@@ -77,9 +77,12 @@ export function TopBar({ mode, onMode, onSearch, version, validationLabel, theme
           onClick={onOpenProfile}
           aria-label={viewerName ? `${viewerName}: open settings` : "Set your name"}
           title={viewerName ?? "Set your name in Admin"}
-          className="grid h-[36px] w-[36px] place-items-center rounded-full bg-accent font-heading text-[12.5px] font-semibold text-white"
+          className="flex items-center gap-[10px] rounded-full bg-surface py-[4px] pl-[14px] pr-[4px] shadow-soft"
         >
-          {viewerInitials}
+          {viewerName && <span className="font-heading text-[13px] font-bold text-ink">{viewerName}</span>}
+          <span className="grid h-[32px] w-[32px] place-items-center rounded-full bg-accent font-heading text-[12px] font-bold text-white" aria-hidden>
+            {viewerInitials}
+          </span>
         </button>
       </div>
     </header>

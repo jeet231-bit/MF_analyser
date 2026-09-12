@@ -1,85 +1,114 @@
 /*
   Design tokens (CLAUDE.md rule 5). This is the ONLY file that may contain colour literals.
-  Light is the default; dark is applied via [data-theme="dark"] which follows the system
-  unless the user toggles it (see src/theme/useTheme.ts).
+  Register: a soft mint ground, white 24 px cards with a soft shadow, a teal accent with a
+  yellow highlight for bars, a curved teal menu whose active item is a white bubble, and a
+  sky-blue gradient header. Light is the default; dark is applied via [data-theme="dark"]
+  which follows the system unless the user toggles it (see src/theme/useTheme.ts).
 */
 @import "tailwindcss";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 :root {
-  --ground: #f6f6f4;
+  --ground: #eef3f1;
   --surface: #ffffff;
-  --surface-lifted: #fbfbfa;
-  --ink: #17191d;
-  --muted: #6b7078;
-  --hairline: #e3e3df;
-  --accent: #2f55d4;
-  --accent-soft: #e9eefb;
-  --positive: #1e7f4f;
-  --warning: #a16207;
-  --negative: #b4232a;
+  --surface-lifted: #f4f8f6;
+  --ink: #1b2b28;
+  --ink-2: #44564f;
+  --muted: #7b8a85;
+  --hairline: #e4ece8;
+  --accent: #1f8a70;
+  --accent-soft: #e2f3ed;
+  --highlight: #f3c74a;
+  --highlight-soft: #fff3d1;
+  --positive: #1e8e5a;
+  --positive-soft: #ddf3e7;
+  --warning: #c98a0f;
+  --warning-soft: #fff1d6;
+  --negative: #d64545;
+  --negative-soft: #fbe3e3;
 
-  /* Research console (Phase 10B): the constant dark rail, the gradient hero, the quartile ramp. */
-  --ink-2: #41454c;
-  --rail: #101216;
-  --rail-ink: #e7e8ea;
-  --rail-muted: #8a8f97;
-  --rail-line: #22262c;
-  --rail-active: #1b1f26;
-  --rail-hover: #191d23;
-  --rail-label: #5e636b;
-  --hero: #17191d;
-  --hero-a: #242a36;
-  --hero-ink: #f3f3f1;
-  --hero-muted: #9a9fa7;
-  --hero-line: #2a2e35;
-  --hero-tile: #21252c;
-  --hero-link: #93aeff;
-  --hero-up: #7be0a8;
-  --q1: #184f95;
-  --q2: #2a78d6;
-  --q3: #5598e7;
-  --q4: #86b6ef;
+  /* the curved teal menu */
+  --rail: #1e6b59;
+  --rail-ink: #ffffff;
+  --rail-muted: #b9dbd1;
+  --rail-line: #2e7f6b;
+  --rail-active: #ffffff;
+  --rail-active-ink: #1e6b59;
+  --rail-hover: #2a7a67;
+  --rail-label: #9fc9bc;
+
+  /* the sky header (executive summary, fund hero) */
+  --hero: #eef5fc;
+  --hero-a: #d9e9fa;
+  --hero-ink: #1b2b3a;
+  --hero-muted: #5d7189;
+  --hero-line: #cfe0f3;
+  --hero-tile: #ffffff;
+  --hero-link: #1f8a70;
+  --hero-up: #1e8e5a;
+
+  /* quartile ramp: deep teal to pale mint */
+  --q1: #1f8a70;
+  --q2: #4bae95;
+  --q3: #8fd1bd;
+  --q4: #cdebe0;
   --q1-ink: #ffffff;
   --q2-ink: #ffffff;
-  --q3-ink: #0b2545;
-  --q4-ink: #0b2545;
+  --q3-ink: #12332b;
+  --q4-ink: #12332b;
   --violet: #7a5af8;
-  --rail-w: 68px;
-  --rail-open: 238px;
+  --rail-w: 76px;
+  --rail-open: 244px;
 
   color-scheme: light;
 }
 
 [data-theme="dark"] {
-  --ground: #0e1013;
-  --surface: #16181d;
-  --surface-lifted: #1c1f25;
-  --ink: #eceef2;
-  --muted: #8b919b;
-  --hairline: #262a31;
-  --accent: #8ca2ee;
-  --accent-soft: #1d2540;
+  --ground: #0f1a17;
+  --surface: #16241f;
+  --surface-lifted: #1c2c27;
+  --ink: #e8f0ec;
+  --ink-2: #bfcfc8;
+  --muted: #8aa39a;
+  --hairline: #24352f;
+  --accent: #4fc3a1;
+  --accent-soft: #1a3a31;
+  --highlight: #f3c74a;
+  --highlight-soft: #3a3116;
   --positive: #4fc38a;
-  --warning: #d9a53a;
-  --negative: #e0616a;
+  --positive-soft: #163a2a;
+  --warning: #d9a94a;
+  --warning-soft: #3a2e12;
+  --negative: #e06a6a;
+  --negative-soft: #3a1e1e;
 
-  --ink-2: #c0c4ca;
-  --hero: #1e222a;
-  --hero-a: #2a3240;
-  --hero-ink: #f3f3f1;
-  --hero-muted: #9a9fa7;
-  --hero-line: #2e333b;
-  --hero-tile: #272c34;
-  --q1: #86b6ef;
-  --q2: #5598e7;
-  --q3: #2a78d6;
-  --q4: #184f95;
-  --q1-ink: #0b2545;
-  --q2-ink: #0b2545;
+  --rail: #123f35;
+  --rail-ink: #e8f0ec;
+  --rail-muted: #9cc4b6;
+  --rail-line: #1d5346;
+  --rail-active: #e8f0ec;
+  --rail-active-ink: #123f35;
+  --rail-hover: #1a4d41;
+  --rail-label: #7fae9f;
+
+  --hero: #16232e;
+  --hero-a: #1c2e3e;
+  --hero-ink: #e8f0ec;
+  --hero-muted: #97abc0;
+  --hero-line: #2a3d4e;
+  --hero-tile: #22333f;
+  --hero-link: #4fc3a1;
+  --hero-up: #4fc38a;
+
+  --q1: #4fc3a1;
+  --q2: #3a9a80;
+  --q3: #2a6f5d;
+  --q4: #1e4f42;
+  --q1-ink: #0b1f1a;
+  --q2-ink: #ffffff;
   --q3-ink: #ffffff;
-  --q4-ink: #ffffff;
+  --q4-ink: #d7ebe3;
   --violet: #9d88ff;
 
   color-scheme: dark;
@@ -95,9 +124,14 @@
   --color-hairline: var(--hairline);
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
+  --color-highlight: var(--highlight);
+  --color-highlight-soft: var(--highlight-soft);
   --color-positive: var(--positive);
+  --color-positive-soft: var(--positive-soft);
   --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
   --color-negative: var(--negative);
+  --color-negative-soft: var(--negative-soft);
   --color-white: #ffffff;
   --color-transparent: transparent;
   --color-ink-2: var(--ink-2);
@@ -106,6 +140,7 @@
   --color-rail-muted: var(--rail-muted);
   --color-rail-line: var(--rail-line);
   --color-rail-active: var(--rail-active);
+  --color-rail-active-ink: var(--rail-active-ink);
   --color-rail-hover: var(--rail-hover);
   --color-rail-label: var(--rail-label);
   --color-hero: var(--hero);
@@ -126,20 +161,21 @@
   --color-q4-ink: var(--q4-ink);
   --color-violet: var(--violet);
 
-  --font-heading: "Schibsted Grotesk", "Inter", system-ui, sans-serif;
-  --font-body: "Instrument Sans", "Inter", system-ui, sans-serif;
+  --font-heading: "Manrope", "Schibsted Grotesk", system-ui, sans-serif;
+  --font-body: "Manrope", "Instrument Sans", system-ui, sans-serif;
   --font-sans: var(--font-body);
 
   /* 8pt grid */
   --spacing: 0.5rem;
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
 
   --shadow-*: initial;
-  --shadow-elevated: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -12px rgb(0 0 0 / 0.12);
+  --shadow-soft: 0 6px 24px rgb(20 40 35 / 0.06);
+  --shadow-elevated: 0 10px 32px rgb(20 40 35 / 0.1);
 }
 
 @layer base {

@@ -14,7 +14,7 @@ export function OverridesBar({ session }: { session: RunSession }) {
     <div
       role="region"
       aria-label="Overrides"
-      className="fixed inset-x-0 bottom-0 z-20 border-t border-hairline bg-surface/95 backdrop-blur md:left-60"
+      className="fixed inset-x-[12px] bottom-[12px] z-20 rounded-xl bg-surface/95 shadow-elevated backdrop-blur md:left-[var(--rail-w)]"
     >
       <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-2 px-4 py-2">
         {draft.size > 0 ? (

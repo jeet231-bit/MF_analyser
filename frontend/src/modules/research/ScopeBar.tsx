@@ -43,18 +43,18 @@ export function ScopeBar({ scope, description, options, onApply, versions, versi
   const dims = options?.dims ?? [];
   const bands = options?.bands ?? [];
   const quartileValue = QUARTILE_CHOICES.find((c) => c.quartile.join(",") === [...draft.quartile].sort().join(","))?.value ?? "";
-  const fieldClass = "w-full rounded-[9px] border border-hairline bg-surface-lifted px-[10px] py-[8px] text-[13px] text-ink";
+  const fieldClass = "w-full rounded-[12px] border border-transparent bg-surface-lifted px-[12px] py-[9px] text-[13px] text-ink focus:border-accent focus:outline-none";
   const labelClass = "mb-[4px] block text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted";
 
   return (
-    <section className={cn("mb-[18px] overflow-hidden rounded-lg border border-hairline bg-surface", applied && "border-accent/40")} aria-label="Scope">
+    <section className={cn("mb-[18px] overflow-hidden rounded-xl bg-surface shadow-soft", applied && "ring-2 ring-accent/30")} aria-label="Scope">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center gap-[11px] px-[16px] py-[11px] text-left"
       >
-        <span className="grid h-[28px] w-[28px] flex-none place-items-center rounded-[9px] bg-accent-soft text-accent" aria-hidden>
+        <span className="grid h-[32px] w-[32px] flex-none place-items-center rounded-full bg-accent-soft text-accent" aria-hidden>
           <Icon name="scope" className="inline-block h-[15px] w-[15px] [&>svg]:h-full [&>svg]:w-full" />
         </span>
         <span className="min-w-0">

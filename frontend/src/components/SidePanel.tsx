@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
-/** Right-hand panel for detail views (cell lineage later). Closes on Escape. */
+/** Right-hand panel for detail views (cell lineage). Closes on Escape. */
 export function SidePanel({
   open,
   title,
@@ -29,21 +29,21 @@ export function SidePanel({
     <aside
       role="dialog"
       aria-label={typeof title === "string" ? title : undefined}
-      className={cn("fixed inset-y-0 right-0 z-30 flex flex-col border-l border-hairline bg-surface")}
-      style={{ width, maxWidth: "100vw" }}
+      className={cn("fixed inset-y-[12px] right-[12px] z-30 flex flex-col rounded-xl bg-surface shadow-elevated")}
+      style={{ width, maxWidth: "calc(100vw - 24px)" }}
     >
-      <header className="flex items-center justify-between border-b border-hairline px-3 py-2">
-        <h2 className="font-heading text-sm font-semibold text-ink">{title}</h2>
+      <header className="flex items-center justify-between px-[20px] pb-[8px] pt-[18px]">
+        <h2 className="font-heading text-[15px] font-bold text-ink">{title}</h2>
         <button
           type="button"
           onClick={onClose}
           aria-label="Close panel"
-          className="rounded-sm px-2 py-1 font-heading text-xs text-muted hover:bg-accent-soft hover:text-accent"
+          className="rounded-full bg-surface-lifted px-[12px] py-[5px] font-heading text-xs font-semibold text-muted hover:bg-accent-soft hover:text-accent"
         >
           Close
         </button>
       </header>
-      <div className="flex-1 overflow-auto p-3">{children}</div>
+      <div className="flex-1 overflow-auto px-[20px] pb-[20px] pt-[8px]">{children}</div>
     </aside>
   );
 }
