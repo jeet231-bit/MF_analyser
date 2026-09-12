@@ -42,7 +42,31 @@ export const entityRows: EntityRow[] = [
 export const summary: ResearchSummary = {
   ...envelope,
   as_of: 46265,
-  universe: { total: 3232, rated: 1434, complete: 1283, quartiles: { "1": 335, "2": 368, "3": 344, "4": 387 }, categories: 200, unranked_categories: 126, unrated_small_categories: 701, unrated_missing_data: 1030, outside_universe: 67, stats_only_categories: 4 },
+  scope: { key: "", applied: false, description: ["All funds", "every category", "every AMC", "both plans"], value: { dims: {}, quartile: [], bands: {}, rated: "all" } },
+  universe: { total: 3232, rated: 1434, complete: 1283, quartiles: { "1": 335, "2": 368, "3": 344, "4": 387 }, categories: 200, ranked_categories: 74, unranked_categories: 126, median_category_rated: 19, largest_category: { key: "Direct-Thematic", rated: 184 }, unrated_small_categories: 92, unrated_missing_data: 1639, unrated_young: 1605, unrated_gap: 0, unrated_unknown: 34, outside_universe: 67, stats_only_categories: 4 },
+  universe_all: { total: 3232, rated: 1434, complete: 1283, quartiles: { "1": 335, "2": 368, "3": 344, "4": 387 }, categories: 200, ranked_categories: 74, unranked_categories: 126, unrated_small_categories: 92, unrated_missing_data: 1639, unrated_young: 1605, unrated_gap: 0, unrated_unknown: 34, outside_universe: 67, stats_only_categories: 4 },
+  scope_options: {
+    dims: [
+      { key: "category", label: "Category", values: ["Direct-Index Funds", "Regular-Aggressive Hybrid"] },
+      { key: "amc", label: "AMC", values: ["Axis", "Kotak"] },
+      { key: "plan", label: "Plan", values: ["Direct", "Regular"] },
+    ],
+    bands: [
+      { key: "corpus", label: "Corpus", options: [{ code: "b1", label: "Up to ₹143 crore" }, { code: "b4", label: "Above ₹2,890 crore" }] },
+      { key: "expense", label: "Expense ratio", options: [{ code: "b1", label: "Up to 0.20%" }, { code: "b4", label: "Above 1.50%" }] },
+    ],
+    quartiles: [1, 2, 3, 4],
+    rated: ["all", "only", "unrated"],
+  },
+  executive: "1,434 funds carry a composite rating this cycle across 74 ranked categories, and 335 of them sit in the top quartile. ICICI Prudential Mutual Fund holds the most Q1 funds (50 of 132 rated), while 73 funds were top quartile in both bull and bear phases: the all-weather set. No fund changed rank since the earlier upload of 31 Aug.",
+  kpis: [
+    { label: "Rated funds", value: "1,434", note: "across 74 ranked categories", tone: "q1" },
+    { label: "Top quartile", value: "335", note: "23.4% of rated funds", tone: "accent" },
+    { label: "All-weather funds", value: "73", note: "Q1 in both bull and bear", tone: "violet" },
+    { label: "Engine agreement", value: "100.00%", note: "7,89,828 formula cells reconciled with Excel", tone: "positive" },
+  ],
+  distribution_narrative: "Quartiles are computed within each category, so the top quartile draws from all 74 ranked categories rather than favouring the largest.",
+  coverage_narrative: "1,434 of 3,232 funds in the master carry a composite rating. Of the rest, 1,605 are too young to rate and 92 sit in categories with fewer than 4 ranked funds.",
   quartiles: { "1": 335, "2": 368, "3": 344, "4": 387 },
   category_averages: {
     measure: "roll1y",
@@ -52,6 +76,7 @@ export const summary: ResearchSummary = {
       { key: "Direct-Multi Asset", value: 18.9, label: "18.90%", count: 35 },
     ],
     total: 45,
+    minGroupCount: 10,
   },
   measures,
   validation: { status: "passed_with_warnings", checked: 789828, matched: 789828, anomalies: 10 },

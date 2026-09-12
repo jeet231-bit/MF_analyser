@@ -45,6 +45,9 @@
   --q2-ink: #ffffff;
   --q3-ink: #0b2545;
   --q4-ink: #0b2545;
+  --violet: #7a5af8;
+  --rail-w: 68px;
+  --rail-open: 238px;
 
   color-scheme: light;
 }
@@ -77,6 +80,7 @@
   --q2-ink: #0b2545;
   --q3-ink: #ffffff;
   --q4-ink: #ffffff;
+  --violet: #9d88ff;
 
   color-scheme: dark;
 }
@@ -120,6 +124,7 @@
   --color-q2-ink: var(--q2-ink);
   --color-q3-ink: var(--q3-ink);
   --color-q4-ink: var(--q4-ink);
+  --color-violet: var(--violet);
 
   --font-heading: "Schibsted Grotesk", "Inter", system-ui, sans-serif;
   --font-body: "Instrument Sans", "Inter", system-ui, sans-serif;

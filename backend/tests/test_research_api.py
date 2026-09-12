@@ -31,7 +31,7 @@ def _fresh_database(tmp_path, monkeypatch):
     monkeypatch.setenv("MFA_DATA_DIR", str(tmp_path / "data"))
     for cached in (get_settings, get_engine, get_session_factory):
         cached.cache_clear()
-    table_store.table_cache.clear()
+    table_store.clear_all()
     yield
     for cached in (get_settings, get_engine, get_session_factory):
         cached.cache_clear()
@@ -46,7 +46,7 @@ def config(tmp_path, monkeypatch):
         monkeypatch.setenv("MFA_DASHBOARD_CONFIG_PATH", str(path))
         get_settings.cache_clear()
         dashboard_config._load.cache_clear()
-        table_store.table_cache.clear()
+        table_store.clear_all()
         return path
 
     use(research_map())
@@ -54,7 +54,7 @@ def config(tmp_path, monkeypatch):
     monkeypatch.delenv("MFA_DASHBOARD_CONFIG_PATH", raising=False)
     get_settings.cache_clear()
     dashboard_config._load.cache_clear()
-    table_store.table_cache.clear()
+    table_store.clear_all()
 
 
 def _upload(client: TestClient, name: str, variant: str = "base", activate: bool = True) -> str:
@@ -418,3 +418,69 @@ def test_exports_go_through_the_view_descriptor(client: TestClient, config) -> N
         f"/api/runs/{client.get('/api/research/summary').json()['run_id']}/report.html"
     ).text
     assert "Insights brief" in report and "Beta One leads at 88.00" in report
+
+
+def test_scope_applies_to_every_view(client: TestClient, config) -> None:
+    """One scope parameter narrows the summary, the executive sentence, the insights, the
+    tables, movement and the exports alike; band boundaries stay those of the full table."""
+    import json
+
+    _upload(client, "master-old.xlsx", variant="repair")
+    _upload(client, "master.xlsx")
+    plain = client.get("/api/research/summary").json()
+    assert plain["scope"] == {
+        "key": "",
+        "applied": False,
+        "description": ["All funds", "every category", "every AMC", "both plans"],
+        "value": {"dims": {}, "quartile": [], "bands": {}, "rated": "all", "q": None},
+    }
+    assert plain["executive"].startswith(
+        "8 funds carry a composite rating this cycle across 2 ranked categories"
+    )
+    assert [k["label"] for k in plain["kpis"]] == ["Rated funds", "Top quartile"]
+    assert plain["kpis"][0]["value"] == "8" and plain["kpis"][1]["note"] == "25.0% of rated funds"
+    assert plain["coverage_narrative"].startswith(
+        "8 of 12 funds in the master carry a composite rating."
+    )
+    assert plain["distribution_narrative"] == (
+        "Quartiles are computed within each category: 2 ranked categories."
+    )
+    opts = plain["scope_options"]
+    assert [d["key"] for d in opts["dims"]] == ["category", "amc", "plan", "manager"]
+    assert [b["key"] for b in opts["bands"]] == ["corpus", "expense"]
+
+    scope = json.dumps({"dims": {"plan": "Direct"}, "rated": "only"})
+    scoped = client.get("/api/research/summary", params={"scope": scope}).json()
+    assert scoped["scope"]["applied"] is True
+    assert scoped["scope"]["description"] == [
+        "Rated funds only",
+        "every category",
+        "every AMC",
+        "Direct",
+    ]
+    assert scoped["universe"]["total"] == scoped["universe"]["rated"] == 4
+    assert scoped["universe_all"]["total"] == 12  # the coverage strip keeps the master's totals
+    assert scoped["executive"].startswith("4 funds carry a composite rating")
+    ins = {
+        i["key"]: i
+        for i in client.get("/api/research/insights", params={"scope": scope}).json()["insights"]
+    }
+    assert ins["best_score"]["count"] == 4
+    assert all(r["sub"].startswith("Direct") for r in ins["best_score"]["rows"])
+    ents = client.get("/api/research/entities", params={"scope": scope, "size": 50}).json()
+    assert ents["total"] == 4
+    assert all(r["dims"]["plan"] == "Direct" and r["rated"] for r in ents["rows"])
+    cats = client.get("/api/research/categories", params={"scope": scope}).json()
+    assert {r["key"] for r in cats["rows"]} == {"Direct-Alpha"}
+    move = client.get("/api/research/movement", params={"scope": scope}).json()
+    assert move["available"] is True and move["exits"] == []  # scoping out a fund is no exit
+    assert all(m["key"].endswith("- Dir") for m in move["risers"] + move["fallers"])
+    csv_out = client.get("/api/research/entities/export", params={"format": "csv", "scope": scope})
+    assert csv_out.status_code == 200 and len(csv_out.text.strip().splitlines()) == 1 + 4
+
+    band = json.dumps({"bands": {"corpus": "b4"}})
+    top = client.get("/api/research/entities", params={"scope": band, "size": 50}).json()
+    assert 1 <= top["total"] <= 3 and all(r["measures"]["corpus"] >= 1500 for r in top["rows"])
+    assert client.get("/api/research/summary", params={"scope": "{not json"}).status_code == 422
+    bad = json.dumps({"rated": "maybe"})
+    assert client.get("/api/research/summary", params={"scope": bad}).status_code == 422

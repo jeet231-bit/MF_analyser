@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getConfig } from "@/api/config";
 import { getModel } from "@/api/model";
-import { getResearchConfig, getResearchSummary, type EntityQuery } from "@/api/research";
+import { getResearchConfig, getResearchSummary, scopeParam, type EntityQuery } from "@/api/research";
 import { listRuns } from "@/api/runs";
 import { anomalyTotal, getValidation } from "@/api/validation";
 import { listWorkbooks } from "@/api/workbooks";
@@ -13,7 +13,6 @@ import { CalculationsPage } from "@/modules/calculations/CalculationsPage";
 import { InputsPage } from "@/modules/inputs/InputsPage";
 import { OutputsPage } from "@/modules/outputs/OutputsPage";
 import { OverviewPage } from "@/modules/overview/OverviewPage";
-import { UploadPanel } from "@/modules/overview/UploadPanel";
 import { AdminPage } from "@/modules/research/AdminPage";
 import { CategoriesPage } from "@/modules/research/CategoriesPage";
 import { DashboardPage } from "@/modules/research/DashboardPage";
@@ -21,13 +20,17 @@ import { FundDetailPage } from "@/modules/research/FundDetailPage";
 import { FundsPage } from "@/modules/research/FundsPage";
 import { InsightsPage } from "@/modules/research/InsightsPage";
 import { MovementPage } from "@/modules/research/MovementPage";
+import { ScopeBar } from "@/modules/research/ScopeBar";
 import type { ResearchActions } from "@/modules/research/types";
 import { UploadPage } from "@/modules/research/UploadPage";
+import { useScope } from "@/modules/research/useScope";
+import { greeting, initials, useViewer } from "@/modules/research/useViewer";
 import { OverridesBar } from "@/modules/runs/OverridesBar";
 import { useRunSession } from "@/modules/runs/useRunSession";
 import { AppShell } from "@/modules/shell/AppShell";
-import { isResearchPage, moduleSheets, readView, writeView, type AppMode, type PageId } from "@/modules/shell/navigation";
-import { Sidebar } from "@/modules/shell/Sidebar";
+import { isResearchPage, moduleSheets, readPinned, readView, validationPill, writePinned, writeView, type AppMode, type PageId } from "@/modules/shell/navigation";
+import { Rail } from "@/modules/shell/Rail";
+import { TopBar } from "@/modules/shell/TopBar";
 import { ValidationPage } from "@/modules/validation/ValidationPage";
 import { VersionsPage } from "@/modules/versions/VersionsPage";
 import { useTheme } from "@/theme";
@@ -38,11 +41,14 @@ export default function App() {
   const versions = useAsync(listWorkbooks, []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState(readView);
+  const [pinned, setPinnedState] = useState(readPinned);
   const [selectedFund, setSelectedFund] = useState<string | null>(null);
   const [fundsQuery, setFundsQuery] = useState<EntityQuery | undefined>(undefined);
   const [selectedSheet, setSelectedSheet] = useState<string | null>(null);
   const [busy, setBusy] = useState<{ active: boolean; label?: string }>({ active: false });
   const [researchTick, setResearchTick] = useState(0);
+  const { scope, setScope, applied: scopeApplied } = useScope();
+  const viewer = useViewer(config.data?.viewer_name);
 
   const versionList = versions.data ?? [];
   const activeVersion = versionList.find((v) => v.status === "active") ?? null;
@@ -62,7 +68,7 @@ export default function App() {
     () => (effectiveId ? listRuns(effectiveId) : Promise.reject(new Error("no version"))),
     [effectiveId],
   );
-  const summary = useAsync(() => getResearchSummary(), [researchTick, versionList.length, activeVersion?.id]);
+  const summary = useAsync(() => getResearchSummary(undefined, scope), [researchTick, versionList.length, activeVersion?.id, scopeParam(scope)]);
   const researchConfig = useAsync(() => getResearchConfig(), [researchTick, activeVersion?.id]);
 
   useEffect(() => {
@@ -95,6 +101,10 @@ export default function App() {
     window.scrollTo({ top: 0 });
   }, []);
   const setMode = useCallback((mode: AppMode) => setView({ mode, page: mode === "research" ? "dashboard" : "overview" }), []);
+  const setPinned = useCallback((next: boolean) => {
+    writePinned(next);
+    setPinnedState(next);
+  }, []);
 
   const refreshAll = useCallback(() => {
     versions.reload();
@@ -123,25 +133,42 @@ export default function App() {
     [go],
   );
 
-  const sidebar = (
-    <Sidebar
+  const rail = (
+    <Rail
       displayName={displayName}
       mode={view.mode}
-      onMode={setMode}
-      versions={versionList}
-      selectedVersionId={effectiveId}
-      onSelectVersion={setSelectedId}
       model={readyModel}
       activeItem={view.page}
       activeSheet={selectedSheet}
       onNavigate={go}
-      validationStatus={validationReport?.status ?? null}
       anomalyCount={anomalyTotal(validationReport?.anomaly_counts)}
       summary={summaryData}
       insightCount={researchConfig.data?.configured ? researchConfig.data.insights?.length : undefined}
       openFindings={researchConfig.data?.findings?.filter((f) => f.status === "open").length ?? 0}
+      pinned={pinned || view.mode === "workbook"}
+      onPin={setPinned}
+    />
+  );
+  const topBar = (
+    <TopBar
+      mode={view.mode}
+      onMode={setMode}
+      onSearch={(q) => actions.openFunds({ q })}
+      version={view.mode === "research" ? (activeVersion ?? version) : version}
+      validationLabel={validationReport ? validationPill[validationReport.status].label : null}
       theme={theme}
       onToggleTheme={toggle}
+      viewerInitials={initials(viewer.name)}
+      viewerName={viewer.name}
+      onOpenProfile={() => go("admin")}
+    />
+  );
+  const scopeBar = (
+    <ScopeBar
+      scope={scope}
+      description={summaryData?.configured ? summaryData.scope?.description : undefined}
+      options={summaryData?.configured ? summaryData.scope_options : undefined}
+      onApply={setScope}
     />
   );
 
@@ -183,20 +210,38 @@ export default function App() {
       />
     );
   } else if (page === "dashboard") {
-    content = <DashboardPage summary={summary} actions={actions} reload={() => setResearchTick((t) => t + 1)} />;
+    content = (
+      <DashboardPage
+        summary={summary}
+        scope={scope}
+        scopeBar={scopeBar}
+        greeting={greeting(viewer.name)}
+        actions={actions}
+        reload={() => setResearchTick((t) => t + 1)}
+      />
+    );
   } else if (page === "insights") {
-    content = <InsightsPage actions={actions} runId={summaryData?.run_id ?? null} />;
+    content = <InsightsPage actions={actions} runId={summaryData?.run_id ?? null} scope={scope} scopeBar={scopeBar} />;
   } else if (page === "funds") {
-    content = <FundsPage key={JSON.stringify(fundsQuery ?? {})} actions={actions} initialQuery={fundsQuery} footer={footer} />;
+    content = <FundsPage key={JSON.stringify(fundsQuery ?? {})} actions={actions} initialQuery={fundsQuery} footer={footer} scope={scope} scopeBar={scopeBar} />;
   } else if (page === "fund") {
-    content = selectedFund ? <FundDetailPage fundKey={selectedFund} actions={actions} footer={footer} /> : <FundsPage actions={actions} footer={footer} />;
+    content = selectedFund ? <FundDetailPage fundKey={selectedFund} actions={actions} footer={footer} /> : <FundsPage actions={actions} footer={footer} scope={scope} scopeBar={scopeBar} />;
   } else if (page === "categories") {
-    content = <CategoriesPage actions={actions} footer={footer} />;
+    content = <CategoriesPage actions={actions} footer={footer} scope={scope} scopeBar={scopeBar} />;
   } else if (page === "movement") {
-    content = <MovementPage actions={actions} footer={footer} />;
+    content = <MovementPage actions={actions} footer={footer} scope={scope} scopeBar={scopeBar} />;
   } else if (page === "admin") {
     content = (
-      <AdminPage summary={summaryData} versions={versionList} validation={validation} versionsPanel={versionsPanel} validationPanel={validationPanel} footer={footer} />
+      <AdminPage
+        summary={summaryData}
+        versions={versionList}
+        validation={validation}
+        versionsPanel={versionsPanel}
+        validationPanel={validationPanel}
+        footer={footer}
+        viewer={viewer}
+        actions={actions}
+      />
     );
   } else if (page === "versions") {
     content = versionsPanel;
@@ -244,11 +289,14 @@ export default function App() {
   return (
     <FormatContext.Provider value={formatSettings}>
       <ProgressBar active={busy.active} label={busy.label} />
-      <AppShell sidebar={sidebar} tone="rail">
+      <AppShell rail={rail} topBar={topBar}>
         {session.job && (
           <div className="mb-3">
             <JobChip job={session.job} onDismiss={session.dismissJob} />
           </div>
+        )}
+        {scopeApplied && view.mode === "workbook" && (
+          <p className="mb-3 text-xs text-muted">A research scope is set; workbook pages show every sheet as the master computes it.</p>
         )}
         {content}
       </AppShell>
@@ -256,5 +304,3 @@ export default function App() {
     </FormatContext.Provider>
   );
 }
-
-export { UploadPanel };

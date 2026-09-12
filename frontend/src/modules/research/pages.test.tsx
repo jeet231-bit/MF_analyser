@@ -3,6 +3,7 @@ import { getResearchSummary } from "@/api/research";
 import { useAsync } from "@/lib/useAsync";
 import { mockApi } from "@/test/mockApi";
 import { version } from "@/test/fixtures";
+import { EMPTY_SCOPE } from "@/api/research";
 import { categories, entitiesPage, entityDetail, groupedPage, insights, movement, movementUnavailable, notConfigured, researchConfig, summary } from "@/test/researchFixtures";
 import { AdminPage } from "./AdminPage";
 import { CategoriesPage } from "./CategoriesPage";
@@ -38,28 +39,35 @@ function makeActions(): ResearchActions {
 
 function Dashboard({ actions }: { actions: ResearchActions }) {
   const s = useAsync(() => getResearchSummary(), []);
-  return <DashboardPage summary={s} actions={actions} />;
+  return <DashboardPage summary={s} scope={EMPTY_SCOPE} scopeBar={<div data-testid="scope-bar" />} greeting="Good morning, Jeet" actions={actions} />;
 }
 
 describe("DashboardPage", () => {
-  it("shows the hero with rated vs universe, both narratives, the distribution, freshness and movers", async () => {
+  it("leads with the greeting, the scope bar, the executive summary and four KPI tiles, then the distribution, leaders and the coverage strip", async () => {
     mockApi({ "GET /api/research/summary": summary, "GET /api/research/entities": entitiesPage });
     const actions = makeActions();
     render(<Dashboard actions={actions} />);
-    expect(await screen.findByText("of 3,232")).toBeInTheDocument();
-    expect(screen.getAllByText("1,434").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(narrative(/126 of 200 categories have fewer than 4 ranked funds/))).toBeInTheDocument();
-    expect(screen.getByText(narrative(/have held Q1 across all/))).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Good morning, Jeet" })).toBeInTheDocument();
+    expect(screen.getByTestId("scope-bar")).toBeInTheDocument();
+    const exec = screen.getByRole("region", { name: "Executive summary" });
+    expect(exec).toHaveTextContent("All funds · every category · every AMC · both plans · as of 31 Aug");
+    expect(within(exec).getByText(narrative(/ICICI Prudential Mutual Fund holds the most Q1 funds/))).toBeInTheDocument();
+    const kpis = within(screen.getByTestId("kpi-row"));
+    expect(kpis.getAllByText(/./).length).toBeGreaterThan(0);
+    expect(kpis.getByText("All-weather funds")).toBeInTheDocument();
+    expect(kpis.getByText("100.00%")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Quartile distribution: Q1 335 funds/ })).toBeInTheDocument();
-    expect(screen.getByText("100.00%")).toBeInTheDocument();
-    expect(screen.getByText("passed with warnings · 10 warnings")).toBeInTheDocument();
-    expect(screen.getByText("1 open")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Kotak Nifty Bank Index Fund/ }));
-    expect(actions.openFund).toHaveBeenCalledWith("Kotak Bank Index - Dir");
-    fireEvent.click(screen.getByRole("button", { name: "All 86 →" }));
-    expect(actions.openMovement).toHaveBeenCalled();
+    expect(screen.getByText(narrative(/draws from all 74 ranked categories/))).toBeInTheDocument();
+    expect(screen.getByText("Median ranked category")).toBeInTheDocument();
+    expect(screen.getByText("Category leaders")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Direct-Thematic" }));
     expect(actions.openFunds).toHaveBeenCalledWith({ category: "Direct-Thematic" });
+    expect(screen.queryByText("Biggest rank movers")).not.toBeInTheDocument(); // its fact lives in the summary
+    const strip = screen.getByTestId("coverage-strip");
+    expect(within(strip).getByRole("img", { name: "Coverage: 1,434 rated, 1,798 not rated" })).toBeInTheDocument();
+    expect(within(strip).getByText(narrative(/1,605 are too young to rate/))).toBeInTheDocument();
+    fireEvent.click(within(strip).getByRole("button", { name: "Coverage detail →" }));
+    expect(actions.openAdmin).toHaveBeenCalled();
     expect(screen.getByText("Test console · confidential")).toBeInTheDocument();
   });
 
@@ -87,10 +95,11 @@ describe("DashboardPage", () => {
 
 describe("InsightsPage", () => {
   it("groups cards by section, shows unavailable notes and drills through the keys", async () => {
-    mockApi({ "GET /api/research/insights": insights });
+    const calls = mockApi({ "GET /api/research/insights": insights });
     const actions = makeActions();
-    render(<InsightsPage actions={actions} runId="run00001" />);
+    render(<InsightsPage actions={actions} runId="run00001" scope={{ ...EMPTY_SCOPE, dims: { plan: "Direct" } }} scopeBar={<div data-testid="scope-bar" />} />);
     expect(await screen.findByRole("heading", { name: "Who is winning" })).toBeInTheDocument();
+    expect(screen.getByTestId("scope-bar")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Cost" })).toBeInTheDocument(); // no label configured: the key, capitalised
     const card = screen.getByRole("article", { name: "Best on long-term rank" });
     expect(within(card).getByText(/leads its category/)).toBeInTheDocument();
@@ -104,6 +113,7 @@ describe("InsightsPage", () => {
     expect(within(held).queryByRole("button")).not.toBeInTheDocument();
     const league = screen.getByRole("article", { name: "Q1 funds by house" });
     expect(within(league).getByText("50 / 132")).toBeInTheDocument();
+    expect(calls[0].url).toContain("scope=%7B%22dims%22%3A%7B%22plan%22%3A%22Direct%22%7D");
   });
 });
 
@@ -229,6 +239,8 @@ describe("MovementPage", () => {
 describe("AdminPage and UploadPage", () => {
   it("shows tiles, findings with status and the column map with unresolved refs marked", async () => {
     mockApi({ "GET /api/research/config": researchConfig });
+    const setName = vi.fn();
+    const actions = makeActions();
     render(
       <AdminPage
         summary={summary}
@@ -236,6 +248,8 @@ describe("AdminPage and UploadPage", () => {
         validation={{ status: "ready", data: { status: "passed_with_warnings", totals: { checked: 100, matched: 100, mismatched: 0, skipped_unsupported: 0, skipped_stale: 0 }, anomaly_counts: { duplicate_keys: 3 } } as never }}
         versionsPanel={<div>versions panel</div>}
         validationPanel={<div>validation panel</div>}
+        viewer={{ name: "Jeet", localName: null, setName }}
+        actions={actions}
       />,
     );
     expect(await screen.findByText("Roll Perf row 3181 read another fund's row")).toBeInTheDocument();
@@ -247,6 +261,15 @@ describe("AdminPage and UploadPage", () => {
     expect(bear.querySelector(".text-negative")).not.toBeNull();
     expect(screen.getByText("versions panel")).toBeInTheDocument();
     expect(screen.getByText("validation panel")).toBeInTheDocument();
+    const coverage = screen.getByTestId("coverage-detail");
+    expect(within(coverage).getByText("Too young to rate")).toBeInTheDocument();
+    expect(within(coverage).getByText("1,605")).toBeInTheDocument();
+    fireEvent.click(within(coverage).getByRole("button", { name: "Open the coverage cards →" }));
+    expect(actions.openInsights).toHaveBeenCalled();
+    expect(screen.getByText("Default from the config: Jeet.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Darsh" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(setName).toHaveBeenCalledWith("Darsh");
   });
 
   it("frames the upload panel with what happens next", () => {

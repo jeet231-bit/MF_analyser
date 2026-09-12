@@ -81,7 +81,7 @@ export function PageHead({ title, sub, actions, back }: { title: ReactNode; sub?
   );
 }
 
-export function RCard({ title, sub, action, className, children, ...rest }: { title?: ReactNode; sub?: ReactNode; action?: ReactNode; className?: string; children: ReactNode; style?: CSSProperties }) {
+export function RCard({ title, sub, action, className, children, ...rest }: { title?: ReactNode; sub?: ReactNode; action?: ReactNode; className?: string; children: ReactNode; style?: CSSProperties; "data-testid"?: string }) {
   return (
     <section className={cn("min-w-0 rounded-xl border border-hairline bg-surface px-5 py-[19px]", className)} {...rest}>
       {(title || action) && (

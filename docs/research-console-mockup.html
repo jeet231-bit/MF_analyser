@@ -11,6 +11,7 @@
   --q1-ink:#FFFFFF; --q2-ink:#FFFFFF; --q3-ink:#0B2545; --q4-ink:#0B2545;
   --up:#006300; --down:#D03B3B; --warn:#A16207;
   --shadow:0 1px 2px rgba(16,18,22,.04);
+  --rail-w:68px; --rail-open:238px;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --ground:#0C0E11; --card:#16181D; --card-2:#1B1E24;
@@ -34,55 +35,106 @@
 }
 *{box-sizing:border-box}
 body{background:var(--ground);color:var(--ink);font-family:"Instrument Sans",system-ui,sans-serif;font-size:14px;line-height:1.5;padding:0}
-h1,h2,h3,h4,.disp{font-family:"Schibsted Grotesk",system-ui,sans-serif;text-wrap:balance}
+h1,h2,h3,h4{font-family:"Schibsted Grotesk",system-ui,sans-serif;text-wrap:balance}
 button{font:inherit;cursor:pointer}
 .tnum{font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
 
-/* ---------- shell ---------- */
-.app{display:grid;grid-template-columns:238px 1fr;min-height:100vh}
-@media(max-width:900px){.app{grid-template-columns:1fr}}
+/* ================= icon rail ================= */
+.rail{position:fixed;top:0;left:0;bottom:0;width:var(--rail-w);background:var(--rail);color:var(--rail-ink);
+  display:flex;flex-direction:column;gap:4px;padding:14px 12px;z-index:40;overflow:hidden;overflow-y:auto}
+.rail:hover,.rail.pinned{width:var(--rail-open);box-shadow:14px 0 40px rgba(0,0,0,.16)}
+@media(prefers-reduced-motion:no-preference){.rail{transition:width .18s cubic-bezier(.4,0,.2,1)}}
+.rlogo{display:flex;align-items:center;gap:11px;padding:4px 6px 14px;white-space:nowrap}
+.rlogo .mk{width:32px;height:32px;border-radius:10px;background:linear-gradient(140deg,#4E77FF,#1B3AA8);
+  display:grid;place-items:center;font-family:"Schibsted Grotesk";font-weight:700;font-size:14px;color:#fff;flex:none}
+.rlab{opacity:0;white-space:nowrap;pointer-events:none}
+.rail:hover .rlab,.rail.pinned .rlab{opacity:1;pointer-events:auto}
+@media(prefers-reduced-motion:no-preference){.rlab{transition:opacity .14s ease .04s}}
+.rlogo .nm{font-family:"Schibsted Grotesk";font-weight:600;font-size:14px;line-height:1.2}
+.rlogo .sb{font-size:10.5px;color:var(--rail-muted)}
+.rgrp{display:flex;flex-direction:column;gap:3px}
+.rgl{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#565B63;font-weight:700;padding:0 10px;margin:14px 0 4px;height:12px;white-space:nowrap}
+.ritem{display:flex;align-items:center;gap:13px;background:none;border:0;color:var(--rail-muted);
+  padding:0 10px;height:42px;border-radius:11px;width:100%;text-align:left;font-size:13.5px;white-space:nowrap}
+.ritem svg{width:19px;height:19px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ritem:hover{color:#fff;background:#1A1E25}
+.ritem[aria-current="page"]{background:var(--rail-active);color:#fff;font-weight:600}
+.ritem[aria-current="page"] svg{color:#7E9BFF}
+.ritem .ct{margin-left:auto;font-size:10.5px;color:#5E636B;font-variant-numeric:tabular-nums}
+.ritem .dotw{margin-left:auto;width:6px;height:6px;border-radius:50%;background:var(--warn);flex:none}
+.rfoot{margin-top:auto;padding-top:12px;border-top:1px solid var(--rail-line);display:flex;flex-direction:column;gap:3px}
+.pinbtn{color:#565B63}
 
-.rail{background:var(--rail);color:var(--rail-ink);padding:22px 16px 20px;display:flex;flex-direction:column;gap:18px;position:sticky;top:0;height:100vh;overflow-y:auto}
-@media(max-width:900px){.rail{position:static;height:auto}}
-.brand{display:flex;align-items:center;gap:10px}
-.brand .mk{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#3E6BFF,#1B3AA8);display:grid;place-items:center;font-family:"Schibsted Grotesk";font-weight:700;font-size:13px;color:#fff}
-.brand .nm{font-family:"Schibsted Grotesk";font-weight:600;font-size:14px;letter-spacing:-.01em}
-.brand .sb{font-size:11px;color:var(--rail-muted);margin-top:-2px}
+/* ================= top bar ================= */
+.wrap{margin-left:var(--rail-w);min-width:0}
+.topbar{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--ground) 88%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:14px;padding:11px 26px}
+@media(max-width:700px){.topbar{padding:10px 14px;flex-wrap:wrap}}
+.modesw{display:flex;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:3px;gap:3px;flex:none}
+.modesw button{background:none;border:0;color:var(--muted);font-size:12.5px;font-weight:600;padding:6px 15px;border-radius:8px;font-family:"Schibsted Grotesk"}
+.modesw button[aria-pressed="true"]{background:var(--ink);color:var(--ground)}
+.gsearch{flex:1;min-width:120px;max-width:460px;display:flex;align-items:center;gap:9px;background:var(--card);
+  border:1px solid var(--line);border-radius:11px;padding:0 13px}
+.gsearch svg{width:15px;height:15px;stroke:var(--muted);fill:none;stroke-width:1.8}
+.gsearch input{border:0;background:none;padding:9px 0;font:inherit;font-size:13px;color:var(--ink);width:100%}
+.gsearch input:focus{outline:none}
+.tbr{margin-left:auto;display:flex;align-items:center;gap:9px}
+.vpill{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:6px 12px;font-size:12px;color:var(--muted);white-space:nowrap}
+.vpill b{color:var(--ink);font-weight:600}
+.vpill .dot{width:6px;height:6px;border-radius:50%;background:#25A75F;flex:none}
+.iconbtn{width:36px;height:36px;display:grid;place-items:center;background:var(--card);border:1px solid var(--line);border-radius:11px;color:var(--ink-2)}
+.iconbtn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round}
+.iconbtn:hover{border-color:var(--accent);color:var(--accent)}
+.avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(140deg,#4E77FF,#1B3AA8);color:#fff;
+  display:grid;place-items:center;font-family:"Schibsted Grotesk";font-weight:600;font-size:12.5px;flex:none}
 
-.vchip{background:var(--rail-active);border:1px solid var(--rail-line);border-radius:10px;padding:9px 11px;font-size:11.5px;color:var(--rail-muted);display:flex;flex-direction:column;gap:3px}
-.vchip b{color:var(--rail-ink);font-weight:600;font-size:12.5px}
-.vchip .dot{width:6px;height:6px;border-radius:50%;background:#3DBE7A;display:inline-block;margin-right:5px;vertical-align:1px}
+/* ================= scope bar ================= */
+main{padding:22px 26px 56px;min-width:0}
+@media(max-width:640px){main{padding:18px 14px 46px}}
+.scope{background:var(--card);border:1px solid var(--line);border-radius:16px;margin-bottom:18px;overflow:hidden}
+.scopehd{display:flex;align-items:center;gap:11px;padding:11px 16px;width:100%;background:none;border:0;text-align:left}
+.scopehd .si{width:28px;height:28px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;flex:none}
+.scopehd .si svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8}
+.scopehd .lb{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+.scopehd .vals{font-size:12.5px;color:var(--ink-2);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.scopehd .chev{margin-left:auto;color:var(--muted);font-size:12px}
+.scopebody{border-top:1px solid var(--line);padding:16px;display:grid;grid-template-columns:repeat(5,1fr);gap:13px}
+@media(max-width:1100px){.scopebody{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:680px){.scopebody{grid-template-columns:1fr}}
+.fgroup label{display:block;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--muted);margin-bottom:5px}
+.fgroup select{width:100%;background:var(--card-2);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:inherit;font-size:13px;color:var(--ink)}
+.scopeft{grid-column:1/-1;display:flex;gap:9px;align-items:center;padding-top:4px}
+.scopenote{font-size:11.5px;color:var(--muted);margin-left:auto}
+.sctag{display:inline-flex;align-items:center;gap:6px;background:var(--accent-soft);color:var(--accent);border:0;border-radius:7px;padding:3px 9px;font-size:11.5px;font-weight:600}
 
-.seg{display:flex;background:var(--rail-active);border:1px solid var(--rail-line);border-radius:10px;padding:3px;gap:3px}
-.seg button{flex:1;background:none;border:0;color:var(--rail-muted);font-size:12px;font-weight:600;padding:6px 4px;border-radius:7px;font-family:"Schibsted Grotesk"}
-.seg button[aria-pressed="true"]{background:#F3F3F1;color:#101216}
+/* ================= exec summary ================= */
+.exec{background:linear-gradient(118deg,var(--hero-a) 0%,var(--hero) 62%);border:1px solid var(--hero-line);
+  border-radius:20px;padding:20px 22px;color:var(--hero-ink);margin-bottom:18px}
+.exechd{display:flex;align-items:center;gap:11px;margin-bottom:11px}
+.exechd .ei{width:30px;height:30px;border-radius:10px;background:rgba(126,155,255,.16);color:#9DB4FF;display:grid;place-items:center;flex:none}
+.exechd .ei svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7}
+.exechd h2{font-size:11.5px;letter-spacing:.11em;text-transform:uppercase;font-weight:700;margin:0}
+.exechd .per{margin-left:auto;font-size:11px;color:var(--hero-muted);border:1px solid var(--hero-line);border-radius:99px;padding:4px 12px;white-space:nowrap}
+.exec p{margin:0;font-size:14.5px;line-height:1.62;color:#D6D9DE;max-width:88ch}
+.exec b{color:#fff;font-weight:600}
+.exec .pos{color:#7BE0A8;font-weight:600}
 
-.navgrp{display:flex;flex-direction:column;gap:2px}
-.navlbl{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#5E636B;font-weight:600;padding:0 8px;margin:10px 0 4px}
-.nav{display:flex;align-items:center;gap:9px;background:none;border:0;color:var(--rail-muted);padding:7px 9px;border-radius:8px;width:100%;text-align:left;font-size:13px}
-.nav:hover{color:var(--rail-ink);background:#191D23}
-.nav[aria-current="page"]{background:var(--rail-active);color:#fff;font-weight:600}
-.nav .ic{width:15px;height:15px;flex:none;opacity:.85}
-.nav .ct{margin-left:auto;font-size:11px;color:#5E636B;font-variant-numeric:tabular-nums}
-.nav .pipd{margin-left:auto;width:6px;height:6px;border-radius:50%;background:var(--warn)}
-.rail .foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--rail-line);display:flex;flex-direction:column;gap:2px}
-
-/* ---------- main ---------- */
-main{padding:26px 30px 60px;min-width:0}
-@media(max-width:640px){main{padding:20px 16px 48px}}
-.mockbar{display:flex;align-items:center;gap:8px;background:var(--accent-soft);color:var(--accent);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:600;margin-bottom:20px}
-.phead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+/* ================= generic ================= */
+.phead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
 .phead h1{font-size:25px;font-weight:600;letter-spacing:-.02em;margin:0 0 4px}
 .phead .sub{color:var(--muted);font-size:13px}
 .acts{display:flex;gap:8px}
-.btn{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--ink);font-family:"Schibsted Grotesk"}
+.btn{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--ink);font-family:"Schibsted Grotesk"}
 .btn:hover{border-color:var(--accent);color:var(--accent)}
 .btn.pri{background:var(--ink);border-color:var(--ink);color:var(--ground)}
 .btn.pri:hover{opacity:.88;color:var(--ground)}
-
 .grid{display:grid;gap:18px}
 .c12{grid-template-columns:repeat(12,1fr)}
-@media(max-width:900px){.c12{grid-template-columns:1fr}.c12>*{grid-column:auto!important}}
+@media(max-width:1000px){.c12{grid-template-columns:repeat(6,1fr)}.c12>*{grid-column:span 6!important}}
+@media(max-width:640px){.c12{grid-template-columns:1fr}.c12>*{grid-column:auto!important}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:19px 20px;box-shadow:var(--shadow);min-width:0}
 .card h3{font-size:14.5px;font-weight:600;margin:0 0 2px}
 .card .cs{font-size:12px;color:var(--muted);margin:0 0 14px}
@@ -91,7 +143,16 @@ main{padding:26px 30px 60px;min-width:0}
 .chead .cs{margin:2px 0 0}
 .lnk{background:none;border:0;color:var(--accent);font-size:12.5px;font-weight:600;padding:0}
 
-/* hero */
+/* kpi tiles with accent rail (Pantomath house pattern) */
+.kpi{position:relative;overflow:hidden}
+.kpi::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--kc,var(--accent))}
+.kpi .l{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.kpi .v{font-family:"Schibsted Grotesk";font-size:30px;font-weight:600;letter-spacing:-.025em;line-height:1.1;margin-top:6px}
+.kpi .v small{font-size:15px;color:var(--muted);font-weight:500;letter-spacing:0}
+.kpi .d{font-size:12px;margin-top:4px;color:var(--muted)}
+.up{color:var(--up)}.down{color:var(--down)}
+
+/* hero / tiles */
 .hero{background:linear-gradient(152deg,var(--hero-a) 0%,var(--hero) 58%);color:var(--hero-ink);border:1px solid var(--hero-line);border-radius:20px;padding:22px;display:flex;flex-direction:column;gap:16px}
 .hero .hl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--hero-muted);font-weight:600}
 .hero .big{font-family:"Schibsted Grotesk";font-size:42px;font-weight:600;line-height:1;letter-spacing:-.03em}
@@ -101,15 +162,12 @@ main{padding:26px 30px 60px;min-width:0}
 :root[data-theme="dark"] .ht{background:#272C34}
 .ht .v{font-family:"Schibsted Grotesk";font-size:19px;font-weight:600;line-height:1.1}
 .ht .l{font-size:10.5px;color:var(--hero-muted);margin-top:2px}
-
-/* stat tile */
 .st .l{font-size:11.5px;color:var(--muted);font-weight:500}
 .st .v{font-family:"Schibsted Grotesk";font-size:27px;font-weight:600;letter-spacing:-.02em;line-height:1.15;margin-top:3px}
 .st .d{font-size:12px;margin-top:3px;font-weight:600}
-.up{color:var(--up)}.down{color:var(--down)}
 
 /* quartile */
-.qbar{display:flex;gap:2px;height:34px;border-radius:8px;overflow:hidden;margin:4px 0 12px}
+.qbar{display:flex;gap:2px;height:34px;border-radius:9px;overflow:hidden;margin:4px 0 12px}
 .qbar span{display:grid;place-items:center;font-size:11.5px;font-weight:700;font-family:"Schibsted Grotesk"}
 .qlgd{display:flex;flex-wrap:wrap;gap:12px}
 .qlgd .i{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
@@ -119,15 +177,13 @@ main{padding:26px 30px 60px;min-width:0}
 .sq1{background:var(--q1);color:var(--q1-ink)}.sq2{background:var(--q2);color:var(--q2-ink)}
 .sq3{background:var(--q3);color:var(--q3-ink)}.sq4{background:var(--q4);color:var(--q4-ink)}
 
-/* bar list */
+/* lists */
 .blist{display:flex;flex-direction:column;gap:11px}
 .brow{display:grid;grid-template-columns:1fr auto;gap:4px}
 .brow .bl{font-size:12.5px;color:var(--ink-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brow .bv{font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums}
 .btrack{grid-column:1/-1;display:flex;height:7px;background:var(--card-2);border:1px solid var(--line);border-radius:4px;overflow:hidden}
 .bfill{display:block;height:100%;background:var(--accent);border-radius:3px}
-
-/* movers */
 .mv{display:flex;flex-direction:column}
 .mvr{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--line)}
 .mvr:last-child{border-bottom:0}
@@ -137,10 +193,28 @@ main{padding:26px 30px 60px;min-width:0}
 .mvr .rk{font-family:"Schibsted Grotesk";font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
 .mvr .dl{font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums;min-width:44px;text-align:right}
 
-/* table */
+/* tables */
 .twrap{overflow-x:auto;border:1px solid var(--line);border-radius:18px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:720px}
+th{text-align:left;font-family:"Schibsted Grotesk";font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--card-2);position:sticky;top:0}
+td{padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:var(--card-2)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.fname{font-weight:600}
+.fsub{font-size:11.5px;color:var(--muted);font-weight:400}
 
-/* section header, pivot row, narrative, insight cards */
+/* filters / chips */
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
+.fld{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--ink);font-family:inherit}
+.search{flex:1;min-width:200px;display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:0 12px}
+.search input{border:0;background:none;padding:9px 0;font:inherit;color:var(--ink);width:100%}
+.search input:focus{outline:none}
+.chips{display:flex;gap:6px}
+.chip{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:600;color:var(--ink-2)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+
+/* sections / narrative / insights */
 .seche{display:flex;align-items:center;gap:11px;margin:30px 0 15px}
 .seche .si{width:32px;height:32px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:15px;flex:none}
 .seche h2{font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;margin:0}
@@ -164,28 +238,14 @@ main{padding:26px 30px 60px;min-width:0}
 .mini{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted)}
 .mtrack{flex:1;height:6px;background:var(--card-2);border:1px solid var(--line);border-radius:4px;overflow:hidden;display:flex}
 .mfill{display:block;height:100%}
-.confoot{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);text-align:center;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
-table{border-collapse:collapse;width:100%;font-size:13px;min-width:720px}
-th{text-align:left;font-family:"Schibsted Grotesk";font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--card-2);position:sticky;top:0}
-td{padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
-tr:last-child td{border-bottom:0}
-tbody tr:hover td{background:var(--card-2)}
-td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
-.fname{font-weight:600}
-.fsub{font-size:11.5px;color:var(--muted);font-weight:400}
 
-/* filters */
-.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
-.fld{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:13px;color:var(--ink);font-family:inherit}
-.fld:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.search{flex:1;min-width:200px;display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:0 12px}
-.search input{border:0;background:none;padding:9px 0;font:inherit;color:var(--ink);width:100%}
-.search input:focus{outline:none}
-.chips{display:flex;gap:6px}
-.chip{background:var(--card);border:1px solid var(--line);border-radius:7px;padding:6px 11px;font-size:12px;font-weight:600;color:var(--ink-2)}
-.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+/* coverage strip */
+.covline{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--card-2);border:1px solid var(--line);
+  border-radius:14px;padding:11px 16px;font-size:12.5px;color:var(--muted);margin-top:18px}
+.covline b{color:var(--ink-2);font-weight:600}
+.covbar{display:flex;height:7px;width:170px;border-radius:4px;overflow:hidden;gap:2px;flex:none}
 
-/* fund detail */
+/* fund detail bits */
 .fhero{display:grid;grid-template-columns:1.4fr 1fr;gap:18px}
 @media(max-width:900px){.fhero{grid-template-columns:1fr}.fhero .hero{order:-1}}
 .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
@@ -200,121 +260,183 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .lgd .i{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
 .lgd .sw{width:12px;height:8px;border-radius:2px}
 
-/* workbook view */
-.wbnote{display:flex;gap:10px;align-items:flex-start;background:var(--card-2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 11px 11px 0;padding:12px 15px;font-size:12.5px;color:var(--ink-2);margin-bottom:16px}
+/* workbook bits */
+.wbnote{display:flex;gap:10px;align-items:flex-start;background:var(--card-2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 14px 14px 0;padding:12px 15px;font-size:12.5px;color:var(--ink-2);margin-bottom:16px}
 .gridcell{font-variant-numeric:tabular-nums}
 .fcell{color:var(--accent);cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
-.lin{background:var(--card-2);border:1px solid var(--line);border-radius:12px;padding:14px}
-.lin .fx{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;background:var(--card);border:1px solid var(--line);border-radius:7px;padding:9px 11px;overflow-x:auto;color:var(--ink-2)}
+.lin{background:var(--card-2)}
+.lin .fx{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:9px 11px;overflow-x:auto;color:var(--ink-2)}
 .lstep{display:flex;gap:9px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12.5px}
 .lstep:last-child{border-bottom:0}
 .lstep .ok{color:var(--up);font-weight:700}
 
-.tip{position:fixed;pointer-events:none;background:var(--hero);color:var(--hero-ink);border-radius:8px;padding:7px 10px;font-size:12px;line-height:1.4;z-index:50;box-shadow:0 4px 14px rgba(0,0,0,.22)}
-.tip b{font-family:"Schibsted Grotesk"}
-[hidden]{display:none!important}
-@media(prefers-reduced-motion:no-preference){.nav,.btn,.chip{transition:background .15s ease,color .15s ease,border-color .15s ease}}
+.tip{position:fixed;pointer-events:none;background:var(--hero);color:var(--hero-ink);border-radius:9px;padding:7px 10px;font-size:12px;line-height:1.4;z-index:60;box-shadow:0 4px 14px rgba(0,0,0,.22)}
+.confoot{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);text-align:center;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.mockbar{display:flex;align-items:center;gap:8px;background:var(--accent-soft);color:var(--accent);border-radius:10px;padding:7px 13px;font-size:12px;font-weight:600;margin-bottom:16px}
+@media(prefers-reduced-motion:no-preference){.ritem,.btn,.chip,.card{transition:background .15s ease,color .15s ease,border-color .15s ease}}
 </style>
 
-<div class="app">
-<nav class="rail">
-  <div class="brand">
+<nav class="rail" id="rail" aria-label="Main">
+  <div class="rlogo">
     <div class="mk">M</div>
-    <div><div class="nm">Equity MF Analyser</div><div class="sb">Research console</div></div>
+    <div class="rlab"><div class="nm">MF Analyser</div><div class="sb">Research console</div></div>
   </div>
 
-  <div class="vchip">
-    <span><span class="dot"></span><b>master.xlsx</b></span>
-    <span>11 Sept 2026 · active · validated</span>
+  <div class="rgrp" id="navResearch">
+    <button class="ritem" data-screen="dash" aria-current="page">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      <span class="rlab">Dashboard</span></button>
+    <button class="ritem" data-screen="insights">
+      <svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0-3.6 10.8c.5.4.8 1 .9 1.6l.2 1.1h5l.2-1.1c.1-.6.4-1.2.9-1.6A6 6 0 0 0 12 3Z"/><path d="M10 20.5h4"/></svg>
+      <span class="rlab">Insights</span><span class="ct rlab">12</span></button>
+    <button class="ritem" data-screen="funds">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      <span class="rlab">Funds</span><span class="ct rlab">1,434</span></button>
+    <button class="ritem" data-screen="cats">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="8" height="7" rx="1.5"/><rect x="13" y="4" width="8" height="7" rx="1.5"/><rect x="3" y="13" width="8" height="7" rx="1.5"/><rect x="13" y="13" width="8" height="7" rx="1.5"/></svg>
+      <span class="rlab">Categories</span><span class="ct rlab">200</span></button>
+    <button class="ritem" data-screen="move">
+      <svg viewBox="0 0 24 24"><path d="M4 17l5-5 3.5 3.5L20 8"/><path d="M15 8h5v5"/></svg>
+      <span class="rlab">Movement</span></button>
   </div>
 
-  <div class="seg" role="group" aria-label="View">
-    <button type="button" id="vwResearch" aria-pressed="true">Research</button>
-    <button type="button" id="vwWorkbook" aria-pressed="false">Workbook</button>
+  <div class="rgrp" id="navWorkbook" hidden>
+    <div class="rgl rlab">Outputs</div>
+    <button class="ritem" data-screen="wb" aria-current="page"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg><span class="rlab">Report</span></button>
+    <button class="ritem" data-screen="wb"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg><span class="rlab">Composite Ranks</span></button>
+    <button class="ritem" data-screen="wb"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg><span class="rlab">Summary-Performance</span></button>
+    <div class="rgl rlab">Calculations</div>
+    <button class="ritem" data-screen="wb"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span class="rlab">P2P Perf</span></button>
+    <button class="ritem" data-screen="wb"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span class="rlab">Roll Perf</span></button>
+    <button class="ritem" data-screen="wb"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span class="rlab">Bull-Bear Returns</span></button>
+    <button class="ritem" data-screen="wb"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span class="rlab">CY Returns</span></button>
+    <button class="ritem" data-screen="wb"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span class="rlab">Averages</span></button>
+    <div class="rgl rlab">Reference &amp; inputs</div>
+    <button class="ritem" data-screen="wb"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M4 10h16"/></svg><span class="rlab">MF Master</span></button>
+    <button class="ritem" data-screen="wb"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M4 10h16"/></svg><span class="rlab">Domain</span></button>
+    <button class="ritem" data-screen="wb"><svg viewBox="0 0 24 24"><path d="M12 3v18M5 8l7-5 7 5"/></svg><span class="rlab">Weights &amp; dates</span></button>
   </div>
 
-  <div id="navResearch">
-    <div class="navgrp">
-      <button class="nav" data-screen="dash" aria-current="page">Dashboard</button>
-      <button class="nav" data-screen="insights">Insights <span class="ct">9</span></button>
-      <button class="nav" data-screen="funds">Funds <span class="ct">3,249</span></button>
-      <button class="nav" data-screen="cats">Categories <span class="ct">42</span></button>
-      <button class="nav" data-screen="move">Movement <span class="ct">86</span></button>
-    </div>
-  </div>
-
-  <div id="navWorkbook" hidden>
-    <div class="navgrp">
-      <div class="navlbl">Outputs</div>
-      <button class="nav" data-screen="wb" aria-current="page">Report</button>
-      <button class="nav" data-screen="wb">Composite Ranks</button>
-      <button class="nav" data-screen="wb">Summary-Performance</button>
-      <div class="navlbl">Calculations</div>
-      <button class="nav" data-screen="wb">P2P Perf</button>
-      <button class="nav" data-screen="wb">Roll Perf</button>
-      <button class="nav" data-screen="wb">Bull-Bear Returns</button>
-      <button class="nav" data-screen="wb">Stat Comp</button>
-      <button class="nav" data-screen="wb">CY Returns</button>
-      <button class="nav" data-screen="wb">Averages</button>
-      <div class="navlbl">Reference</div>
-      <button class="nav" data-screen="wb">MF Master</button>
-      <button class="nav" data-screen="wb">Domain</button>
-      <button class="nav" data-screen="wb">First NAV</button>
-      <button class="nav" data-screen="wb">Nifty</button>
-      <div class="navlbl">Inputs</div>
-      <button class="nav" data-screen="wb">Weights &amp; dates</button>
-    </div>
-  </div>
-
-  <div class="foot">
-    <button class="nav" data-screen="upload">Upload version</button>
-    <button class="nav" data-screen="admin">Admin <span class="pipd" title="4 warnings"></span></button>
-    <button class="nav" id="themeBtn">Dark theme</button>
+  <div class="rfoot">
+    <button class="ritem" data-screen="upload">
+      <svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M8 8l4-4 4 4"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+      <span class="rlab">Upload version</span></button>
+    <button class="ritem" data-screen="admin">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 15a1.6 1.6 0 0 0-1.5-1H1.4a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 3 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 7 4.6h.1A1.6 1.6 0 0 0 8.6 3V2.9a2 2 0 1 1 4 0V3a1.6 1.6 0 0 0 2.7 1.1 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.1a2 2 0 1 1 0 4H21a1.6 1.6 0 0 0-1.6 1.7Z"/></svg>
+      <span class="rlab">Admin</span><span class="dotw"></span></button>
+    <button class="ritem pinbtn" id="pinBtn" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 4 3v2H6v-2l4-3-1-6Z"/><path d="M12 15v5"/></svg>
+      <span class="rlab">Keep menu open</span></button>
   </div>
 </nav>
 
+<div class="wrap">
+<header class="topbar">
+  <div class="modesw" role="group" aria-label="View">
+    <button type="button" id="vwResearch" aria-pressed="true">Research</button>
+    <button type="button" id="vwWorkbook" aria-pressed="false">Workbook</button>
+  </div>
+  <div class="gsearch">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <input type="text" id="globalSearch" placeholder="Search a fund, category or AMC…">
+  </div>
+  <div class="tbr">
+    <span class="vpill"><span class="dot"></span><b>master.xlsx</b> · 11 Sept · active</span>
+    <button class="iconbtn" id="themeBtn" aria-label="Switch theme">
+      <svg viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg>
+    </button>
+    <div class="avatar">DK</div>
+  </div>
+</header>
+
 <main>
-<div class="mockbar">Design mockup · structure and names from the live model · all figures illustrative</div>
+<div class="mockbar">Design mockup · structure and names from the live model · figures illustrative</div>
 
 <!-- ================= DASHBOARD ================= -->
 <section id="s-dash">
   <div class="phead">
     <div>
-      <h1>Research overview</h1>
-      <div class="sub">Universe as of 31 Aug 2026 · recalculated 11 Sept, 3:42 pm</div>
+      <h1>Good morning, Darsh</h1>
+      <div class="sub">Equity mutual fund research · universe as of 31 Aug 2026 · recalculated 11 Sept, 3:42 pm</div>
     </div>
-    <div class="acts"><button class="btn">Export</button><button class="btn pri">Run what-if</button></div>
+    <div class="acts"><button class="btn">Export brief</button><button class="btn pri">Run what-if</button></div>
   </div>
 
-  <div class="grid c12" style="margin-bottom:18px">
-    <div class="hero" style="grid-column:span 4">
-      <div>
-        <div class="hl">Rated universe</div>
-        <div class="big tnum">3,249</div>
-        <div class="bsub">funds across 42 categories · 1,544 with a complete record</div>
-      </div>
-      <p class="narr" style="color:var(--hero-muted);margin:0;font-size:12.5px">
-        <b style="color:var(--hero-ink)">86 funds changed rank</b> since 31 Aug — 51 up, 35 down.
-        Two of those moves are data repairs, not market movement.
-        <b style="color:var(--hero-ink)">31 funds</b> have held Q1 across all three stored versions.
-      </p>
-      <div class="htiles">
-        <div class="ht"><div class="v tnum">812</div><div class="l">Top quartile</div></div>
-        <div class="ht"><div class="v tnum">86</div><div class="l">Rank changes</div></div>
-        <div class="ht"><div class="v tnum">14</div><div class="l">New funds</div></div>
+  <!-- global scope -->
+  <div class="scope">
+    <button class="scopehd" id="scopeToggle" aria-expanded="false" aria-controls="scopeBody">
+      <span class="si"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg></span>
+      <span>
+        <span class="lb">Scope</span>
+        <span class="vals"><b>All rated funds</b> · every category · every AMC · both plans</span>
+      </span>
+      <span class="chev" id="scopeChev">Refine ▾</span>
+    </button>
+    <div class="scopebody" id="scopeBody" hidden>
+      <div class="fgroup"><label for="sc1">Category</label><select class="fld" id="sc1"><option>All categories</option><option>Aggressive Hybrid Fund</option><option>Index Funds</option><option>Thematic</option><option>Multi Asset Allocation</option></select></div>
+      <div class="fgroup"><label for="sc2">Sub-nature</label><select class="fld" id="sc2"><option>All</option><option>Large Cap</option><option>Mid Cap</option><option>Small Cap</option></select></div>
+      <div class="fgroup"><label for="sc3">AMC</label><select class="fld" id="sc3"><option>All AMCs</option><option>ICICI Prudential</option><option>HDFC</option><option>Kotak Mahindra</option><option>WhiteOak Capital</option></select></div>
+      <div class="fgroup"><label for="sc4">Plan</label><select class="fld" id="sc4"><option>Direct and Regular</option><option>Direct only</option><option>Regular only</option></select></div>
+      <div class="fgroup"><label for="sc5">Management team</label><select class="fld" id="sc5"><option>All teams</option></select></div>
+      <div class="fgroup"><label for="sc6">Quartile</label><select class="fld" id="sc6"><option>All quartiles</option><option>Q1 only</option><option>Q1 and Q2</option><option>Q4 only</option></select></div>
+      <div class="fgroup"><label for="sc7">Corpus band</label><select class="fld" id="sc7"><option>Any size</option><option>Above ₹10,000 Cr</option><option>₹1,000–10,000 Cr</option><option>Below ₹1,000 Cr</option></select></div>
+      <div class="fgroup"><label for="sc8">Expense band</label><select class="fld" id="sc8"><option>Any expense</option><option>Lowest quartile</option><option>Highest quartile</option></select></div>
+      <div class="fgroup"><label for="sc9">Rating status</label><select class="fld" id="sc9"><option>Rated funds only</option><option>Include unrated</option><option>Unrated only</option></select></div>
+      <div class="fgroup"><label for="sc10">Version</label><select class="fld" id="sc10"><option>Active · 11 Sept 2026</option><option>31 Aug 2026</option></select></div>
+      <div class="scopeft">
+        <button class="btn pri">Apply scope</button>
+        <button class="btn">Reset</button>
+        <span class="scopenote">Scope applies to every view — dashboard, insights, funds, categories and exports.</span>
       </div>
     </div>
+  </div>
 
+  <!-- executive summary -->
+  <div class="exec">
+    <div class="exechd">
+      <span class="ei"><svg viewBox="0 0 24 24"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg></span>
+      <h2>Executive summary</h2>
+      <span class="per">All rated funds · as of 31 Aug 2026</span>
+    </div>
+    <p>
+      <b>1,434 funds</b> carry a composite rating this cycle across <b>74 ranked categories</b>, and
+      <b>335</b> of them sit in the top quartile. <b>ICICI Prudential</b> holds the most Q1 funds
+      (50 of 132 rated), while <b>73 funds</b> were top quartile in both bull and bear phases —
+      the all-weather set. <b>113 funds</b> deliver Q1 performance at Q1 cost.
+      <span class="pos">No fund changed rank</span> since the earlier upload of 31 Aug, and the engine
+      reconciles with Excel on every one of 789,828 formula cells.
+    </p>
+  </div>
+
+  <!-- kpis -->
+  <div class="grid c12" style="margin-bottom:18px">
+    <div class="card kpi" style="grid-column:span 3;--kc:var(--q1)">
+      <div class="l">Rated funds</div><div class="v tnum">1,434</div>
+      <div class="d">across 74 ranked categories</div>
+    </div>
+    <div class="card kpi" style="grid-column:span 3;--kc:var(--accent)">
+      <div class="l">Top quartile</div><div class="v tnum">335</div>
+      <div class="d">23.4% of rated funds</div>
+    </div>
+    <div class="card kpi" style="grid-column:span 3;--kc:#7A5AF8">
+      <div class="l">All-weather funds</div><div class="v tnum">73</div>
+      <div class="d">Q1 in both bull and bear</div>
+    </div>
+    <div class="card kpi" style="grid-column:span 3;--kc:var(--up)">
+      <div class="l">Engine agreement</div><div class="v tnum">100<small>.00%</small></div>
+      <div class="d">789,828 cells reconciled</div>
+    </div>
+  </div>
+
+  <div class="grid c12">
     <div class="card" style="grid-column:span 5">
       <div class="chead">
-        <div><h3>Quartile distribution</h3><p class="cs">Composite quartile within category · 3,249 rated funds</p></div>
+        <div><h3>Quartile distribution</h3><p class="cs">Composite quartile within category · 1,434 rated funds</p></div>
         <button class="lnk" data-goto="cats">Break down</button>
       </div>
-      <div class="qbar" role="img" aria-label="Quartile distribution: Q1 812 funds, Q2 814, Q3 811, Q4 812">
-        <span class="sq1" style="flex:812">812</span>
-        <span class="sq2" style="flex:814">814</span>
-        <span class="sq3" style="flex:811">811</span>
-        <span class="sq4" style="flex:812">812</span>
+      <div class="qbar" role="img" aria-label="Quartile distribution: Q1 335 funds, Q2 368, Q3 344, Q4 387">
+        <span class="sq1" style="flex:335">335</span><span class="sq2" style="flex:368">368</span>
+        <span class="sq3" style="flex:344">344</span><span class="sq4" style="flex:387">387</span>
       </div>
       <div class="qlgd">
         <div class="i"><span class="sw" style="background:var(--q1)"></span>Q1 · top</div>
@@ -322,40 +444,23 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
         <div class="i"><span class="sw" style="background:var(--q3)"></span>Q3</div>
         <div class="i"><span class="sw" style="background:var(--q4)"></span>Q4 · bottom</div>
       </div>
-      <p class="cs" style="margin:14px 0 0">Categories with fewer than 4 rated funds are left unranked and shown as “--”, per the workbook rule.</p>
-    </div>
-
-    <div class="card" style="grid-column:span 3">
-      <div class="st"><div class="l">Engine agreement with Excel</div><div class="v tnum">100.00%</div><div class="d up">789,828 of 789,828 cells</div></div>
-      <div style="height:1px;background:var(--line);margin:15px 0"></div>
-      <div style="display:flex;flex-direction:column;gap:9px">
-        <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--muted)">Last upload</span><b>11 Sept, 3:31 pm</b></div>
-        <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--muted)">Validation</span><b style="color:var(--warn)">Passed · 5 warnings</b></div>
-        <div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--muted)">Data findings</span><b>4 open</b></div>
-      </div>
-      <button class="lnk" style="margin-top:14px">Open admin →</button>
-    </div>
-  </div>
-
-  <div class="grid c12">
-    <div class="card" style="grid-column:span 5">
-      <div class="chead">
-        <div><h3>Biggest rank movers</h3><p class="cs">Composite rank vs version of 31 Aug</p></div>
-        <button class="lnk" data-goto="move">All 86 →</button>
-      </div>
-      <div class="mv">
-        <div class="mvr"><div class="nmw"><div class="nm">Kotak Nifty Bank Index Fund - Dir</div><div class="ct">Direct · Index Funds</div></div><div class="rk tnum">7</div><div class="dl up">▲ 23</div></div>
-        <div class="mvr"><div class="nmw"><div class="nm">WhiteOak Capital Balanced Advantage - Dir</div><div class="ct">Direct · Dynamic Asset Allocation</div></div><div class="rk tnum">12</div><div class="dl up">▲ 18</div></div>
-        <div class="mvr"><div class="nmw"><div class="nm">UTI Nifty 500 Index Fund - Reg</div><div class="ct">Regular · Index Funds</div></div><div class="rk tnum">31</div><div class="dl up">▲ 11</div></div>
-        <div class="mvr"><div class="nmw"><div class="nm">Edelweiss Nifty REITs &amp; Realty - Dir</div><div class="ct">Direct · Thematic</div></div><div class="rk tnum">44</div><div class="dl down">▼ 16</div></div>
-        <div class="mvr"><div class="nmw"><div class="nm">Axis Nifty Energy Index Fund - Reg</div><div class="ct">Regular · Sectoral - Energy</div></div><div class="rk tnum">58</div><div class="dl down">▼ 27</div></div>
+      <p class="narr" style="margin:16px 0 0">Quartiles are computed <b>within each category</b>, so the top quartile draws from all 74 ranked categories rather than favouring the largest.</p>
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+        <div style="background:var(--card-2);border:1px solid var(--line);border-radius:12px;padding:11px 13px">
+          <div style="font-size:11px;color:var(--muted);font-weight:600">Median category</div>
+          <div class="tnum" style="font-family:'Schibsted Grotesk';font-size:18px;font-weight:600;margin-top:2px">19 funds</div>
+        </div>
+        <div style="background:var(--card-2);border:1px solid var(--line);border-radius:12px;padding:11px 13px">
+          <div style="font-size:11px;color:var(--muted);font-weight:600">Largest category</div>
+          <div class="tnum" style="font-family:'Schibsted Grotesk';font-size:18px;font-weight:600;margin-top:2px">184 funds</div>
+        </div>
       </div>
     </div>
 
     <div class="card" style="grid-column:span 4">
       <div class="chead">
-        <div><h3>Category averages</h3><p class="cs">3-year rolling return · top 6 of 42</p></div>
-        <button class="lnk" data-goto="cats">All →</button>
+        <div><h3>Category leaders</h3><p class="cs">3-year rolling average · categories with 10+ rated funds</p></div>
+        <button class="lnk" data-goto="cats">All 200</button>
       </div>
       <div class="blist">
         <div class="brow"><span class="bl">Direct-Thematic</span><span class="bv tnum">22.4%</span><span class="btrack"><span class="bfill" style="width:100%"></span></span></div>
@@ -363,21 +468,31 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
         <div class="brow"><span class="bl">Regular-Multi Asset Allocation</span><span class="bv tnum">18.0%</span><span class="btrack"><span class="bfill" style="width:80%"></span></span></div>
         <div class="brow"><span class="bl">Direct-Aggressive Hybrid Fund</span><span class="bv tnum">16.1%</span><span class="btrack"><span class="bfill" style="width:72%"></span></span></div>
         <div class="brow"><span class="bl">Regular-Aggressive Hybrid Fund</span><span class="bv tnum">14.1%</span><span class="btrack"><span class="bfill" style="width:63%"></span></span></div>
-        <div class="brow"><span class="bl">Direct-Balanced Hybrid Fund</span><span class="bv tnum">11.6%</span><span class="btrack"><span class="bfill" style="width:52%"></span></span></div>
       </div>
     </div>
 
     <div class="card" style="grid-column:span 3">
       <div class="chead"><div><h3>Watchlist</h3><p class="cs">Pinned by you</p></div></div>
       <div class="mv">
-        <div class="mvr"><div class="nmw"><div class="nm">WhiteOak Aggressive Hybrid</div><div class="ct">Reg · Growth</div></div><span class="qp sq1">Q1</span></div>
-        <div class="mvr"><div class="nmw"><div class="nm">Navi Nifty REITs &amp; Realty</div><div class="ct">Dir · Index</div></div><span class="qp sq2">Q2</span></div>
-        <div class="mvr"><div class="nmw"><div class="nm">UTI BSE India Sector Leaders</div><div class="ct">Reg · Thematic</div></div><span class="qp sq3">Q3</span></div>
-        <div class="mvr"><div class="nmw"><div class="nm">Alphagrep Multi Asset</div><div class="ct">Dir · Multi Asset</div></div><span class="qp n">--</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">WhiteOak Aggressive Hybrid</div><div class="ct">Reg · rank 3 of 42</div></div><span class="qp sq1">Q1</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Navi Nifty REITs &amp; Realty</div><div class="ct">Dir · rank 18 of 63</div></div><span class="qp sq2">Q2</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">UTI BSE India Sector Leaders</div><div class="ct">Reg · rank 41 of 63</div></div><span class="qp sq3">Q3</span></div>
+        <div class="mvr"><div class="nmw"><div class="nm">Kotak Nifty Bank Index</div><div class="ct">Dir · rank 7 of 128</div></div><span class="qp sq1">Q1</span></div>
       </div>
-      <p class="cs" style="margin:12px 0 0">“--” means the fund is missing from CY Returns — see data findings.</p>
+      <button class="lnk" style="margin-top:12px" data-goto="funds">Add a fund →</button>
     </div>
   </div>
+
+  <!-- coverage: honest, quiet, one click from the detail -->
+  <div class="covline">
+    <span class="covbar" role="img" aria-label="Coverage: 1,434 rated, 1,798 not rated">
+      <span class="sq1" style="flex:1434"></span><span style="flex:1798;background:var(--line)"></span>
+    </span>
+    <span><b>1,434 of 3,232 funds</b> in the master carry a composite rating. The rest are young funds
+      without full history, or sit in categories with fewer than four ranked funds.</span>
+    <button class="lnk" style="margin-left:auto" data-goto="admin">Coverage detail →</button>
+  </div>
+
   <p class="confoot">Pantomath Group — Equity MF Research Engine · Private &amp; Confidential</p>
 </section>
 
@@ -686,7 +801,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 <!-- ================= CATEGORIES ================= -->
 <section id="s-cats" hidden>
   <div class="phead">
-    <div><h1>Categories</h1><div class="sub">42 categories · quartile spread and averages from the Averages sheet</div></div>
+    <div><h1>Categories</h1><div class="sub">200 categories · 74 ranked, 126 with fewer than four ranked funds</div></div>
     <div class="acts"><button class="btn">Export view</button></div>
   </div>
   <div class="grid c12" id="catGrid"></div>
@@ -839,81 +954,78 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 
 <script>
 (function(){
+  /* ---- bull/bear chart on fund detail ---- */
   var PHASES=[
-    {k:'BULL',p:'11 Feb 16 – 28 Aug 18',f:22.8,c:19.1},
-    {k:'BEAR',p:'28 Aug 18 – 26 Oct 18',f:-6.4,c:-8.2},
-    {k:'BULL',p:'26 Oct 18 – 14 Jan 20',f:11.7,c:10.4},
-    {k:'BEAR',p:'14 Jan 20 – 23 Mar 20',f:-28.9,c:-31.5},
-    {k:'BULL',p:'23 Mar 20 – 18 Oct 21',f:117.1,c:104.3},
-    {k:'BEAR',p:'18 Oct 21 – 17 Jun 22',f:-14.2,c:-16.8},
-    {k:'BULL',p:'17 Jun 22 – 26 Sep 24',f:46.2,c:41.7},
-    {k:'BEAR',p:'26 Sep 24 – 04 Mar 25',f:-9.8,c:-11.4},
-    {k:'BULL',p:'04 Mar 25 – 02 Jan 26',f:21.3,c:18.9},
-    {k:'BEAR',p:'02 Jan 26 – 30 Mar 26',f:-5.1,c:-6.3}
+    {k:'BULL',p:'11 Feb 16 – 28 Aug 18',f:22.8,c:19.1},{k:'BEAR',p:'28 Aug 18 – 26 Oct 18',f:-6.4,c:-8.2},
+    {k:'BULL',p:'26 Oct 18 – 14 Jan 20',f:11.7,c:10.4},{k:'BEAR',p:'14 Jan 20 – 23 Mar 20',f:-28.9,c:-31.5},
+    {k:'BULL',p:'23 Mar 20 – 18 Oct 21',f:117.1,c:104.3},{k:'BEAR',p:'18 Oct 21 – 17 Jun 22',f:-14.2,c:-16.8},
+    {k:'BULL',p:'17 Jun 22 – 26 Sep 24',f:46.2,c:41.7},{k:'BEAR',p:'26 Sep 24 – 04 Mar 25',f:-9.8,c:-11.4},
+    {k:'BULL',p:'04 Mar 25 – 02 Jan 26',f:21.3,c:18.9},{k:'BEAR',p:'02 Jan 26 – 30 Mar 26',f:-5.1,c:-6.3}
   ];
-  var max=0; PHASES.forEach(function(d){max=Math.max(max,Math.abs(d.f),Math.abs(d.c));});
-  var host=document.getElementById('bbChart'); var html='';
-  PHASES.forEach(function(d){
-    var wf=Math.abs(d.f)/max*100, wc=Math.abs(d.c)/max*100;
-    html+='<div class="bbrow" data-f="'+d.f+'" data-c="'+d.c+'" data-p="'+d.p+'" data-k="'+d.k+'">'
-      +'<div class="pl"><b>'+d.k+'</b>'+d.p+'</div>'
-      +'<div><div class="bbt"><span class="bbseg" style="width:'+wf+'%;background:var(--q2)"></span>'
-      +'<span class="bbv">'+(d.f>0?'+':'')+d.f.toFixed(1)+'%</span></div>'
-      +'<div class="bbt" style="height:14px"><span class="bbseg" style="width:'+wc+'%;background:var(--muted);opacity:.45;height:6px"></span>'
-      +'<span class="bbv" style="color:var(--muted);font-weight:500">'+(d.c>0?'+':'')+d.c.toFixed(1)+'%</span></div></div></div>';
-  });
-  host.innerHTML=html;
+  var host=document.getElementById('bbChart');
+  if(host){
+    var max=0; PHASES.forEach(function(d){max=Math.max(max,Math.abs(d.f),Math.abs(d.c));});
+    var html='';
+    PHASES.forEach(function(d){
+      var wf=Math.abs(d.f)/max*100, wc=Math.abs(d.c)/max*100;
+      html+='<div class="bbrow" data-f="'+d.f+'" data-c="'+d.c+'" data-p="'+d.p+'" data-k="'+d.k+'">'
+        +'<div class="pl"><b>'+d.k+'</b>'+d.p+'</div>'
+        +'<div><div class="bbt"><span class="bbseg" style="width:'+wf+'%;background:var(--q2)"></span>'
+        +'<span class="bbv">'+(d.f>0?'+':'')+d.f.toFixed(1)+'%</span></div>'
+        +'<div class="bbt" style="height:14px"><span class="bbseg" style="width:'+wc+'%;background:var(--muted);opacity:.45;height:6px"></span>'
+        +'<span class="bbv" style="color:var(--muted);font-weight:500">'+(d.c>0?'+':'')+d.c.toFixed(1)+'%</span></div></div></div>';
+    });
+    host.innerHTML=html;
+    var tip=null;
+    host.addEventListener('mousemove',function(e){
+      var row=e.target.closest('.bbrow'); if(!row){hide();return;}
+      if(!tip){tip=document.createElement('div');tip.className='tip';document.body.appendChild(tip);}
+      tip.innerHTML='<b>'+row.dataset.k+'</b> '+row.dataset.p+'<br>Fund '+row.dataset.f+'% · category '+row.dataset.c+'%';
+      tip.style.left=Math.min(e.clientX+14,window.innerWidth-230)+'px';
+      tip.style.top=(e.clientY+16)+'px';
+    });
+    host.addEventListener('mouseleave',hide);
+    function hide(){if(tip){tip.remove();tip=null;}}
+  }
 
-  var tip=null;
-  host.addEventListener('mousemove',function(e){
-    var row=e.target.closest('.bbrow'); if(!row){hide();return;}
-    if(!tip){tip=document.createElement('div');tip.className='tip';document.body.appendChild(tip);}
-    tip.innerHTML='<b>'+row.dataset.k+'</b> '+row.dataset.p+'<br>Fund '+row.dataset.f+'% · category '+row.dataset.c+'%';
-    tip.style.left=Math.min(e.clientX+14,window.innerWidth-230)+'px';
-    tip.style.top=(e.clientY+16)+'px';
-  });
-  host.addEventListener('mouseleave',hide);
-  function hide(){if(tip){tip.remove();tip=null;}}
-
+  /* ---- category cards ---- */
   var CATS=[
-    {n:'Direct-Thematic',c:184,a:22.4,q:[46,46,46,46]},
-    {n:'Regular-Thematic',c:181,a:20.1,q:[45,45,45,46]},
-    {n:'Direct-Aggressive Hybrid Fund',c:42,a:16.1,q:[11,10,11,10]},
-    {n:'Regular-Aggressive Hybrid Fund',c:42,a:14.1,q:[11,10,11,10]},
-    {n:'Direct-Multi Asset Allocation',c:35,a:18.9,q:[9,9,9,8]},
-    {n:'Regular-Multi Asset Allocation',c:35,a:18.0,q:[9,9,9,8]},
-    {n:'Direct-Index Funds',c:128,a:15.7,q:[32,32,32,32]},
-    {n:'Direct-Arbitrage Fund',c:3,a:6.4,q:null}
+    {n:'Direct-Thematic',c:184,a:22.4,q:[46,46,46,46]},{n:'Regular-Thematic',c:181,a:20.1,q:[45,45,45,46]},
+    {n:'Direct-Aggressive Hybrid Fund',c:42,a:16.1,q:[11,10,11,10]},{n:'Regular-Aggressive Hybrid Fund',c:42,a:14.1,q:[11,10,11,10]},
+    {n:'Direct-Multi Asset Allocation',c:35,a:18.9,q:[9,9,9,8]},{n:'Regular-Multi Asset Allocation',c:35,a:18.0,q:[9,9,9,8]},
+    {n:'Direct-Index Funds',c:128,a:15.7,q:[32,32,32,32]},{n:'Direct-Arbitrage Fund',c:3,a:6.4,q:null}
   ];
-  var g=document.getElementById('catGrid'); var ch='';
-  CATS.forEach(function(d){
-    ch+='<div class="card" style="grid-column:span 3"><div class="chead"><div><h3 style="font-size:13.5px">'+d.n+'</h3>'
-      +'<p class="cs" style="margin:2px 0 0">'+d.c+' funds rated</p></div></div>'
-      +'<div class="st" style="margin-bottom:12px"><div class="l">3Y rolling average</div><div class="v tnum" style="font-size:23px">'+d.a.toFixed(1)+'%</div></div>';
-    if(d.q){
-      ch+='<div class="qbar" style="height:22px">'
-        +'<span class="sq1" style="flex:'+d.q[0]+'">'+d.q[0]+'</span>'
-        +'<span class="sq2" style="flex:'+d.q[1]+'">'+d.q[1]+'</span>'
-        +'<span class="sq3" style="flex:'+d.q[2]+'">'+d.q[2]+'</span>'
-        +'<span class="sq4" style="flex:'+d.q[3]+'">'+d.q[3]+'</span></div>';
-    } else {
-      ch+='<div style="background:var(--card-2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:11.5px;color:var(--muted);margin:4px 0 12px">Fewer than 4 funds — left unranked by the workbook rule</div>';
-    }
-    ch+='<button class="lnk">Open category →</button></div>';
-  });
-  g.innerHTML=ch;
+  var g=document.getElementById('catGrid');
+  if(g){
+    var ch='';
+    CATS.forEach(function(d){
+      ch+='<div class="card" style="grid-column:span 3"><div class="chead"><div><h3 style="font-size:13.5px">'+d.n+'</h3>'
+        +'<p class="cs" style="margin:2px 0 0">'+d.c+' funds rated</p></div></div>'
+        +'<div class="st" style="margin-bottom:12px"><div class="l">3Y rolling average</div><div class="v tnum" style="font-size:23px">'+d.a.toFixed(1)+'%</div></div>';
+      if(d.q){
+        ch+='<div class="qbar" style="height:22px">'
+          +'<span class="sq1" style="flex:'+d.q[0]+'">'+d.q[0]+'</span><span class="sq2" style="flex:'+d.q[1]+'">'+d.q[1]+'</span>'
+          +'<span class="sq3" style="flex:'+d.q[2]+'">'+d.q[2]+'</span><span class="sq4" style="flex:'+d.q[3]+'">'+d.q[3]+'</span></div>';
+      } else {
+        ch+='<div style="background:var(--card-2);border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:11.5px;color:var(--muted);margin:4px 0 12px">Fewer than 4 ranked funds — left unranked by the workbook rule</div>';
+      }
+      ch+='<button class="lnk">Open category →</button></div>';
+    });
+    g.innerHTML=ch;
+  }
 
+  /* ---- screen routing ---- */
   var SCREENS=['dash','insights','funds','fund','cats','move','wb','upload','admin'];
   function show(id){
     SCREENS.forEach(function(s){
       var el=document.getElementById('s-'+s); if(el) el.hidden=(s!==id);
     });
-    document.querySelectorAll('.nav').forEach(function(b){
+    document.querySelectorAll('.ritem[data-screen]').forEach(function(b){
       if(b.dataset.screen===id) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
     });
     window.scrollTo({top:0,behavior:'instant'});
   }
-  document.querySelectorAll('.nav[data-screen]').forEach(function(b){
+  document.querySelectorAll('.ritem[data-screen]').forEach(function(b){
     b.addEventListener('click',function(){show(b.dataset.screen);});
   });
   document.querySelectorAll('[data-goto]').forEach(function(b){
@@ -923,25 +1035,49 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     tr.style.cursor='pointer';
     tr.addEventListener('click',function(){show('fund');});
   });
-  var tc=document.getElementById('traceCell');
 
+  /* ---- rail pin ---- */
+  var rail=document.getElementById('rail'), pin=document.getElementById('pinBtn');
+  pin.addEventListener('click',function(){
+    var on=rail.classList.toggle('pinned');
+    pin.setAttribute('aria-pressed',on?'true':'false');
+    pin.querySelector('.rlab').textContent=on?'Collapse menu':'Keep menu open';
+  });
+
+  /* ---- mode switch ---- */
   var R=document.getElementById('vwResearch'), W=document.getElementById('vwWorkbook');
   R.addEventListener('click',function(){
     R.setAttribute('aria-pressed','true');W.setAttribute('aria-pressed','false');
-    document.getElementById('navResearch').hidden=false;document.getElementById('navWorkbook').hidden=true;show('dash');
+    document.getElementById('navResearch').hidden=false;document.getElementById('navWorkbook').hidden=true;
+    rail.classList.remove('pinned');pin.setAttribute('aria-pressed','false');
+    pin.querySelector('.rlab').textContent='Keep menu open';
+    show('dash');
   });
   W.addEventListener('click',function(){
     W.setAttribute('aria-pressed','true');R.setAttribute('aria-pressed','false');
-    document.getElementById('navWorkbook').hidden=false;document.getElementById('navResearch').hidden=true;show('wb');
+    document.getElementById('navWorkbook').hidden=false;document.getElementById('navResearch').hidden=true;
+    rail.classList.add('pinned');pin.setAttribute('aria-pressed','true');
+    pin.querySelector('.rlab').textContent='Collapse menu';
+    show('wb');
   });
 
+  /* ---- scope bar ---- */
+  var st=document.getElementById('scopeToggle'), sb=document.getElementById('scopeBody'), sc=document.getElementById('scopeChev');
+  st.addEventListener('click',function(){
+    var open=sb.hidden;
+    sb.hidden=!open;
+    st.setAttribute('aria-expanded',open?'true':'false');
+    sc.textContent=open?'Collapse ▴':'Refine ▾';
+  });
+
+  /* ---- theme ---- */
   var tb=document.getElementById('themeBtn');
   tb.addEventListener('click',function(){
     var dark=document.documentElement.getAttribute('data-theme')==='dark';
     document.documentElement.setAttribute('data-theme',dark?'light':'dark');
-    tb.textContent=dark?'Dark theme':'Light theme';
   });
 
+  /* ---- chips ---- */
   document.querySelectorAll('.pivot').forEach(function(grp){
     grp.addEventListener('click',function(e){
       var b=e.target.closest('.chip'); if(!b)return;

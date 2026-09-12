@@ -1,5 +1,6 @@
 import { runExportUrl } from "@/api/exports";
-import { getResearchInsights, researchExportUrl, type Insight } from "@/api/research";
+import type { ReactNode } from "react";
+import { getResearchInsights, researchExportUrl, scopeParam, type Insight, type Scope } from "@/api/research";
 import { Button, EmptyState, ExportMenu } from "@/components";
 import { formatCount } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
@@ -12,8 +13,8 @@ function sectionTitle(key: string): string {
   return key.replace(/[_-]+/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
 
-export function InsightsPage({ actions, runId }: { actions: ResearchActions; runId: string | null }) {
-  const data = useAsync(() => getResearchInsights(), []);
+export function InsightsPage({ actions, runId, scope, scopeBar }: { actions: ResearchActions; runId: string | null; scope?: Scope; scopeBar?: ReactNode; }) {
+  const data = useAsync(() => getResearchInsights(undefined, scope), [scopeParam(scope)]);
   if (data.status === "error") return <EmptyState tone="error" title="Could not compute the insights" description={data.error} action={<Button onClick={data.reload}>Retry</Button>} />;
   if (data.status === "loading" && !data.data) return <Skeleton rows={3} />;
   const body = data.data!;
@@ -29,13 +30,14 @@ export function InsightsPage({ actions, runId }: { actions: ResearchActions; run
         actions={
           <ExportMenu
             items={[
-              { label: "Insights brief (xlsx)", url: researchExportUrl("insights", "xlsx"), hint: "Every card with its sentence and rows" },
-              { label: "Insights brief (csv)", url: researchExportUrl("insights", "csv") },
+              { label: "Insights brief (xlsx)", url: researchExportUrl("insights", "xlsx", {}, scope), hint: "Every card with its sentence and rows, in scope" },
+              { label: "Insights brief (csv)", url: researchExportUrl("insights", "csv", {}, scope) },
               ...(runId ? [{ label: "Analysis report (PDF)", url: runExportUrl(runId, "pdf"), hint: "Includes the insights brief" }] : []),
             ]}
           />
         }
       />
+      {scopeBar}
       {body.sections.map((section, i) => (
         <section key={section} aria-label={body.sectionLabels?.[section] ?? sectionTitle(section)}>
           <SectionHeader icon={SECTION_ICONS[i % SECTION_ICONS.length]} title={body.sectionLabels?.[section] ?? sectionTitle(section)} sub={`${bySection.get(section)?.length ?? 0} cards`} />

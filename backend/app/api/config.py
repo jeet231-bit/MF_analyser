@@ -15,6 +15,7 @@ class DashboardConfigOut(BaseModel):
     label_overrides: dict[str, str]
     number_grouping: str
     number_decimals: int
+    viewer_name: str | None = None
 
 
 @router.get("", response_model=DashboardConfigOut)
@@ -27,4 +28,5 @@ def get_config() -> DashboardConfigOut:
         label_overrides=cfg.label_overrides,
         number_grouping=cfg.number_format.grouping,
         number_decimals=cfg.number_format.decimals,
+        viewer_name=(cfg.viewer or {}).get("defaultName") or None,
     )

@@ -52,6 +52,8 @@ class ComputedInsight:
     problems: list[str] = field(default_factory=list)
     status: str = "ok"  # ok | empty | unavailable | problem
     note: str | None = None  # why an unavailable or empty card shows a placeholder
+    context: dict[str, Any] = field(default_factory=dict)  # the sentence placeholders, formatted
+    numbers: dict[str, Any] = field(default_factory=dict)  # the same, raw, for zero tests
 
 
 # ---- formatting -------------------------------------------------------------------------
@@ -471,9 +473,12 @@ def compute_insight(
             )
             status = "problem"
         sentence = ""
-    return _result(
+    out = _result(
         spec, sentence, rows, count, rated_total, drill, measure_key, problems, status, note
     )
+    out.context = {k: v for k, v in ctx.items() if k != "_n"}
+    out.numbers = dict(numbers)
+    return out
 
 
 def _entity_row(

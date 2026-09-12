@@ -38,6 +38,9 @@ class DashboardConfig(BaseModel):
     # The semantic map for the research views; validated by app.research.semantic, not here,
     # so a broken map degrades to a "not configured" state instead of breaking every page.
     research: Any | None = None
+    # Interim, until sign-in exists: a default first name for the greeting; a per-browser
+    # setting in Admin overrides it. Dropped when the name derives from the signed-in email.
+    viewer: dict[str, Any] | None = None
 
     model_config = {"populate_by_name": True, "extra": "ignore"}
 

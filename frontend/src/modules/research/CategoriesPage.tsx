@@ -1,14 +1,14 @@
-import { useState } from "react";
-import { getResearchCategories, researchExportUrl } from "@/api/research";
+import { useState, type ReactNode } from "react";
+import { getResearchCategories, researchExportUrl, scopeParam, type Scope } from "@/api/research";
 import { Button, EmptyState, ExportMenu, Select } from "@/components";
 import { formatCount } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
 import type { ResearchActions } from "./types";
 import { ConfidentialFooter, LinkButton, Narrative, NotConfigured, PageHead, QuartileBar, Skeleton } from "./ui";
 
-export function CategoriesPage({ actions, footer }: { actions: ResearchActions; footer?: string | null }) {
+export function CategoriesPage({ actions, footer, scope, scopeBar }: { actions: ResearchActions; footer?: string | null; scope?: Scope; scopeBar?: ReactNode; }) {
   const [measure, setMeasure] = useState<string | undefined>(undefined);
-  const data = useAsync(() => getResearchCategories(measure), [measure]);
+  const data = useAsync(() => getResearchCategories(measure, scope), [measure, scopeParam(scope)]);
   if (data.status === "error") return <EmptyState tone="error" title="Could not load the categories" description={data.error} action={<Button onClick={data.reload}>Retry</Button>} />;
   if (!data.data) return <Skeleton rows={2} />;
   const body = data.data;
@@ -31,13 +31,14 @@ export function CategoriesPage({ actions, footer }: { actions: ResearchActions; 
             </Select>
             <ExportMenu
               items={[
-                { label: "Categories (csv)", url: researchExportUrl("categories", "csv", { measure: body.measure ?? undefined }) },
-                { label: "Categories (xlsx)", url: researchExportUrl("categories", "xlsx", { measure: body.measure ?? undefined }) },
+                { label: "Categories (csv)", url: researchExportUrl("categories", "csv", { measure: body.measure ?? undefined }, scope) },
+                { label: "Categories (xlsx)", url: researchExportUrl("categories", "xlsx", { measure: body.measure ?? undefined }, scope) },
               ]}
             />
           </>
         }
       />
+      {scopeBar}
       <Narrative text={body.narrative} className="mb-4" />
       <div className="grid gap-[18px] md:grid-cols-12">
         {body.rows.map((c) => (

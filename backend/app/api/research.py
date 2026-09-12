@@ -19,8 +19,15 @@ from app.exports.csv_export import write_csv
 from app.exports.xlsx import write_workbook
 from app.research import export as rexport
 from app.research import insights as engine
+from app.research import scope as scoping
 from app.research import snapshots as snaps
-from app.research.insights import entity_sub, fmt_count, fmt_measure, render_sentences
+from app.research.insights import (
+    entity_sub,
+    fmt_count,
+    fmt_measure,
+    render_sentence,
+    render_sentences,
+)
 from app.research.semantic import MeasureSpec, parse_map
 from app.research.snapshots import Snapshot
 from app.research.table import (
@@ -28,6 +35,7 @@ from app.research.table import (
     NotConfigured,
     ResearchTable,
     get_table,
+    register_cache,
     resolve_for_version,
 )
 from app.storage import diffs, validation, workbooks
@@ -76,9 +84,18 @@ def _pick_version(session: Session, version_id: str | None) -> WorkbookVersion |
     return None
 
 
+def _scope(raw: str | None) -> scoping.Scope:
+    try:
+        return scoping.parse_scope(raw)
+    except scoping.ScopeError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+
+
 def _context(
-    session: Session, version_id: str | None, run_id: str | None
+    session: Session, version_id: str | None, run_id: str | None, scope: str | None = None
 ) -> tuple[WorkbookVersion, Run, ResearchTable] | dict[str, Any]:
+    """The version, run and research table a request works on. With a ``scope`` the table is
+    the scoped view; ``get_table`` still gives the full one."""
     version = _pick_version(session, version_id)
     if version is None:
         return _not_configured(
@@ -102,15 +119,33 @@ def _context(
         table = get_table(session, version, run)
     except NotConfigured as exc:
         return _not_configured(exc.problems, version)
+    sc = _scope(scope)
+    if not sc.is_empty:
+        table = scoping.apply_scope(table, sc)
     return version, run, table
 
 
-def _status(version: WorkbookVersion, run: Run, table: ResearchTable) -> dict[str, Any]:
+def _base(
+    session: Session, version: WorkbookVersion, run: Run, table: ResearchTable
+) -> ResearchTable:
+    return table if not table.scope_key else get_table(session, version, run)
+
+
+def _status(
+    version: WorkbookVersion, run: Run, table: ResearchTable, base: ResearchTable | None = None
+) -> dict[str, Any]:
+    sc = scoping.parse_scope(table.scope_key)
     return {
         "configured": True,
         "problems": table.resolved.problems,
         "version_id": version.id,
         "run_id": run.id,
+        "scope": {
+            "key": table.scope_key,
+            "applied": not sc.is_empty,
+            "description": scoping.describe(base or table, sc),
+            "value": sc.model_dump(),
+        },
         "version": {
             "id": version.id,
             "filename": version.filename,
@@ -250,7 +285,11 @@ def _repair_keys(
 
 
 def compute_movement(
-    session: Session, base: WorkbookVersion, target: WorkbookVersion, table_to: ResearchTable
+    session: Session,
+    base: WorkbookVersion,
+    target: WorkbookVersion,
+    table_to: ResearchTable,
+    all_keys: set[str] | None = None,
 ) -> dict[str, Any]:
     """Rank and quartile movement from the base version's snapshot to the target's table."""
     if run_store.baseline_run(session, base.id) is None:
@@ -303,8 +342,9 @@ def compute_movement(
                 "note": repairs.get(e.key),
             }
         )
+    present = all_keys if all_keys is not None else set(table_to.by_key)
     for k, before in snap_from.rows.items():
-        if k not in table_to.by_key:
+        if k not in present:
             exits.append({"key": k, "label": before.label, "category": before.category})
     up = [m for m in movers if m["delta"] > 0]
     down = [m for m in movers if m["delta"] < 0]
@@ -384,6 +424,45 @@ def _coverage_since(table: ResearchTable) -> str | None:
         if value is not None
         else None
     )
+
+
+def _coverage_ctx(base: ResearchTable, as_of: str | None) -> dict[str, Any]:
+    """The universe and coverage vocabulary, always over the full table."""
+    u = base.summary
+    return _numbers(
+        total=u["total"],
+        rated=u["rated"],
+        unrated=u["total"] - u["rated"],
+        categories=u["categories"],
+        unranked=u["unranked_categories"],
+        unranked_below=base.map.quartileRule.unrankedBelow,
+        unrated_small=u["unrated_small_categories"],
+        unrated_other=u["unrated_missing_data"],
+        outside=u.get("outside_universe", 0),
+        unrated_young=u.get("unrated_young", 0),
+        unrated_gap=u.get("unrated_gap", 0),
+        unrated_unknown=u.get("unrated_unknown", 0),
+        coverage_since=_coverage_since(base),
+        as_of=as_of,
+    )
+
+
+_computed_cache: dict[tuple[str, str, str], list[engine.ComputedInsight]] = {}
+register_cache(_computed_cache)
+
+
+def _computed(
+    session: Session, table: ResearchTable, section: str | None = None
+) -> list[engine.ComputedInsight]:
+    """Every insight on this (possibly scoped) table, cached per version, run and scope."""
+    key = (table.version_id, table.run_id, table.scope_key)
+    hit = _computed_cache.get(key)
+    if hit is None:
+        hit = engine.compute_all(table, _versions_for_insights(session, table))
+        if len(_computed_cache) >= 24:
+            _computed_cache.pop(next(iter(_computed_cache)))
+        _computed_cache[key] = hit
+    return [c for c in hit if section is None or c.section == section]
 
 
 def _numbers(**values: Any) -> dict[str, Any]:
@@ -525,14 +604,18 @@ def research_summary(
     measure: Annotated[
         str | None, Query(description="return measure for the category averages")
     ] = None,
+    scope: Annotated[str | None, Query(description="the global scope, as JSON")] = None,
 ) -> dict[str, Any]:
-    ctx = _context(session, version_id, run_id)
+    ctx = _context(session, version_id, run_id, scope)
     if isinstance(ctx, dict):
         return ctx
     version, run, table = ctx
-    out = _status(version, run, table)
+    base = _base(session, version, run, table)
+    out = _status(version, run, table, base)
     out["as_of"] = table.as_of
     out["universe"] = table.summary
+    out["universe_all"] = base.summary
+    out["scope_options"] = scoping.options(base)
     out["quartiles"] = {str(k): v for k, v in table.summary["quartiles"].items()}
     returns = [m for m in table.resolved.measure_specs() if m.role == "return"]
     chosen = next((m for m in returns if m.key == measure), returns[0] if returns else None)
@@ -545,7 +628,9 @@ def research_summary(
                 "count": c.rated,
             }
             for c in table.categories.values()
-            if c.means.get(chosen.key) is not None and not c.unranked
+            if c.means.get(chosen.key) is not None
+            and not c.unranked
+            and c.rated >= table.map.minGroupCount
         ]
         rows.sort(key=lambda r: -r["value"])
         out["category_averages"] = {
@@ -553,6 +638,7 @@ def research_summary(
             "label": chosen.label,
             "rows": rows[:8],
             "total": len(rows),
+            "minGroupCount": table.map.minGroupCount,
         }
     else:
         out["category_averages"] = None
@@ -575,7 +661,9 @@ def research_summary(
     }
     # Movement headline vs the previous activated version.
     previous = _previous_version(session, version)
-    movement = compute_movement(session, previous, version, table) if previous else None
+    movement = (
+        compute_movement(session, previous, version, table, set(base.by_key)) if previous else None
+    )
     available = bool(movement and movement.get("available"))
     out["movement"] = (
         {
@@ -605,23 +693,63 @@ def research_summary(
         for s in history
     ]
     u = table.summary
-    universe_ctx = _numbers(
-        total=u["total"],
-        rated=u["rated"],
-        unrated=u["total"] - u["rated"],
-        categories=u["categories"],
-        unranked=u["unranked_categories"],
-        unranked_below=table.map.quartileRule.unrankedBelow,
-        unrated_small=u["unrated_small_categories"],
-        unrated_other=u["unrated_missing_data"],
-        outside=u.get("outside_universe", 0),
-        unrated_young=u.get("unrated_young", 0),
-        unrated_gap=u.get("unrated_gap", 0),
-        unrated_unknown=u.get("unrated_unknown", 0),
-        coverage_since=_coverage_since(table),
-        as_of=snaps.date_label(current) if current else None,
-    )
+    universe_ctx = _coverage_ctx(base, snaps.date_label(current) if current else None)
     out["universe_narrative"] = render_sentences(table.map.narrative("universe"), universe_ctx)
+    out["coverage_narrative"] = render_sentences(table.map.narrative("coverage"), universe_ctx)
+    # The executive summary and the KPI tiles read the scoped numbers and the computed insights.
+    computed = _computed(session, table)
+    exec_ctx = _numbers(
+        rated=u["rated"],
+        total=u["total"],
+        q1=u["quartiles"].get(1, 0),
+        ranked_categories=u.get("ranked_categories", 0),
+        categories=u["categories"],
+        moved=movement["moved"] if available and movement else None,
+        up=movement["up"] if available and movement else None,
+        down=movement["down"] if available and movement else None,
+        repairs=len(movement["repairs"]) if available and movement else None,
+        checked=out["validation"]["checked"] if out.get("validation") else None,
+        matched=out["validation"]["matched"] if out.get("validation") else None,
+        mismatched=(out["validation"]["checked"] - out["validation"]["matched"])
+        if out.get("validation")
+        else None,
+    )
+    exec_ctx["q1_pct"] = (
+        f"{100 * u['quartiles'].get(1, 0) / u['rated']:.1f}%" if u["rated"] else None
+    )
+    v = out.get("validation")
+    exec_ctx["agreement"] = (
+        f"{100 * v['matched'] / v['checked']:.2f}%" if v and v["checked"] else None
+    )
+    exec_ctx["previous"] = _previous_label(movement) if available and movement else None
+    exec_ctx["current"] = snaps.date_label(current) if current else None
+    exec_ctx["as_of"] = exec_ctx["current"]
+    exec_ctx["scope"] = " · ".join(out["scope"]["description"])
+    exec_ctx["ins"] = {c.key: c.context for c in computed}
+    for c in computed:
+        for path, value in c.numbers.items():
+            exec_ctx["_n"][f"ins.{c.key}.{path}"] = value
+        exec_ctx["_n"][f"ins.{c.key}.count"] = c.count
+    out["executive"] = render_sentences(table.map.narrative("executive"), exec_ctx)
+    out["kpis"] = [
+        {
+            "label": k.label,
+            "value": value,
+            "note": render_sentence(k.note, exec_ctx) if k.note else None,
+            "tone": k.tone,
+        }
+        for k in table.map.kpis
+        if (value := render_sentence(k.value, exec_ctx)) is not None
+    ]
+    dist_ctx = _numbers(
+        rated=u["rated"],
+        ranked_categories=u.get("ranked_categories", 0),
+        categories=u["categories"],
+        median_category=u.get("median_category_rated", 0),
+        largest_category_rated=(u.get("largest_category") or {}).get("rated", 0),
+    )
+    dist_ctx["largest_category"] = (u.get("largest_category") or {}).get("key")
+    out["distribution_narrative"] = render_sentences(table.map.narrative("distribution"), dist_ctx)
     dashboard_ctx = _numbers(
         moved=movement["moved"] if available and movement else None,
         up=movement["up"] if available and movement else None,
@@ -719,12 +847,13 @@ def research_entities(
     group_by: Annotated[
         str | None, Query(alias="groupBy", description="dimension key, or <measure>_band")
     ] = None,
+    scope: Annotated[str | None, Query()] = None,
 ) -> dict[str, Any]:
-    ctx = _context(session, version_id, run_id)
+    ctx = _context(session, version_id, run_id, scope)
     if isinstance(ctx, dict):
         return ctx
     version, run, table = ctx
-    out = _status(version, run, table)
+    out = _status(version, run, table, _base(session, version, run, table))
     rank_key = table.primary_key("rank")
     rows = _filter_entities(table, q, category, amc, plan, quartile, keys)
     sort_key = sort if sort and sort in table.resolved.measures else rank_key
@@ -854,12 +983,13 @@ def research_categories(
     version_id: Annotated[str | None, Query()] = None,
     run_id: Annotated[str | None, Query()] = None,
     measure: Annotated[str | None, Query()] = None,
+    scope: Annotated[str | None, Query()] = None,
 ) -> dict[str, Any]:
-    ctx = _context(session, version_id, run_id)
+    ctx = _context(session, version_id, run_id, scope)
     if isinstance(ctx, dict):
         return ctx
     version, run, table = ctx
-    out = _status(version, run, table)
+    out = _status(version, run, table, _base(session, version, run, table))
     rows, chosen = _category_rows(table, measure)
     spec = table.map.measure(chosen) if chosen else None
     min_group = table.map.minGroupCount
@@ -915,19 +1045,21 @@ def research_movement(
     session: SessionDep,
     version_id: Annotated[str | None, Query(alias="to")] = None,
     from_id: Annotated[str | None, Query(alias="from")] = None,
+    scope: Annotated[str | None, Query()] = None,
 ) -> dict[str, Any]:
-    ctx = _context(session, version_id, None)
+    ctx = _context(session, version_id, None, scope)
     if isinstance(ctx, dict):
         return ctx
     version, run, table = ctx
-    out = _status(version, run, table)
+    full = _base(session, version, run, table)
+    out = _status(version, run, table, full)
     base = _pick_version(session, from_id) if from_id else _previous_version(session, version)
     if base is None or base.id == version.id:
         out.update(
             {"available": False, "reason": "no earlier version with a baseline run to compare with"}
         )
         return out
-    movement = compute_movement(session, base, version, table)
+    movement = compute_movement(session, base, version, table, set(full.by_key))
     out.update(movement)
     current = _snapshot_of(session, version, table)
     by_id = {s.version_id: s for s in snaps.activated_snapshots(session)}
@@ -1001,14 +1133,14 @@ def research_insights(
     version_id: Annotated[str | None, Query()] = None,
     run_id: Annotated[str | None, Query()] = None,
     section: Annotated[str | None, Query()] = None,
+    scope: Annotated[str | None, Query()] = None,
 ) -> dict[str, Any]:
-    ctx = _context(session, version_id, run_id)
+    ctx = _context(session, version_id, run_id, scope)
     if isinstance(ctx, dict):
         return ctx
     version, run, table = ctx
-    out = _status(version, run, table)
-    versions = _versions_for_insights(session, table)
-    computed = engine.compute_all(table, versions, section)
+    out = _status(version, run, table, _base(session, version, run, table))
+    computed = _computed(session, table, section)
     sections: list[str] = []
     for i in table.map.insights:
         if i.section not in sections:
@@ -1060,8 +1192,9 @@ def export_entities(
     keys: Annotated[list[str] | None, Query()] = None,
     sort: Annotated[str | None, Query()] = None,
     dir: Annotated[Literal["asc", "desc"] | None, Query()] = None,  # noqa: A002
+    scope: Annotated[str | None, Query()] = None,
 ):
-    ctx = _context(session, version_id, run_id)
+    ctx = _context(session, version_id, run_id, scope)
     if isinstance(ctx, dict):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -1098,8 +1231,9 @@ def export_categories(
     version_id: Annotated[str | None, Query()] = None,
     run_id: Annotated[str | None, Query()] = None,
     measure: Annotated[str | None, Query()] = None,
+    scope: Annotated[str | None, Query()] = None,
 ):
-    ctx = _context(session, version_id, run_id)
+    ctx = _context(session, version_id, run_id, scope)
     if isinstance(ctx, dict):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -1117,8 +1251,9 @@ def export_movement(
     format: Annotated[Literal["csv", "xlsx"], Query()],  # noqa: A002
     version_id: Annotated[str | None, Query(alias="to")] = None,
     from_id: Annotated[str | None, Query(alias="from")] = None,
+    scope: Annotated[str | None, Query()] = None,
 ):
-    ctx = _context(session, version_id, None)
+    ctx = _context(session, version_id, None, scope)
     if isinstance(ctx, dict):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -1128,7 +1263,9 @@ def export_movement(
     base = _pick_version(session, from_id) if from_id else _previous_version(session, version)
     if base is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "no earlier version to compare with")
-    movement = compute_movement(session, base, version, table)
+    movement = compute_movement(
+        session, base, version, table, set(_base(session, version, run, table).by_key)
+    )
     if not movement.get("available"):
         raise HTTPException(
             status.HTTP_409_CONFLICT, movement.get("reason", "movement unavailable")
@@ -1151,15 +1288,16 @@ def export_insights(
     format: Annotated[Literal["csv", "xlsx"], Query()],  # noqa: A002
     version_id: Annotated[str | None, Query()] = None,
     run_id: Annotated[str | None, Query()] = None,
+    scope: Annotated[str | None, Query()] = None,
 ):
-    ctx = _context(session, version_id, run_id)
+    ctx = _context(session, version_id, run_id, scope)
     if isinstance(ctx, dict):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             {"message": "research views are not configured", "problems": ctx["problems"]},
         )
     version, run, table = ctx
-    computed = engine.compute_all(table, _versions_for_insights(session, table))
+    computed = _computed(session, table)
     view = rexport.insights_view(session, version, run, load_dashboard_config(), computed)
     return _send(view, format, f"insights-{version.id[:8]}")
 
@@ -1370,7 +1508,7 @@ def compute_insights_for_report(
         table = get_table(session, version, run)
     except NotConfigured:
         return None
-    return engine.compute_all(table, _versions_for_insights(session, table))
+    return _computed(session, table)
 
 
 __all__ = ["router", "compute_movement", "compute_insights_for_report", "math"]

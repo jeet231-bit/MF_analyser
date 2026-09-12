@@ -1,14 +1,39 @@
+import type { ReactNode } from "react";
 import { runExportUrl } from "@/api/exports";
-import { getResearchEntities, researchExportUrl, type ResearchSummary } from "@/api/research";
+import { getResearchEntities, researchExportUrl, type ResearchSummary, type Scope } from "@/api/research";
 import { Button, EmptyState, ExportMenu } from "@/components";
+import { cn } from "@/lib/cn";
 import { formatCount, formatTimestamp } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
-import { formatRankDelta } from "./format";
+import { Icon } from "@/modules/shell/icons";
 import type { ResearchActions } from "./types";
-import { BarList, ConfidentialFooter, Hero, HeroTiles, LinkButton, MoverRow, Narrative, NotConfigured, PageHead, QuartileBar, QuartileLegend, QuartilePill, RCard, Skeleton } from "./ui";
+import { BarList, ConfidentialFooter, LinkButton, MoverRow, Narrative, NotConfigured, PageHead, QuartileBar, QuartileLegend, QuartilePill, RCard, Skeleton } from "./ui";
 import { useWatchlist } from "./useWatchlist";
 
-export function DashboardPage({ summary, actions, reload }: { summary: ReturnType<typeof useAsync<ResearchSummary>>; actions: ResearchActions; reload?: () => void }) {
+const KPI_TONES: Record<string, string> = {
+  q1: "bg-q1",
+  q2: "bg-q2",
+  accent: "bg-accent",
+  violet: "bg-violet",
+  positive: "bg-positive",
+  warning: "bg-warning",
+};
+
+export function DashboardPage({
+  summary,
+  scope,
+  scopeBar,
+  greeting,
+  actions,
+  reload,
+}: {
+  summary: ReturnType<typeof useAsync<ResearchSummary>>;
+  scope: Scope;
+  scopeBar: ReactNode;
+  greeting: string;
+  actions: ResearchActions;
+  reload?: () => void;
+}) {
   if (summary.status === "error") {
     return <EmptyState tone="error" title="Could not load the research summary" description={summary.error} action={<Button onClick={reload ?? summary.reload}>Retry</Button>} />;
   }
@@ -16,26 +41,28 @@ export function DashboardPage({ summary, actions, reload }: { summary: ReturnTyp
   const s = summary.data!;
   if (!s.configured) return <NotConfigured problems={s.problems} onOpenAdmin={actions.openAdmin} />;
   const u = s.universe!;
-  const q1 = s.quartiles?.["1"] ?? 0;
-  const movement = s.movement;
+  const all = s.universe_all ?? u;
   const asOf = s.history?.find((h) => h.id === s.version_id)?.date ?? s.history?.[s.history.length - 1]?.date ?? null;
+  const scopeText = (s.scope?.description ?? []).join(" · ");
+  const leaders = s.category_averages;
 
   return (
     <div>
       <PageHead
-        title="Research overview"
+        title={greeting}
         sub={
           <>
-            {asOf ? `Universe as of ${asOf} · ` : ""}
+            Fund research · {asOf ? `universe as of ${asOf} · ` : ""}
             {s.version?.filename} · recalculated {s.run ? formatTimestamp(s.run.created_at) : "—"}
           </>
         }
         actions={
           s.run_id && (
             <ExportMenu
+              label="Export brief"
               items={[
-                { label: "Funds (csv)", url: researchExportUrl("entities", "csv"), hint: "Every fund with its dimensions and measures" },
-                { label: "Insights brief (xlsx)", url: researchExportUrl("insights", "xlsx"), hint: "Every card with its sentence and rows" },
+                { label: "Insights brief (xlsx)", url: researchExportUrl("insights", "xlsx", {}, scope), hint: "Every card with its sentence and rows, in scope" },
+                { label: "Funds in scope (csv)", url: researchExportUrl("entities", "csv", {}, scope) },
                 { label: "Analysis report (PDF)", url: runExportUrl(s.run_id, "pdf"), hint: "Headline numbers, insights brief, changelog" },
               ]}
             />
@@ -43,25 +70,42 @@ export function DashboardPage({ summary, actions, reload }: { summary: ReturnTyp
         }
       />
 
-      <div className="mb-[18px] grid gap-[18px] md:grid-cols-12">
-        <Hero
-          className="md:col-span-4"
-          eyebrow="Rated universe"
-          big={formatCount(u.rated)}
-          bigSuffix={`of ${formatCount(u.total)}`}
-          sub={`funds across ${formatCount(u.categories)} categories · ${formatCount(u.complete)} with a complete record`}
-        >
-          <Narrative text={s.universe_narrative} onHero className="text-[12.5px]" />
-          <Narrative text={s.narrative} onHero className="text-[12.5px]" />
-          <HeroTiles
-            tiles={[
-              { value: formatCount(q1), label: "Top quartile" },
-              { value: movement ? formatCount(movement.moved) : "—", label: "Rank changes" },
-              { value: movement ? formatCount(movement.entries) : "—", label: "New funds" },
-            ]}
-          />
-        </Hero>
+      {scopeBar}
 
+      {s.executive && (
+        <section
+          aria-label="Executive summary"
+          className="mb-[18px] rounded-xl border border-hero-line px-[22px] py-5 text-hero-ink"
+          style={{ background: "linear-gradient(118deg, var(--hero-a) 0%, var(--hero) 62%)" }}
+        >
+          <div className="mb-[11px] flex items-center gap-[11px]">
+            <span className="grid h-[30px] w-[30px] flex-none place-items-center rounded-[10px] bg-hero-link/20 text-hero-link" aria-hidden>
+              <Icon name="spark" className="inline-block h-4 w-4 [&>svg]:h-full [&>svg]:w-full" />
+            </span>
+            <h2 className="m-0 font-heading text-[11.5px] font-bold uppercase tracking-[0.11em]">Executive summary</h2>
+            <span className="ml-auto whitespace-nowrap rounded-full border border-hero-line px-3 py-1 text-[11px] text-hero-muted">
+              {scopeText}
+              {asOf ? ` · as of ${asOf}` : ""}
+            </span>
+          </div>
+          <Narrative text={s.executive} onHero className="max-w-[88ch] text-[14.5px] leading-[1.62] text-hero-ink/85" />
+        </section>
+      )}
+
+      {s.kpis && s.kpis.length > 0 && (
+        <div className="mb-[18px] grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4" data-testid="kpi-row">
+          {s.kpis.map((k) => (
+            <div key={k.label} className="relative overflow-hidden rounded-xl border border-hairline bg-surface px-5 py-[19px]">
+              <span className={cn("absolute inset-x-0 top-0 h-[3px]", KPI_TONES[k.tone] ?? "bg-accent")} aria-hidden />
+              <div className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-muted">{k.label}</div>
+              <div className="tabular mt-1.5 font-heading text-[30px] font-semibold leading-[1.1] tracking-[-0.025em] text-ink">{k.value}</div>
+              {k.note && <div className="mt-1 text-xs text-muted">{k.note}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid gap-[18px] md:grid-cols-12">
         <RCard
           className="md:col-span-5"
           title="Quartile distribution"
@@ -70,95 +114,59 @@ export function DashboardPage({ summary, actions, reload }: { summary: ReturnTyp
         >
           <QuartileBar counts={s.quartiles ?? {}} className="mb-3 mt-1" />
           <QuartileLegend />
-          <p className="m-0 mt-3.5 text-xs text-muted">
-            {formatCount(u.unranked_categories)} of {formatCount(u.categories)} categories are left unranked by the workbook rule and show “--”; {formatCount(u.unrated_missing_data)} more funds are unrated because part of their composite is missing.
-          </p>
-        </RCard>
-
-        <RCard className="md:col-span-3">
-          <div className="text-[11.5px] font-medium text-muted">Engine agreement with Excel</div>
-          <div className="tabular mt-0.5 font-heading text-[27px] font-semibold tracking-[-0.02em] text-ink">
-            {s.validation && s.validation.checked > 0 ? `${((100 * s.validation.matched) / s.validation.checked).toFixed(2)}%` : "—"}
-          </div>
-          <div className="text-xs font-semibold text-positive">
-            {s.validation ? `${formatCount(s.validation.matched)} of ${formatCount(s.validation.checked)} cells` : "not validated"}
-          </div>
-          <div className="my-[15px] h-px bg-hairline" />
-          <dl className="m-0 flex flex-col gap-2 text-[12.5px]">
-            <div className="flex justify-between gap-2">
-              <dt className="text-muted">Last upload</dt>
-              <dd className="m-0 font-semibold text-ink">{s.version ? formatTimestamp(s.version.uploaded_at) : "—"}</dd>
+          <Narrative text={s.distribution_narrative} className="mt-4" />
+          {(u.median_category_rated !== undefined || u.largest_category) && (
+            <div className="mt-3.5 grid grid-cols-2 gap-2.5">
+              <div className="rounded-md border border-hairline bg-surface-lifted px-[13px] py-[11px]">
+                <div className="text-[11px] font-semibold text-muted">Median ranked category</div>
+                <div className="tabular mt-0.5 font-heading text-lg font-semibold text-ink">{formatCount(u.median_category_rated ?? 0)} funds</div>
+              </div>
+              <div className="rounded-md border border-hairline bg-surface-lifted px-[13px] py-[11px]" title={u.largest_category?.key}>
+                <div className="text-[11px] font-semibold text-muted">Largest category</div>
+                <div className="tabular mt-0.5 font-heading text-lg font-semibold text-ink">{formatCount(u.largest_category?.rated ?? 0)} funds</div>
+              </div>
             </div>
-            <div className="flex justify-between gap-2">
-              <dt className="text-muted">Validation</dt>
-              <dd className={`m-0 font-semibold ${s.validation?.anomalies ? "text-warning" : "text-ink"}`}>
-                {s.validation ? `${s.validation.status.replace(/_/g, " ")}${s.validation.anomalies ? ` · ${s.validation.anomalies} warnings` : ""}` : "—"}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-2">
-              <dt className="text-muted">Data findings</dt>
-              <dd className="m-0 font-semibold text-ink">{s.findings ? `${s.findings.open} open` : "—"}</dd>
-            </div>
-          </dl>
-          <LinkButton className="mt-3.5" onClick={actions.openAdmin}>
-            Open admin →
-          </LinkButton>
-        </RCard>
-      </div>
-
-      <div className="grid gap-[18px] md:grid-cols-12">
-        <RCard
-          className="md:col-span-5"
-          title="Biggest rank movers"
-          sub={movement ? `Composite rank vs version of ${movement.previous.date ?? movement.previous.filename}` : "Needs an earlier activated version"}
-          action={movement && <LinkButton onClick={actions.openMovement}>All {formatCount(movement.moved)} →</LinkButton>}
-        >
-          {movement && movement.top.length > 0 ? (
-            <div>
-              {movement.top.map((m) => (
-                <MoverRow
-                  key={m.key}
-                  name={m.label}
-                  context={[m.sub, m.category, m.cause === "repair" ? "repaired row" : null].filter(Boolean).join(" · ")}
-                  right={<div className="tabular font-heading text-sm font-semibold text-ink">{m.rankTo}</div>}
-                  delta={formatRankDelta(m.delta)}
-                  onClick={() => actions.openFund(m.key)}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="m-0 text-[13px] text-muted">{movement ? "No fund changed rank since the previous version." : "Movement appears once a second version has been activated."}</p>
           )}
         </RCard>
 
-        <RCard
-          className="md:col-span-4"
-          title="Category averages"
-          sub={s.category_averages ? `${s.category_averages.label} · top ${s.category_averages.rows.length} of ${s.category_averages.total}` : "No return measure configured"}
-          action={<LinkButton onClick={actions.openCategories}>All →</LinkButton>}
-        >
-          {s.category_averages && s.category_averages.rows.length > 0 ? (
-            <BarList rows={s.category_averages.rows.map((r) => ({ key: r.key, label: r.key, value: r.value, valueLabel: r.label }))} onSelect={(key) => actions.openFunds({ category: key })} />
-          ) : (
-            <p className="m-0 text-[13px] text-muted">Nothing to average yet.</p>
-          )}
-        </RCard>
+        {leaders && leaders.rows.length > 0 && (
+          <RCard
+            className="md:col-span-4"
+            title="Category leaders"
+            sub={`${leaders.label} average · categories with ${leaders.minGroupCount ?? 10}+ rated funds`}
+            action={<LinkButton onClick={actions.openCategories}>All {formatCount(u.categories)}</LinkButton>}
+          >
+            <BarList rows={leaders.rows.map((r) => ({ key: r.key, label: r.key, value: r.value, valueLabel: r.label }))} onSelect={(key) => actions.openFunds({ category: key })} />
+          </RCard>
+        )}
 
-        <WatchlistCard actions={actions} />
+        <WatchlistCard actions={actions} className={leaders && leaders.rows.length > 0 ? "md:col-span-3" : "md:col-span-7"} />
       </div>
+
+      {s.coverage_narrative && (
+        <div className="mt-[18px] flex flex-wrap items-center gap-2.5 rounded-lg border border-hairline bg-surface-lifted px-4 py-[11px] text-[12.5px] text-muted" data-testid="coverage-strip">
+          <span className="flex h-[7px] w-[170px] flex-none gap-0.5 overflow-hidden rounded-sm" role="img" aria-label={`Coverage: ${formatCount(all.rated)} rated, ${formatCount(all.total - all.rated)} not rated`}>
+            <span className="bg-q1" style={{ flex: all.rated }} />
+            <span className="bg-hairline" style={{ flex: Math.max(all.total - all.rated, 0) }} />
+          </span>
+          <Narrative text={s.coverage_narrative} className="min-w-0 flex-1 text-[12.5px] text-muted [&_b]:text-ink-2" />
+          <LinkButton onClick={actions.openAdmin}>Coverage detail →</LinkButton>
+        </div>
+      )}
       <ConfidentialFooter text={s.footer} />
     </div>
   );
 }
 
-function WatchlistCard({ actions }: { actions: ResearchActions }) {
+function WatchlistCard({ actions, className }: { actions: ResearchActions; className?: string }) {
   const { items, remove } = useWatchlist();
   const keys = items.map((i) => i.key);
-  const rows = useAsync(() => (keys.length ? getResearchEntities({ keys, size: 50 }) : Promise.resolve(null)), [keys.join(" ")]);
+  const rows = useAsync(() => (keys.length ? getResearchEntities({ keys, size: 50 }) : Promise.resolve(null)), [keys.join(" ")]);
   const byKey = new Map((rows.data?.rows ?? []).map((r) => [r.key, r]));
   const qKey = rows.data?.measures.find((m) => m.role === "quartile" && m.primary)?.key ?? rows.data?.measures.find((m) => m.role === "quartile")?.key;
+  const rankKey = rows.data?.measures.find((m) => m.role === "rank" && m.primary)?.key;
   return (
-    <RCard className="md:col-span-3" title="Watchlist" sub="Pinned by you, in this browser">
+    <RCard className={className} title="Watchlist" sub="Pinned by you, in this browser">
       {items.length === 0 ? (
         <p className="m-0 text-[13px] text-muted">Open a fund and choose “Watch” to pin it here.</p>
       ) : (
@@ -166,11 +174,12 @@ function WatchlistCard({ actions }: { actions: ResearchActions }) {
           {items.map((i) => {
             const row = byKey.get(i.key);
             const q = row && qKey ? row.measures[qKey] : null;
+            const rank = row && rankKey ? row.measures[rankKey] : null;
             return (
               <MoverRow
                 key={i.key}
                 name={i.label}
-                context={i.sub ?? row?.sub ?? undefined}
+                context={[i.sub ?? row?.sub, rank !== null && rank !== undefined ? `rank ${rank}` : null].filter(Boolean).join(" · ") || undefined}
                 right={
                   <>
                     <QuartilePill q={q ?? null} />
@@ -185,6 +194,9 @@ function WatchlistCard({ actions }: { actions: ResearchActions }) {
           })}
         </div>
       )}
+      <LinkButton className="mt-3" onClick={() => actions.openFunds({})}>
+        Add a fund →
+      </LinkButton>
     </RCard>
   );
 }

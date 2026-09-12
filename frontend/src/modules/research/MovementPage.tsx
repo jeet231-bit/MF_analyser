@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { getResearchMovement, researchExportUrl, type Mover } from "@/api/research";
+import { useState, type ReactNode } from "react";
+import { getResearchMovement, researchExportUrl, scopeParam, type Mover, type Scope } from "@/api/research";
 import { Button, EmptyState, ExportMenu, Select } from "@/components";
 import { formatCount } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
@@ -7,9 +7,9 @@ import { formatRankDelta } from "./format";
 import type { ResearchActions } from "./types";
 import { ConfidentialFooter, MoverRow, Narrative, Note, NotConfigured, PageHead, QuartilePill, RCard, Skeleton, StatCard } from "./ui";
 
-export function MovementPage({ actions, footer }: { actions: ResearchActions; footer?: string | null }) {
+export function MovementPage({ actions, footer, scope, scopeBar }: { actions: ResearchActions; footer?: string | null; scope?: Scope; scopeBar?: ReactNode; }) {
   const [pair, setPair] = useState<{ from?: string; to?: string }>({});
-  const data = useAsync(() => getResearchMovement(pair.from, pair.to), [pair.from, pair.to]);
+  const data = useAsync(() => getResearchMovement(pair.from, pair.to, scope), [pair.from, pair.to, scopeParam(scope)]);
   if (data.status === "error") return <EmptyState tone="error" title="Could not compute the movement" description={data.error} action={<Button onClick={data.reload}>Retry</Button>} />;
   if (!data.data) return <Skeleton rows={2} />;
   const m = data.data;
@@ -74,14 +74,15 @@ export function MovementPage({ actions, footer }: { actions: ResearchActions; fo
             {selects}
             <ExportMenu
               items={[
-                { label: "Movers (csv)", url: researchExportUrl("movement", "csv", { from: fromId, to: toId }) },
-                { label: "Movers (xlsx)", url: researchExportUrl("movement", "xlsx", { from: fromId, to: toId }) },
+                { label: "Movers (csv)", url: researchExportUrl("movement", "csv", { from: fromId, to: toId }, scope) },
+                { label: "Movers (xlsx)", url: researchExportUrl("movement", "xlsx", { from: fromId, to: toId }, scope) },
               ]}
             />
             <Button onClick={actions.openVersions}>Open version diff</Button>
           </>
         }
       />
+      {scopeBar}
       <div className="mb-[18px] grid gap-[18px] md:grid-cols-4">
         <StatCard label="Funds that moved" value={formatCount(m.moved!)} note={`of ${formatCount(m.rated!)} rated`} />
         <StatCard label="Moved up" value={<span className="text-positive">{formatCount(m.up!)}</span>} note={m.avg_up ? `avg ▲ ${m.avg_up} places` : undefined} />

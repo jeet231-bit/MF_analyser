@@ -22,7 +22,7 @@ Role = Literal["score", "rank", "quartile", "return", "factor"]
 Op = Literal["eq", "ne", "lt", "lte", "gt", "gte", "in", "top", "bottom", "notnull", "isnull"]
 # {name} · {name|one|many} renders "N one/many" · {name?one|many} renders just the word.
 SENTENCE_PLACEHOLDER = re.compile(
-    r"\{([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?)(?:([|?])([^{}|]*)\|([^{}|]*))?\}"
+    r"\{([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*)(?:([|?])([^{}|]*)\|([^{}|]*))?\}"
 )
 
 
@@ -42,7 +42,29 @@ NARRATIVE_PLACEHOLDERS: dict[str, set[str]] = {
     "movement": {"moved", "up", "down", "repairs", "into_q1", "out_of_q1", "entries", "exits", "previous", "current"},
     "categories": {"categories", "unranked", "unranked_below", "eligible", "min_group", "widest.label", "widest.value", "best.label", "best.value", "measure.label"},
     "fund": {"label", "rank", "category_count", "category", "quartile", "delta", "delta_text", "previous", "score"},
+    "executive": {"rated", "total", "q1", "q1_pct", "ranked_categories", "categories", "moved", "up", "down", "repairs", "previous", "current", "checked", "matched", "mismatched", "agreement", "scope", "as_of"},
+    "distribution": {"rated", "ranked_categories", "categories", "median_category", "largest_category", "largest_category_rated"},
+    "coverage": {"total", "rated", "unrated", "categories", "unranked", "unranked_below", "unrated_small", "unrated_other", "unrated_young", "unrated_gap", "unrated_unknown", "coverage_since", "outside", "as_of"},
 }  # fmt: skip
+# Executive sentences and KPI tiles may also read a computed insight: {ins.<key>.count},
+# {ins.<key>.top.label}, {ins.<key>.group.count} ... (any placeholder an insight sentence has).
+INSIGHT_REF = re.compile(r"^ins\.([a-z_][a-z0-9_]*)\.(.+)$")
+
+
+def narrative_placeholder_ok(name: str, ph: str, rmap: ResearchMap) -> bool:
+    allowed = NARRATIVE_PLACEHOLDERS.get(name)
+    if allowed is None:
+        return False
+    if ph in allowed:
+        return True
+    if name in ("executive", "kpi"):
+        m = INSIGHT_REF.match(ph)
+        return (
+            bool(m)
+            and any(i.key == m.group(1) for i in rmap.insights)
+            and m.group(2) in INSIGHT_PLACEHOLDERS
+        )
+    return False
 
 
 class SentenceSpec(BaseModel):
@@ -269,6 +291,16 @@ class CoverageSpec(BaseModel):
     constant: str
 
 
+class KpiSpec(BaseModel):
+    """A dashboard tile: label, a value template and a note template over the executive
+    vocabulary (including {ins.<key>.count}), and a tone token (q1, accent, violet, positive)."""
+
+    label: str
+    value: str
+    note: str | None = None
+    tone: Literal["q1", "q2", "accent", "violet", "positive", "warning"] = "accent"
+
+
 class Finding(BaseModel):
     title: str
     detail: str = ""
@@ -291,6 +323,7 @@ class ResearchMap(BaseModel):
     constants: dict[str, ConstantSpec] = Field(default_factory=dict)
     coverage: CoverageSpec | None = None
     sectionLabels: dict[str, str] = Field(default_factory=dict)
+    kpis: list[KpiSpec] = Field(default_factory=list)
     insights: list[InsightSpec] = Field(default_factory=list)
     narratives: dict[str, Any] = Field(default_factory=dict)
     footer: str | None = None
@@ -340,8 +373,7 @@ def parse_map(raw: Any) -> tuple[ResearchMap | None, list[str]]:
     for i, ins in enumerate(rmap.insights):
         problems.extend(_check_insight(rmap, i, ins))
     for name, raw in rmap.narratives.items():
-        allowed = NARRATIVE_PLACEHOLDERS.get(name)
-        if allowed is None:
+        if name not in NARRATIVE_PLACEHOLDERS:
             problems.append(
                 f"narratives.{name}: unknown narrative (expected one of {sorted(NARRATIVE_PLACEHOLDERS)})"
             )
@@ -353,8 +385,12 @@ def parse_map(raw: Any) -> tuple[ResearchMap | None, list[str]]:
             continue
         for spec in specs:
             for ph in dict.fromkeys(spec.placeholders_used()):
-                if ph not in allowed:
+                if not narrative_placeholder_ok(name, ph, rmap):
                     problems.append(f"narratives.{name}: unknown placeholder {{{ph}}}")
+    for i, kpi in enumerate(rmap.kpis):
+        for ph in dict.fromkeys(placeholder_names(kpi.value) + placeholder_names(kpi.note or "")):
+            if not narrative_placeholder_ok("executive", ph, rmap):
+                problems.append(f"kpis[{i}] '{kpi.label}': unknown placeholder {{{ph}}}")
     return rmap, problems
 
 

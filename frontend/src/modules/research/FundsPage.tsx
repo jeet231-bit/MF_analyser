@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { getResearchEntities, researchExportUrl, type EntitiesPage, type EntityQuery, type EntityRow, type MeasureMeta } from "@/api/research";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { getResearchEntities, researchExportUrl, scopeParam, type EntitiesPage, type EntityQuery, type EntityRow, type MeasureMeta, type Scope } from "@/api/research";
 import { Button, EmptyState, ExportMenu, Select } from "@/components";
 import { cn } from "@/lib/cn";
 import { formatCount } from "@/lib/format";
@@ -12,7 +12,7 @@ import { Chip, Chips, ConfidentialFooter, LinkButton, NotConfigured, PageHead, Q
 const PAGE = 100;
 
 /** Mount with a key derived from initialQuery: a new drill-through starts a fresh page. */
-export function FundsPage({ actions, initialQuery, footer }: { actions: ResearchActions; initialQuery?: EntityQuery; footer?: string | null }) {
+export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { actions: ResearchActions; initialQuery?: EntityQuery; footer?: string | null; scope?: Scope; scopeBar?: ReactNode; }) {
   const settings = useFormat();
   const [query, setQuery] = useState<EntityQuery>({ page: 1, size: PAGE, ...initialQuery });
   const [search, setSearch] = useState(initialQuery?.q ?? "");
@@ -21,7 +21,7 @@ export function FundsPage({ actions, initialQuery, footer }: { actions: Research
     return () => clearTimeout(t);
   }, [search]);
 
-  const data = useAsync(() => getResearchEntities(query), [JSON.stringify(query)]);
+  const data = useAsync(() => getResearchEntities(query, scope), [JSON.stringify(query), scopeParam(scope)]);
   const body = data.data;
   const columns = useMemo(() => (body ? tableMeasures(body.measures) : []), [body]);
   const rankKey = body?.measures.find((m) => m.role === "rank" && m.primary)?.key;
@@ -51,12 +51,13 @@ export function FundsPage({ actions, initialQuery, footer }: { actions: Research
         actions={
           <ExportMenu
             items={[
-              { label: "This view (csv)", url: researchExportUrl("entities", "csv", exportQuery), hint: "The current filter, every measure" },
-              { label: "This view (xlsx)", url: researchExportUrl("entities", "xlsx", exportQuery) },
+              { label: "This view (csv)", url: researchExportUrl("entities", "csv", exportQuery, scope), hint: "The current filter within the scope, every measure" },
+              { label: "This view (xlsx)", url: researchExportUrl("entities", "xlsx", exportQuery, scope) },
             ]}
           />
         }
       />
+      {scopeBar}
 
       <div className="mb-4 flex flex-wrap items-center gap-[7px] rounded-lg border border-hairline bg-surface px-3.5 py-3" role="group" aria-label="Analyse funds by">
         <span className="mr-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-muted">Analyse funds by</span>

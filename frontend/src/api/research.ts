@@ -15,6 +15,48 @@ export interface MeasureMeta {
   decimals?: number | null;
 }
 
+/** The global scope: one filter every research view, sentence and export honours. */
+export interface Scope {
+  dims: Record<string, string>;
+  quartile: number[];
+  bands: Record<string, string>;
+  rated: "all" | "only" | "unrated";
+  q?: string;
+}
+
+export const EMPTY_SCOPE: Scope = { dims: {}, quartile: [], bands: {}, rated: "all" };
+
+export function isScopeEmpty(scope: Scope | undefined): boolean {
+  if (!scope) return true;
+  return (
+    Object.values(scope.dims).every((v) => !v) &&
+    scope.quartile.length === 0 &&
+    Object.values(scope.bands).every((v) => !v) &&
+    scope.rated === "all" &&
+    !scope.q
+  );
+}
+
+/** The value the backend expects: canonical JSON, or undefined when nothing is selected. */
+export function scopeParam(scope: Scope | undefined): string | undefined {
+  if (isScopeEmpty(scope)) return undefined;
+  const s = scope!;
+  return JSON.stringify({
+    dims: Object.fromEntries(Object.entries(s.dims).filter(([, v]) => v)),
+    quartile: s.quartile,
+    bands: Object.fromEntries(Object.entries(s.bands).filter(([, v]) => v)),
+    rated: s.rated,
+    q: s.q || undefined,
+  });
+}
+
+export interface ScopeOptions {
+  dims: { key: string; label: string; values: string[] }[];
+  bands: { key: string; label: string; options: { code: string; label: string }[] }[];
+  quartiles: number[];
+  rated: string[];
+}
+
 export interface VersionRef {
   id: string;
   filename: string;
@@ -27,6 +69,7 @@ export interface VersionRef {
 interface Envelope {
   configured: boolean;
   problems: string[];
+  scope?: { key: string; applied: boolean; description: string[]; value: Scope };
   version_id?: string | null;
   run_id?: string | null;
   version?: { id: string; filename: string; uploaded_at: string; status: string };
@@ -63,6 +106,12 @@ export interface Universe {
   unranked_categories: number;
   unrated_small_categories: number;
   unrated_missing_data: number;
+  ranked_categories?: number;
+  median_category_rated?: number;
+  largest_category?: { key: string; rated: number } | null;
+  unrated_young?: number;
+  unrated_gap?: number;
+  unrated_unknown?: number;
   outside_universe?: number;
   stats_only_categories?: number;
 }
@@ -93,8 +142,14 @@ export interface HeldQ1 {
 export interface ResearchSummary extends Envelope {
   as_of?: unknown;
   universe?: Universe;
+  universe_all?: Universe;
+  scope_options?: ScopeOptions;
   quartiles?: Record<string, number>;
-  category_averages?: { measure: string; label: string; rows: { key: string; value: number; label: string; count: number }[]; total: number } | null;
+  category_averages?: { measure: string; label: string; rows: { key: string; value: number; label: string; count: number }[]; total: number; minGroupCount?: number } | null;
+  executive?: string | null;
+  kpis?: { label: string; value: string; note: string | null; tone: "q1" | "q2" | "accent" | "violet" | "positive" | "warning" }[];
+  distribution_narrative?: string | null;
+  coverage_narrative?: string | null;
   measures?: MeasureMeta[];
   validation?: { status: string; checked: number; matched: number; anomalies: number } | null;
   findings?: { open: number; fixed: number };
@@ -268,7 +323,7 @@ export interface EntityQuery {
   groupBy?: string;
 }
 
-function entityQs(query: EntityQuery): string {
+function entityQs(query: EntityQuery, scope?: Scope): string {
   const params = new URLSearchParams();
   const set = (k: string, v: string | number | undefined) => v !== undefined && v !== "" && params.set(k, String(v));
   set("q", query.q);
@@ -280,6 +335,7 @@ function entityQs(query: EntityQuery): string {
   set("page", query.page);
   set("size", query.size);
   set("groupBy", query.groupBy);
+  set("scope", scopeParam(scope));
   for (const q of query.quartile ?? []) params.append("quartile", String(q));
   for (const k of query.keys ?? []) params.append("keys", k);
   const s = params.toString();
@@ -290,37 +346,42 @@ export function getResearchConfig(): Promise<ResearchConfig> {
   return apiGet<ResearchConfig>("/research/config");
 }
 
-export function getResearchSummary(measure?: string): Promise<ResearchSummary> {
-  return apiGet<ResearchSummary>(`/research/summary${qs({ measure })}`);
+export function getResearchSummary(measure?: string, scope?: Scope): Promise<ResearchSummary> {
+  return apiGet<ResearchSummary>(`/research/summary${qs({ measure, scope: scopeParam(scope) })}`);
 }
 
-export function getResearchEntities(query: EntityQuery = {}): Promise<EntitiesPage> {
-  return apiGet<EntitiesPage>(`/research/entities${entityQs(query)}`);
+export function getResearchEntities(query: EntityQuery = {}, scope?: Scope): Promise<EntitiesPage> {
+  return apiGet<EntitiesPage>(`/research/entities${entityQs(query, scope)}`);
 }
 
 export function getResearchEntity(key: string): Promise<EntityDetail> {
   return apiGet<EntityDetail>(`/research/entities/${encodeURIComponent(key)}`);
 }
 
-export function getResearchCategories(measure?: string): Promise<CategoriesResponse> {
-  return apiGet<CategoriesResponse>(`/research/categories${qs({ measure })}`);
+export function getResearchCategories(measure?: string, scope?: Scope): Promise<CategoriesResponse> {
+  return apiGet<CategoriesResponse>(`/research/categories${qs({ measure, scope: scopeParam(scope) })}`);
 }
 
-export function getResearchMovement(from?: string, to?: string): Promise<MovementResponse> {
-  return apiGet<MovementResponse>(`/research/movement${qs({ from, to })}`);
+export function getResearchMovement(from?: string, to?: string, scope?: Scope): Promise<MovementResponse> {
+  return apiGet<MovementResponse>(`/research/movement${qs({ from, to, scope: scopeParam(scope) })}`);
 }
 
-export function getResearchInsights(section?: string): Promise<InsightsResponse> {
-  return apiGet<InsightsResponse>(`/research/insights${qs({ section })}`);
+export function getResearchInsights(section?: string, scope?: Scope): Promise<InsightsResponse> {
+  return apiGet<InsightsResponse>(`/research/insights${qs({ section, scope: scopeParam(scope) })}`);
 }
 
 export type ResearchExportKind = "entities" | "categories" | "movement" | "insights";
 
-export function researchExportUrl(kind: ResearchExportKind, format: "csv" | "xlsx", query: EntityQuery & { from?: string; to?: string; measure?: string } = {}): string {
+export function researchExportUrl(
+  kind: ResearchExportKind,
+  format: "csv" | "xlsx",
+  query: EntityQuery & { from?: string; to?: string; measure?: string } = {},
+  scope?: Scope,
+): string {
   const base = `/api/research/${kind}/export`;
   if (kind === "entities") {
-    const q = entityQs(query);
+    const q = entityQs(query, scope);
     return `${base}${q ? `${q}&` : "?"}format=${format}`;
   }
-  return `${base}${qs({ format, from: query.from, to: query.to, measure: query.measure })}`;
+  return `${base}${qs({ format, from: query.from, to: query.to, measure: query.measure, scope: scopeParam(scope) })}`;
 }

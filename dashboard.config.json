@@ -1007,6 +1007,59 @@
           "zero": "Unchanged since {previous}.",
           "trigger": "delta"
         }
+      ],
+      "executive": [
+        {
+          "default": "{rated|fund carries|funds carry} a composite rating this cycle across {ranked_categories} ranked {ranked_categories?category|categories}, and {q1} of them {q1?sits|sit} in the top quartile."
+        },
+        {
+          "default": "{ins.amc_league.group.label} holds the most Q1 funds ({ins.amc_league.group.count} of {ins.amc_league.group.total} rated), while {ins.all_weather.count|fund was|funds were} top quartile in both bull and bear phases: the all-weather set.",
+          "trigger": "ins.amc_league.group.count"
+        },
+        {
+          "default": "{ins.best_value.count|fund delivers|funds deliver} Q1 performance at Q1 cost.",
+          "zero": "No fund delivers Q1 performance at Q1 cost this cycle."
+        },
+        {
+          "default": "{moved|fund|funds} changed rank since {previous}: {up} up, {down} down.",
+          "zero": "No fund changed rank since {previous}."
+        },
+        {
+          "default": "{repairs} of those moves {repairs?is a data repair|are data repairs}, not market movement.",
+          "zero": "None of those moves is a data repair.",
+          "requires": [
+            "moved"
+          ]
+        },
+        {
+          "default": "The engine reconciles with Excel on {matched} of {checked} formula cells."
+        }
+      ],
+      "distribution": [
+        {
+          "default": "Quartiles are computed within each category, so the top quartile draws from all {ranked_categories} ranked categories rather than favouring the largest."
+        }
+      ],
+      "coverage": [
+        {
+          "default": "{rated} of {total} funds in the master carry a composite rating."
+        },
+        {
+          "default": "Of the rest, {unrated_young|is|are} too young to rate and {unrated_small} sit in categories with fewer than {unranked_below} ranked funds.",
+          "trigger": [
+            "unrated_young",
+            "unrated_small"
+          ]
+        },
+        {
+          "default": "{unrated_gap|fund is|funds are} old enough to rate yet unrated: a data gap."
+        },
+        {
+          "default": "{unrated_unknown|fund has|funds have} no first-NAV date on record."
+        },
+        {
+          "default": "{outside|fund sits|funds sit} outside the universe flag."
+        }
       ]
     },
     "footer": "Pantomath Group — Equity MF Research Engine · Private & Confidential",
@@ -1054,6 +1107,36 @@
       "houses": "Houses and managers",
       "cost": "Cost and scale",
       "coverage": "Rating coverage"
-    }
+    },
+    "kpis": [
+      {
+        "label": "Rated funds",
+        "value": "{rated}",
+        "note": "across {ranked_categories} ranked categories",
+        "tone": "q1"
+      },
+      {
+        "label": "Top quartile",
+        "value": "{q1}",
+        "note": "{q1_pct} of rated funds",
+        "tone": "accent"
+      },
+      {
+        "label": "All-weather funds",
+        "value": "{ins.all_weather.count}",
+        "note": "Q1 in both bull and bear",
+        "tone": "violet"
+      },
+      {
+        "label": "Engine agreement",
+        "value": "{agreement}",
+        "note": "{checked} formula cells reconciled with Excel",
+        "tone": "positive"
+      }
+    ]
+  },
+  "viewer": {
+    "defaultName": "Jeet",
+    "note": "Interim: the greeting's first name until sign-in exists. A per-browser 'Your name' setting in Admin overrides it."
   }
 }

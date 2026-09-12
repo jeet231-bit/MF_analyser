@@ -3,9 +3,11 @@ import { getResearchConfig, type ResearchSummary } from "@/api/research";
 import type { ValidationReport } from "@/api/validation";
 import type { WorkbookVersion } from "@/api/workbooks";
 import { Button, EmptyState } from "@/components";
+import { useState } from "react";
 import { formatCount, formatDate } from "@/lib/format";
 import { useAsync, type AsyncState } from "@/lib/useAsync";
-import { ConfidentialFooter, PageHead, RCard, SectionHeader, Skeleton, StatCard } from "./ui";
+import type { ResearchActions } from "./types";
+import { ConfidentialFooter, LinkButton, Narrative, PageHead, RCard, SectionHeader, Skeleton, StatCard } from "./ui";
 
 export function AdminPage({
   summary,
@@ -14,6 +16,8 @@ export function AdminPage({
   versionsPanel,
   validationPanel,
   footer,
+  viewer,
+  actions,
 }: {
   summary: ResearchSummary | null;
   versions: WorkbookVersion[];
@@ -21,7 +25,10 @@ export function AdminPage({
   versionsPanel: ReactNode;
   validationPanel: ReactNode;
   footer?: string | null;
+  viewer?: { name: string | null; localName: string | null; setName: (name: string) => void };
+  actions?: ResearchActions;
 }) {
+  const [nameDraft, setNameDraft] = useState(viewer?.localName ?? "");
   const config = useAsync(() => getResearchConfig(), []);
   const active = versions.find((v) => v.status === "active") ?? null;
   const report = validation.status === "ready" ? validation.data : null;
@@ -111,11 +118,82 @@ export function AdminPage({
         </RCard>
       </div>
 
+      {summary?.configured && summary.universe_all && (
+        <RCard className="mb-[18px]" title="Rating coverage" sub="Why every unrated fund is unrated · the same partition the dashboard strip and the coverage cards use" data-testid="coverage-detail">
+          <Narrative text={summary.universe_narrative} className="mb-3" />
+          <CoverageTable universe={summary.universe_all} />
+          {actions && (
+            <LinkButton className="mt-3" onClick={actions.openInsights}>
+              Open the coverage cards →
+            </LinkButton>
+          )}
+        </RCard>
+      )}
+      {viewer && (
+        <RCard className="mb-[18px]" title="Your name" sub="Used for the greeting. Kept in this browser until sign-in exists; then it comes from your account.">
+          <form
+            className="flex flex-wrap items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              viewer.setName(nameDraft);
+            }}
+          >
+            <input
+              aria-label="Your name"
+              className="rounded-[9px] border border-hairline bg-surface-lifted px-3 py-2 text-[13px] text-ink"
+              placeholder={viewer.name ?? "First name"}
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+            />
+            <Button type="submit">Save</Button>
+            {viewer.localName && (
+              <Button
+                onClick={() => {
+                  setNameDraft("");
+                  viewer.setName("");
+                }}
+              >
+                Clear
+              </Button>
+            )}
+            <span className="text-xs text-muted">{viewer.localName ? `Greeting you as ${viewer.localName}.` : viewer.name ? `Default from the config: ${viewer.name}.` : "No name yet: the greeting is plain."}</span>
+          </form>
+        </RCard>
+      )}
       <SectionHeader icon="◫" title="Versions" sub="Upload history, activation and the logic diff" />
       {versionsPanel}
       <SectionHeader icon="✓" title="Validation" sub="Reconciliation against Excel's own cached values" />
       {validationPanel}
       <ConfidentialFooter text={footer} />
     </div>
+  );
+}
+
+function CoverageTable({ universe: u }: { universe: NonNullable<ResearchSummary["universe_all"]> }) {
+  const rows: [string, number, string][] = [
+    ["Rated", u.rated, "carry a composite quartile"],
+    ["Too young to rate", u.unrated_young ?? 0, "first NAV after the earliest bull phase"],
+    ["Data gap", u.unrated_gap ?? 0, "old enough to rate, composite still \"--\""],
+    ["No first-NAV date", u.unrated_unknown ?? 0, "cannot be told apart from young launches"],
+    ["Small category only", u.unrated_small_categories, "fewer ranked funds than the workbook rule needs"],
+    ["Outside the universe flag", u.outside_universe ?? 0, "excluded by the master itself"],
+  ];
+  return (
+    <table className="w-full border-collapse text-[13px]">
+      <tbody>
+        {rows.map(([label, n, why]) => (
+          <tr key={label} className="border-b border-hairline last:border-b-0">
+            <td className="py-2 pr-3 font-semibold text-ink">{label}</td>
+            <td className="tabular py-2 pr-3 text-right text-ink">{formatCount(n)}</td>
+            <td className="py-2 text-muted">{why}</td>
+          </tr>
+        ))}
+        <tr>
+          <td className="pt-2 font-semibold text-muted">Universe</td>
+          <td className="tabular pt-2 pr-3 text-right font-semibold text-ink">{formatCount(u.total)}</td>
+          <td className="pt-2 text-muted">funds on the master</td>
+        </tr>
+      </tbody>
+    </table>
   );
 }

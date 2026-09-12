@@ -10,6 +10,7 @@ def test_config_endpoint_exposes_display_settings(client: TestClient) -> None:
         "label_overrides",
         "number_grouping",
         "number_decimals",
+        "viewer_name",
     }
     assert isinstance(body["sheet_scope"], list)
     assert body["number_grouping"] in ("indian", "international")

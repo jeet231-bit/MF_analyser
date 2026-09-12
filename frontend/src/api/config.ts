@@ -7,6 +7,7 @@ export interface DashboardConfig {
   label_overrides: Record<string, string>;
   number_grouping: "indian" | "international";
   number_decimals: number;
+  viewer_name?: string | null;
 }
 
 export function getConfig(): Promise<DashboardConfig> {

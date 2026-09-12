@@ -119,6 +119,25 @@ export const validationPill: Record<ValidationStatus, { tone: PillTone; label: s
 // ---- persisted view (mode + page), per browser ------------------------------------------------
 
 export const VIEW_KEY = "mfa-view";
+export const RAIL_KEY = "mfa-rail";
+
+/** Whether the viewer pinned the rail open (Workbook mode pins it regardless). */
+export function readPinned(): boolean {
+  try {
+    return localStorage.getItem(RAIL_KEY) === "pinned";
+  } catch {
+    return false;
+  }
+}
+
+export function writePinned(pinned: boolean): void {
+  try {
+    if (pinned) localStorage.setItem(RAIL_KEY, "pinned");
+    else localStorage.removeItem(RAIL_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 export interface ViewState {
   mode: AppMode;

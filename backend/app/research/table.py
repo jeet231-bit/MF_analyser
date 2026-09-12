@@ -34,6 +34,7 @@ class Entity:
     phases: dict[str, float | None] = field(default_factory=dict)  # "group:COL" -> value
     periods: dict[str, float | None] = field(default_factory=dict)  # COL -> value
     cells: dict[str, str] = field(default_factory=dict)  # measure key -> "Sheet!A1"
+    inside: bool = True  # inside the universe flag (True when the map declares none)
 
     @property
     def category(self) -> str | None:
@@ -65,6 +66,8 @@ class ResearchTable:
     quantiles: dict[str, tuple[float, float]] = field(default_factory=dict)  # measure -> (q1, q3)
     as_of: Any = None
     constants: dict[str, float | None] = field(default_factory=dict)  # declared constants, resolved
+    stat_rows: dict[str, dict[str, float | None]] = field(default_factory=dict, repr=False)
+    scope_key: str = ""  # "" for the full table; the canonical scope JSON for a scoped view
     _sorted: dict[str, list[float]] = field(default_factory=dict, repr=False)
 
     @property
@@ -239,8 +242,8 @@ def build_table(
             for letter in p.columns:
                 e.periods[letter.upper()] = _number(src.value(row, ci(letter))) if row else None
 
-    # Categories: configured stats, then derived stats.
-    categories: dict[str, CategoryInfo] = {}
+    # Category statistics from the configured sheet (one row per category key).
+    stat_rows: dict[str, dict[str, float | None]] = {}
     if rmap.categoryStats and resolved.category_stats_ok:
         cs = rmap.categoryStats
         src = sv(cs.sheet)
@@ -250,9 +253,46 @@ def build_table(
             key = _text(src.value(row, kcol))
             if not key:
                 continue
-            info = categories.setdefault(key, CategoryInfo(key=key))
-            for letter in cs.columns:
-                info.stats[letter.upper()] = _number(src.value(row, ci(letter)))
+            stat_rows[key] = {
+                letter.upper(): _number(src.value(row, ci(letter))) for letter in cs.columns
+            }
+    for e in entities:
+        e.inside = inside.get(e.key, True)
+    constants: dict[str, float | None] = {}
+    for name, (sheet_name, r, c) in resolved.constant_cells.items():
+        try:
+            constants[name] = parse_constant(sv(sheet_name).value(r, c), rmap.constants[name].parse)
+        except Exception:  # noqa: BLE001 - a broken constant reads as unavailable
+            constants[name] = None
+    as_of = None
+    if ent.asOf and "!" in ent.asOf:
+        sheet_name, addr = ent.asOf.rsplit("!", 1)
+        try:
+            from app.model.formula.refs import parse_a1_cell
+
+            r, c = parse_a1_cell(addr)
+            as_of = sv(sheet_name.strip("'")).value(r, c)
+        except Exception:  # noqa: BLE001 - as-of is decorative
+            as_of = None
+    return assemble(version.id, run.id, resolved, entities, stat_rows, constants, as_of)
+
+
+def assemble(
+    version_id: str,
+    run_id: str,
+    resolved: ResolvedMap,
+    entities: list[Entity],
+    stat_rows: dict[str, dict[str, float | None]],
+    constants: dict[str, float | None],
+    as_of: Any,
+    scope_key: str = "",
+) -> ResearchTable:
+    """Derive category statistics and the universe summary for a set of entities. Called for
+    the full table and again for every scoped view of it, so both describe the same numbers."""
+    rmap = resolved.map
+    categories: dict[str, CategoryInfo] = {}
+    for key, stats in stat_rows.items():
+        categories[key] = CategoryInfo(key=key, stats=dict(stats))
     qkey = rmap.primary("quartile")
     qkey = qkey.key if qkey and qkey.key in resolved.measures else None
     rkey = rmap.primary("rank")
@@ -289,7 +329,6 @@ def build_table(
         qi = int(e.measures[qkey])  # type: ignore[index]
         if qi in dist:
             dist[qi] += 1
-    # Why the rest are unrated: a category too small for the workbook's rule, or missing data.
     small = {c.key for c in categories.values() if c.count and c.unranked}
     # The unrated set partitions into: outside the universe flag; a missing composite (score
     # "--", whatever the category size), which coverage splits further; and, for the rest, a
@@ -297,7 +336,7 @@ def build_table(
     skey = rmap.primary("score")
     skey = skey.key if skey and skey.key in resolved.measures else None
     unrated = [e for e in entities if not qkey or e.measures.get(qkey) is None]
-    outside = [e for e in unrated if universe is not None and not inside.get(e.key, False)]
+    outside = [e for e in unrated if rmap.entity.universe is not None and not e.inside]
     outside_keys = {e.key for e in outside}
     composite_missing = [
         e
@@ -310,7 +349,6 @@ def build_table(
         for e in unrated
         if e.category in small and e.key not in outside_keys and e.key not in missing_keys
     )
-    unrated_other = len(composite_missing)
     primary_keys = [k for k in (rmap.primary(r) for r in ("score", "rank", "quartile")) if k]
     complete = sum(
         1
@@ -320,13 +358,7 @@ def build_table(
         )
         and all(e.measures.get(k) is not None for k in return_keys)
     )
-    constants: dict[str, float | None] = {}
-    for name, (sheet_name, r, c) in resolved.constant_cells.items():
-        try:
-            constants[name] = parse_constant(sv(sheet_name).value(r, c), rmap.constants[name].parse)
-        except Exception:  # noqa: BLE001 - a broken constant reads as unavailable
-            constants[name] = None
-    # Coverage: why the "--" funds are unrated (too young, or a data gap).
+    # Coverage: why the "--" funds are unrated (too young, a data gap, or no date to tell).
     unrated_young = unrated_gap = unrated_unknown = 0
     cov = rmap.coverage
     if cov and cov.measure in resolved.measures and constants.get(cov.constant) is not None:
@@ -339,20 +371,11 @@ def build_table(
                 unrated_young += 1
             else:
                 unrated_gap += 1
-    as_of = None
-    if ent.asOf and "!" in ent.asOf:
-        sheet_name, addr = ent.asOf.rsplit("!", 1)
-        try:
-            from app.model.formula.refs import parse_a1_cell
-
-            r, c = parse_a1_cell(addr)
-            as_of = sv(sheet_name.strip("'")).value(r, c)
-        except Exception:  # noqa: BLE001 - as-of is decorative
-            as_of = None
-
-    table = ResearchTable(
-        version_id=version.id,
-        run_id=run.id,
+    ranked_sizes = sorted(c.rated for c in categories.values() if c.count and not c.unranked)
+    largest = max((c for c in categories.values() if c.count), key=lambda c: c.rated, default=None)
+    return ResearchTable(
+        version_id=version_id,
+        run_id=run_id,
         resolved=resolved,
         entities=entities,
         by_key={e.key: e for e in entities},
@@ -363,9 +386,12 @@ def build_table(
             "complete": complete,
             "quartiles": dist,
             "categories": len(members),
+            "ranked_categories": len(ranked_sizes),
             "unranked_categories": len(small),
+            "median_category_rated": statistics.median(ranked_sizes) if ranked_sizes else 0,
+            "largest_category": {"key": largest.key, "rated": largest.rated} if largest else None,
             "unrated_small_categories": unrated_small,
-            "unrated_missing_data": unrated_other,
+            "unrated_missing_data": len(composite_missing),
             "outside_universe": len(outside),
             "unrated_young": unrated_young,
             "unrated_gap": unrated_gap,
@@ -374,8 +400,9 @@ def build_table(
         },
         as_of=as_of,
         constants=constants,
+        stat_rows=stat_rows,
+        scope_key=scope_key,
     )
-    return table
 
 
 _DATE_TOKEN = re.compile(r"\b(\d{1,2})[ -]([A-Za-z]{3,9})[ -](\d{4})\b")
@@ -431,6 +458,17 @@ class _TableCache:
 
 table_cache = _TableCache()
 _build_lock = threading.Lock()
+_clearable: list[Any] = [table_cache]
+
+
+def register_cache(cache: Any) -> None:
+    """Caches derived from the table (scoped views, computed insights) clear with it."""
+    _clearable.append(cache)
+
+
+def clear_all() -> None:
+    for cache in _clearable:
+        cache.clear()
 
 
 class NotConfigured(Exception):  # noqa: N818 - read as a state, not an error
