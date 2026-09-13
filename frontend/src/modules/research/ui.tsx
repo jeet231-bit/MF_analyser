@@ -212,7 +212,7 @@ export function Narrative({ text, className, onHero = false }: { text: string | 
 
 export function SectionHeader({ icon, title, sub }: { icon: string; title: string; sub?: string }) {
   return (
-    <div className="mb-[16px] mt-[30px] flex items-center gap-[11px] first:mt-0">
+    <div className="mb-[16px] mt-[32px] flex items-center gap-[11px]">
       <div className="grid h-[34px] w-[34px] flex-none place-items-center rounded-full bg-accent-soft text-[15px] text-accent" aria-hidden>
         {icon}
       </div>

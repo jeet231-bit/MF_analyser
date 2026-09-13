@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { model, version } from "@/test/fixtures";
 import { summary } from "@/test/researchFixtures";
 import { buildNavigation, buildResearchNav, buildWorkbookNav, RAIL_KEY, readPinned, readView, VIEW_KEY, writePinned, writeView } from "./navigation";
+import { AppShell } from "./AppShell";
 import { Rail } from "./Rail";
 import { TopBar } from "./TopBar";
 
@@ -143,5 +144,22 @@ describe("TopBar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Jeet: open settings" }));
     expect(onOpenProfile).toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Jeet: open settings" })).toHaveTextContent("J");
+  });
+});
+
+describe("AppShell", () => {
+  it("pushes the page aside when the rail is pinned, overlays it otherwise", () => {
+    const { rerender } = render(
+      <AppShell rail={<nav />} topBar={<header />} pinned={false}>
+        <p>page</p>
+      </AppShell>,
+    );
+    expect(screen.getByTestId("shell-column").className).toContain("pl-[var(--rail-w)]");
+    rerender(
+      <AppShell rail={<nav />} topBar={<header />} pinned>
+        <p>page</p>
+      </AppShell>,
+    );
+    expect(screen.getByTestId("shell-column").className).toContain("--rail-open");
   });
 });

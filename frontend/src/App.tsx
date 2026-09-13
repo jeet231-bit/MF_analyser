@@ -292,7 +292,7 @@ export default function App() {
   return (
     <FormatContext.Provider value={formatSettings}>
       <ProgressBar active={busy.active} label={busy.label} />
-      <AppShell rail={rail} topBar={topBar}>
+      <AppShell rail={rail} topBar={topBar} pinned={pinned || view.mode === "workbook"}>
         {session.job && (
           <div className="mb-3">
             <JobChip job={session.job} onDismiss={session.dismissJob} />
