@@ -16,6 +16,8 @@ note what you saw in the margin, and send this page plus `C:\MFAnalyser\data\log
 - ☐ A4. The installer ended with `OK  healthy` and printed two URLs. Write the first one here:
   `http://______________________:8000/`
 - ☐ A5. `deploy\status.ps1` shows `state: Running` (service) or `state: Running`/`Ready` (task) and `OK  health`.
+- ☐ A5a. The same output says `PDF: available`. If it says `unavailable: GTK not found`, install the GTK3 runtime it names, run `deploy\restart.ps1`, and check again. Result: ☐ available ☐ installed later
+- ☐ A5b. The same output names the backup mirror (`mirror: \\server\share …`). If it says `mirror: none`, the backups are single-disk: write the share or OneDrive folder here and rerun the installer with `-BackupMirror`: ______________________
 - ☐ A6. On this machine, a browser at `http://localhost:8000/` shows the sign-in screen; the password opens the console.
 
 ## B. Survives a reboot
@@ -50,6 +52,7 @@ note what you saw in the margin, and send this page plus `C:\MFAnalyser\data\log
 - ☐ F2. `deploy\restore.ps1 -Date <today>` ends with `OK  restored <today> and healthy`.
 - ☐ F3. Reload the console on the second PC: the same versions are listed and the dashboard is unchanged.
 - ☐ F4. Task Scheduler → Task Scheduler Library → "MFAnalyser Backup" exists, next run 02:00.
+- ☐ F5. Open the mirror folder from the **second PC**: today's dated folder is there with `mf-analyser.db`, `workbooks\` and `manifest.json`.
 
 ## G. Record
 

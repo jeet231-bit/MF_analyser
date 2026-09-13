@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     environment: str = "development"  # development | test | production
     data_dir: Path = DEFAULT_ROOT / "data"
     backup_dir: Path | None = None  # default: <data root>/backups
+    # An off-machine copy of the newest backup (a share or a OneDrive folder; the OneDrive
+    # ban covers the live database only). Without it, backups die with the disk.
+    backup_mirror: Path | None = None
     log_dir: Path | None = None  # default: <data_dir>/logs
     static_dir: Path | None = None  # default: <repo>/frontend/dist when it exists
     database_url: str = ""

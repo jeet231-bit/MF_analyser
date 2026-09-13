@@ -12,7 +12,10 @@
   Safe to run again: every step is idempotent.
 
 .PARAMETER DataDir        Where the database and uploaded workbooks live (never OneDrive).
-.PARAMETER BackupDir      Where dated backups go; put it on another drive or a share if you can.
+.PARAMETER BackupDir      Where dated backups go (the local 30-day ring).
+.PARAMETER BackupMirror   Off-machine folder (a network share or a OneDrive folder) that receives
+                          the newest backup after each run; the last 4 weekly copies are kept
+                          there. Without it backups die with the disk, and the installer says so.
 .PARAMETER Port           TCP port the app listens on.
 .PARAMETER ServiceName    Windows service / task name.
 .PARAMETER UseScheduledTask  Register a Scheduled Task instead of an NSSM service (fallback
@@ -24,6 +27,7 @@
 param(
     [string]$DataDir = "C:\MFAnalyser\data",
     [string]$BackupDir = "C:\MFAnalyser\backups",
+    [string]$BackupMirror = "",
     [int]$Port = 8000,
     [string]$ServiceName = "MFAnalyser",
     [switch]$UseScheduledTask,
@@ -46,6 +50,7 @@ Write-Host "MF Analyser installer" -ForegroundColor White
 Write-Host "  repo:     $RepoRoot"
 Write-Host "  data:     $DataDir"
 Write-Host "  backups:  $BackupDir"
+Write-Host "  mirror:   $(if ($BackupMirror) { $BackupMirror } else { "(none: single-disk backups)" })"
 Write-Host "  config:   $ConfigFile"
 Write-Host "  port:     $Port"
 Write-Host "  mode:     $(if ($UseScheduledTask) { 'Scheduled Task' } else { 'NSSM service' })"
@@ -70,6 +75,22 @@ if ($free) {
     $freeGb = [math]::Round($free / 1GB, 1)
     if ($freeGb -lt 20) { Write-Warn2 "only $freeGb GB free on $drive; each uploaded master is ~50-150 MB and backups keep 30 days" }
     else { Write-Ok "$freeGb GB free on $drive" }
+}
+if ($BackupMirror) {
+    $mirrorDrive = Split-Path -Qualifier $BackupMirror -ErrorAction SilentlyContinue
+    if ($mirrorDrive -and $mirrorDrive -eq $drive -and -not (Test-OneDrivePath $BackupMirror)) {
+        Write-Warn2 "the backup mirror '$BackupMirror' is on the same drive as the data ($drive); it will not survive a drive failure. Use a network share, another disk, or a OneDrive folder."
+    } elseif (-not $DryRun) {
+        try { New-Item -ItemType Directory -Force $BackupMirror | Out-Null; Write-Ok "backup mirror reachable: $BackupMirror" }
+        catch { Write-Warn2 "the backup mirror '$BackupMirror' cannot be created now ($($_.Exception.Message)); the nightly backup will retry and report it in backup.log" }
+    } else { Write-Ok "backup mirror: $BackupMirror" }
+} else {
+    Write-Warn2 "NO BACKUP MIRROR: backups will sit on the same disk as the data and die with it. Run again with -BackupMirror \\server\share\mfa-backups (or a OneDrive folder) as soon as one exists."
+}
+$gtk = Find-Gtk
+if ($gtk) { Write-Ok "GTK3 runtime found ($gtk): PDF export will work" }
+else {
+    Write-Warn2 "GTK3 runtime not found: PDF export will answer 501 until it is installed. Get gtk3-runtime-3.24.x-win64.exe from $GtkInstallerUrl (default options), then run deploy\restart.ps1. Everything else works without it."
 }
 
 # ---- uv + python --------------------------------------------------------------------------
@@ -132,6 +153,7 @@ Invoke-Step "write $ConfigFile" {
     Set-ConfigValue "MFA_ENVIRONMENT" "production"
     Set-ConfigValue "MFA_DATA_DIR" $DataDir
     Set-ConfigValue "MFA_BACKUP_DIR" $BackupDir
+    if ($BackupMirror) { Set-ConfigValue "MFA_BACKUP_MIRROR" $BackupMirror }
     Set-ConfigValue "MFA_HOST" "0.0.0.0"
     Set-ConfigValue "MFA_PORT" "$Port"
     Set-ConfigValue "MFA_STATIC_DIR" (Join-Path $FrontendDir "dist")
@@ -242,7 +264,10 @@ if ($DryRun) {
 } else {
     Start-App $ServiceName
     $health = Wait-Healthy -Port $Port -Seconds 90
-    if ($health) { Write-Ok "healthy: status=$($health.status) version=$($health.version)" }
+    if ($health) {
+        Write-Ok "healthy: status=$($health.status) version=$($health.version)"
+        if ($health.pdf -eq "available") { Write-Ok "PDF export: available" } else { Write-Warn2 "PDF export: $($health.pdf)" }
+    }
     else {
         Write-Fail "no answer on http://127.0.0.1:$Port/api/health after 90 s. Read $logDir\mf-analyser.log and $logDir\service.err.log, then run deploy\status.ps1."
         exit 1
@@ -265,5 +290,6 @@ $dhcp = $addresses | Where-Object { $_.PrefixOrigin -eq "Dhcp" }
 if ($dhcp) {
     Write-Warn2 "This machine gets its address by DHCP ($($dhcp.IPAddress -join ', ')). Ask IT for a DHCP reservation or a static address so the numeric URL never changes; the name-based URL keeps working either way."
 }
+if (-not $BackupMirror) { Write-Warn2 "Reminder: backups are single-disk until you rerun with -BackupMirror." }
 Write-Host "    Then sign in with the shared password. Print deploy\CHECKLIST.md and work through it."
 Write-Host ""

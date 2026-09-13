@@ -10,6 +10,7 @@ import html
 import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -498,11 +499,38 @@ class PdfUnavailableError(RuntimeError):
     pass
 
 
-def render_pdf(html_text: str) -> bytes:
+GTK_HINT = (
+    "install the GTK3 runtime (https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases) "
+    "and restart the service"
+)
+
+
+@lru_cache
+def pdf_status() -> tuple[bool, str | None]:
+    """Whether PDF export works in this process, and why not; probed once (importing
+    WeasyPrint loads GTK), so /api/health can report it before anyone clicks Export PDF."""
+    import importlib.util
+
+    if importlib.util.find_spec("weasyprint") is None:
+        return False, "WeasyPrint is not installed (uv sync --extra pdf)"
     try:
-        from weasyprint import HTML
-    except Exception as exc:  # noqa: BLE001 - missing extra or missing GTK runtime
-        raise PdfUnavailableError(
-            "PDF export needs WeasyPrint: `uv sync --extra pdf` (and the GTK/Pango runtime on Windows)."
-        ) from exc
+        import weasyprint  # noqa: F401
+    except Exception as exc:  # noqa: BLE001 - the usual failure is a missing GTK DLL
+        text = str(exc)
+        if (
+            "gobject" in text.lower()
+            or "pango" in text.lower()
+            or "cannot load library" in text.lower()
+        ):
+            return False, f"GTK not found: {GTK_HINT}"
+        return False, f"WeasyPrint failed to load ({text[:120]})"
+    return True, None
+
+
+def render_pdf(html_text: str) -> bytes:
+    available, reason = pdf_status()
+    if not available:
+        raise PdfUnavailableError(f"PDF export is unavailable: {reason}.")
+    from weasyprint import HTML
+
     return HTML(string=html_text).write_pdf()

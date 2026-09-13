@@ -74,6 +74,21 @@ function Get-DataDir {
     if ($d) { return $d } else { return (Join-Path $script:DefaultRoot "data") }
 }
 
+function Get-BackupMirror {
+    $d = Read-ConfigValue "MFA_BACKUP_MIRROR"
+    if ($d) { return $d } else { return $null }
+}
+
+# The GTK3 runtime WeasyPrint needs for PDF export: on PATH or in its default install folder.
+function Find-Gtk {
+    $dll = "libgobject-2.0-0.dll"
+    foreach ($dir in ($env:Path -split ";") + @("C:\Program Files\GTK3-Runtime Win64\bin")) {
+        if ($dir -and (Test-Path (Join-Path $dir $dll))) { return (Join-Path $dir $dll) }
+    }
+    return $null
+}
+$script:GtkInstallerUrl = "https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases"
+
 function Get-BackupDir {
     $d = Read-ConfigValue "MFA_BACKUP_DIR"
     if ($d) { return $d } else { return (Join-Path $script:DefaultRoot "backups") }

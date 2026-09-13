@@ -101,3 +101,58 @@ def test_restore_round_trip(client: TestClient, tmp_path: Path) -> None:
     listed = {v["id"] for v in client.get("/api/workbooks").json()}
     assert version_id in listed
     assert client.get(f"/api/workbooks/{version_id}").status_code == 200
+
+
+def test_mirror_keeps_four_weekly_copies_off_machine(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    (data_dir / "workbooks" / "v1").mkdir(parents=True)
+    (data_dir / "workbooks" / "v1" / "m.xlsx").write_bytes(b"x")
+    db = sqlite3.connect(data_dir / "mf-analyser.db")
+    db.execute("CREATE TABLE workbook_versions (id TEXT)")
+    db.execute("INSERT INTO workbook_versions VALUES ('v1')")
+    db.commit()
+    db.close()
+    backup_dir = tmp_path / "backups"
+    mirror = tmp_path / "share" / "mfa"  # stands in for a network share or a OneDrive folder
+
+    # Six weeks of daily backups: the mirror keeps the newest copy of each of the last 4 weeks.
+    start = date(2026, 8, 3)  # a Monday
+    for offset in range(0, 42):
+        today = start + timedelta(days=offset)
+        backup_tool.backup(
+            data_dir, backup_dir, keep_days=30, today=today, mirror_dir=mirror, keep_weeks=4
+        )
+    copies = sorted(p.name for p in mirror.iterdir() if p.is_dir())
+    assert copies == ["2026-08-23", "2026-08-30", "2026-09-06", "2026-09-13"]
+    assert (mirror / "2026-09-13" / "mf-analyser.db").exists()
+    assert (mirror / "2026-09-13" / "workbooks" / "v1" / "m.xlsx").exists()
+    manifest = json.loads((mirror / "2026-09-13" / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["mirror"]["status"] == "ok" and manifest["mirror"]["copies"] == copies
+    # The local ring is untouched by the weekly rule: 31 days kept.
+    assert len([p for p in backup_dir.iterdir() if p.is_dir()]) == 31
+
+
+def test_mirror_unreachable_is_reported_not_fatal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    blocker = tmp_path / "share"
+    blocker.write_text(
+        "not a directory", encoding="utf-8"
+    )  # mkdir under a file fails like an offline share
+    dest = backup_tool.backup(
+        data_dir, tmp_path / "backups", today=date(2026, 9, 13), mirror_dir=blocker / "mfa"
+    )
+    manifest = json.loads((dest / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["mirror"]["status"] == "unreachable"
+    monkeypatch.setenv("MFA_DATA_DIR", str(data_dir))
+    get_settings.cache_clear()
+    try:
+        code = backup_tool.main(
+            ["--backup-dir", str(tmp_path / "backups"), "--mirror", str(blocker / "mfa")]
+        )
+        assert code == 3
+        assert backup_tool.main(["--backup-dir", str(tmp_path / "backups"), "--no-mirror"]) == 0
+    finally:
+        get_settings.cache_clear()
