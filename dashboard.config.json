@@ -1197,7 +1197,7 @@
     ]
   },
   "viewer": {
-    "defaultName": "Darsh",
+    "defaultName": "Jeet",
     "note": "Interim: the greeting's first name until sign-in exists. A per-browser 'Your name' setting in Admin overrides it."
   }
 }

@@ -71,9 +71,9 @@ describe("viewer", () => {
     const { result } = renderHook(() => useViewer("Jeet"));
     expect(result.current.name).toBe("Jeet");
     expect(result.current.localName).toBeNull();
-    act(() => result.current.setName("  Darsh "));
-    expect(result.current.name).toBe("Darsh");
-    expect(JSON.parse(localStorage.getItem(VIEWER_KEY)!)).toEqual({ name: "Darsh" });
+    act(() => result.current.setName("  Jeet "));
+    expect(result.current.name).toBe("Jeet");
+    expect(JSON.parse(localStorage.getItem(VIEWER_KEY)!)).toEqual({ name: "Jeet" });
     act(() => result.current.setName(""));
     expect(result.current.name).toBe("Jeet");
     const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {

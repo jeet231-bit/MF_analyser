@@ -267,9 +267,9 @@ describe("AdminPage and UploadPage", () => {
     fireEvent.click(within(coverage).getByRole("button", { name: "Open the coverage cards →" }));
     expect(actions.openInsights).toHaveBeenCalled();
     expect(screen.getByText("Default from the config: Jeet.")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Darsh" } });
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Jeet" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(setName).toHaveBeenCalledWith("Darsh");
+    expect(setName).toHaveBeenCalledWith("Jeet");
   });
 
   it("frames the upload panel with what happens next", () => {
