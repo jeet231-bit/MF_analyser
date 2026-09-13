@@ -19,6 +19,7 @@ from app.storage import logic, workbooks
 from app.storage import runs as run_store
 from app.storage.db import get_session
 from app.storage.models import ExportJob, Run
+from app.storage.paths import resolve_stored
 
 router = APIRouter()
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -163,8 +164,13 @@ def get_export_file(job_id: str, session: SessionDep):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Export job not found.")
     if row.status != "ok" or not row.file_path:
         raise HTTPException(status.HTTP_409_CONFLICT, f"Export is {row.status}.")
+    path = resolve_stored(row.file_path)
+    if path is None:
+        raise HTTPException(
+            status.HTTP_410_GONE, "The export file is no longer on disk; export again."
+        )
     return FileResponse(
-        row.file_path,
+        path,
         media_type=row.media_type or "application/octet-stream",
         filename=row.filename or f"{job_id}.{row.format}",
     )

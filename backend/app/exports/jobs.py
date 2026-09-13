@@ -24,6 +24,7 @@ from app.model.formula.refs import Rect
 from app.storage import diffs, logic, runs, workbooks
 from app.storage import views as view_store
 from app.storage.models import ExportJob, Run
+from app.storage.paths import to_stored
 
 log = logging.getLogger(__name__)
 
@@ -178,7 +179,7 @@ def start_export_job(session: Session, run: Run, fmt: str, params: dict[str, Any
                 row = s.get(ExportJob, job_id)
                 if row is not None:
                     row.status = "ok"
-                    row.file_path = str(path)
+                    row.file_path = to_stored(path)
                     row.filename = built.filename
                     row.media_type = built.media_type
                     row.finished_at = datetime.now(UTC)

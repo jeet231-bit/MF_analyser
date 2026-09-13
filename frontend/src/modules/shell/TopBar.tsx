@@ -17,10 +17,12 @@ export interface TopBarProps {
   viewerInitials: string;
   viewerName: string | null;
   onOpenProfile: () => void;
+  /** Present only when the shared-password gate is on. */
+  onSignOut?: () => void;
 }
 
-/** Mode switch, global search, the version pill, the theme toggle and the viewer avatar. */
-export function TopBar({ mode, onMode, onSearch, version, validationLabel, theme, onToggleTheme, viewerInitials, viewerName, onOpenProfile }: TopBarProps) {
+/** Mode switch, global search, the version pill, the theme toggle, the viewer avatar and sign-out. */
+export function TopBar({ mode, onMode, onSearch, version, validationLabel, theme, onToggleTheme, viewerInitials, viewerName, onOpenProfile, onSignOut }: TopBarProps) {
   const [query, setQuery] = useState("");
   return (
     <header className="sticky top-0 z-30 flex flex-wrap items-center gap-[14px] bg-ground/90 px-[14px] py-[12px] backdrop-blur md:px-[26px]">
@@ -84,6 +86,15 @@ export function TopBar({ mode, onMode, onSearch, version, validationLabel, theme
             {viewerInitials}
           </span>
         </button>
+        {onSignOut && (
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="rounded-full bg-surface px-[14px] py-[9px] font-heading text-[12.5px] font-bold text-muted shadow-soft hover:text-accent"
+          >
+            Sign out
+          </button>
+        )}
       </div>
     </header>
   );

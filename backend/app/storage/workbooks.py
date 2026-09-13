@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.parser.loader import load_raw_workbook
 from app.parser.models import RawSheet, RawWorkbook, WorkbookSummary
 from app.storage.models import RawSheetBlob, WorkbookVersion
+from app.storage.paths import to_stored
 
 
 class WorkbookNotFoundError(LookupError):
@@ -49,7 +50,7 @@ def ingest_workbook(
         filename=filename,
         uploaded_at=datetime.now(UTC),
         status="parsing",
-        file_path=str(path),
+        file_path=to_stored(path),
         size_bytes=path.stat().st_size,
     )
     session.add(version)

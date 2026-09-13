@@ -56,6 +56,10 @@ npm run lint               # ruff + eslint + tsc    (make lint)
 
 Backend settings are read from environment variables prefixed `MFA_` (see `backend/.env.example`).
 
+**Where the data lives (developers).** Since Phase 11 the database and uploaded workbooks default to `C:\MFAnalyser\data` (Linux/macOS: `~/.local/share/mf-analyser`), never `backend/data` and never anywhere under OneDrive: the app refuses to start when the data directory is inside a synced folder, because the sync client locks and corrupts an open SQLite file. Move an existing development database once with `robocopy backend\data C:\MFAnalyser\data /E`; stored file paths are relative to the data directory, so the copy is the whole migration. Override with `MFA_DATA_DIR` in `backend/.env`.
+
+**Production shape.** `npm run build` then `npm run serve` (or `make start`) runs one uvicorn process that serves the API under `/api` and the built UI from `frontend/dist` with SPA fallback, on `0.0.0.0:8000`. `npm run dev` is unchanged for development.
+
 The integration test against the real master workbook is opt-in because it parses over a million cells:
 
 ```bash
@@ -114,6 +118,7 @@ The system is built one phase per session; each phase is committed separately an
 | 8 | Exports: xlsx (in place, cover sheet, background jobs), csv (grid windows), PDF analysis report, changelog export, one Export menu | done |
 | 9 | Hardening: run limiter and bounded caches for two users, robustness and end-to-end tests, QA.md timings, master findings for the research team | done |
 | 10 | Research views. Stage A: the semantic map, research API, declarative insights, snapshots. Stage B: the research console (rail with Research / Workbook switch, Dashboard, Insights, Funds with pivots, Fund detail, Categories, Movement, Admin, Upload) | done |
+| 11 | Deployment on one Windows machine: one process serves API and UI, data outside the repo and OneDrive, NSSM service (or Scheduled Task), SQLite WAL + daily backups with a tested restore, firewall and URL, shared-password gate, runbook and go-live checklist | done |
 
 ## Runbook: a new master version
 
@@ -176,14 +181,52 @@ The shell is an **icon rail** (68 px; it expands with labels on hover, and "Keep
 - **Movement**: any two activated versions; tiles, the narrative, the data-repair note, moved-up and moved-down lists with repaired rows labelled.
 - **Admin**: active version, reconciliation, structural warnings and data findings tiles; the findings list and the column map (both from `dashboard.config.json`); the rating-coverage breakdown; "Your name" for the greeting; then the Versions and Validation panels.
 
-Two interim, per-browser settings exist until the platform has accounts: the **watchlist** and the **viewer's name** (the greeting). Both live in the browser's local storage, wrapped so that blocked storage never breaks a page. The name falls back to `viewer.defaultName` in `dashboard.config.json` ("Jeet" today) and to a plain "Good morning" when neither is set. When sign-in arrives the name derives from the signed-in email and the local setting is dropped.
+Two interim, per-browser settings exist until the platform has accounts: the **watchlist** and the **viewer's name** (the greeting). Both live in the browser's local storage, wrapped so that blocked storage never breaks a page. The name falls back to `viewer.defaultName` in `dashboard.config.json` ("Jeet" today) and to a plain "Good morning" when neither is set. The Phase 11 access gate is one shared password, not accounts: when real accounts arrive they replace it, supply the viewer's name from the signed-in identity, and own the watchlist.
+
+## Deployment on one Windows machine
+
+This is the runbook for the always-on office machine that serves the console to the team over the LAN. It assumes no cloud, SQLite, two users, and a person who is not a developer. Every command is run on that machine in **PowerShell opened as administrator** from the app folder (`C:\MFAnalyser\app` below). Print `deploy/CHECKLIST.md` and tick it off the first time.
+
+**1. Install the prerequisites (once).**
+
+- Put the app at `C:\MFAnalyser\app`: either `git clone <repo> C:\MFAnalyser\app` or unzip a copy of the repository there. Not under OneDrive, not on a network drive.
+- Install uv, which installs Python by itself: `irm https://astral.sh/uv/install.ps1 | iex`, then close and reopen PowerShell. (The installer does this for you if uv is missing.)
+- Install Node.js 20 or later from nodejs.org **or** copy a `frontend\dist` folder built on another machine (`npm run build`) into `C:\MFAnalyser\app\frontend\dist`. Node is only needed to build the web app.
+- PDF export only: install the GTK3 runtime named in Prerequisites above. Everything else works without it.
+
+**2. Run the installer.**
+
+```powershell
+cd C:\MFAnalyser\app
+powershell -ExecutionPolicy Bypass -File deploy\install.ps1
+```
+
+It installs the backend, builds the web app, creates `C:\MFAnalyser\data` (database, uploaded workbooks, logs, an `inbox` folder) and `C:\MFAnalyser\backups`, writes `C:\MFAnalyser\config.env`, asks you to choose the **shared password**, registers the `MFAnalyser` Windows service (starts at boot, restarts itself within 5 s if it crashes, keeps running when nobody is signed in to Windows), opens TCP port 8000 in the Windows firewall for the office network, schedules the daily backup at 02:00, starts the service, waits until it answers, and prints the address to share. Options: `-DataDir D:\MFAnalyser\data` and `-BackupDir \\fileserver\mfa-backups` to put data or backups elsewhere (backups belong on another drive or a share), `-Port 8080`, `-DryRun` to see what it would do. If antivirus quarantines `deploy\tools\nssm.exe` (its SHA-256 is pinned in `deploy\tools\nssm.sha256` and verified before use), run the installer again with `-UseScheduledTask`: the app is then a Scheduled Task with the same start-at-boot and restart-on-failure behaviour, and every other script works unchanged. Run the installer again at any time to repair or update; it is idempotent.
+
+**3. The address.** The installer prints it; it is `http://<machine-name>:8000/`, for example `http://research-pc:8000/`, and also `http://<ip-address>:8000/`. The other person types it into any browser on the office network and signs in with the shared password. The name form keeps working if the address changes; ask IT for a **DHCP reservation or a static address** for the machine so that the numeric form is stable too. Sessions last 12 hours of inactivity; "Sign out" is in the top bar.
+
+**4. Is it running?** `deploy\status.ps1` prints the service state, the health check, the latest backup and the last log lines. In the browser the top bar shows the active version. `Get-Service MFAnalyser` is the raw Windows view.
+
+**5. Restart.** `deploy\restart.ps1`. Restart after editing `C:\MFAnalyser\config.env` or changing the password.
+
+**6. Logs.** `C:\MFAnalyser\data\logs\mf-analyser.log` is the application log (rotates at 10 MB, ten files kept); `service.out.log` and `service.err.log` are the process output captured by the service; `backup.log` is the nightly backup. Send `mf-analyser.log` with any problem report.
+
+**7. Backups and restore.** Every night at 02:00 the `MFAnalyser Backup` task writes `C:\MFAnalyser\backups\<YYYY-MM-DD>\` containing a consistent copy of the database (taken with SQLite's online backup API, safe while the app runs), every uploaded workbook, and a `manifest.json`; folders older than 30 days are removed. `deploy\backup-now.ps1` takes one immediately. To go back to a day: `deploy\restore.ps1 -Date 2026-09-13`, which first backs up the current state, stops the app, restores the database and workbooks, and starts it again; the restore refuses to run while the app holds the database. Rehearse it once after installing (checklist section F). Copy the backups folder off the machine, or point `-BackupDir` at a share, so a dead disk does not take the history with it.
+
+**8. Change the password.** `deploy\set-password.ps1` asks twice, stores only a hash in `config.env`, and restarts the service. Tell the other user the new one.
+
+**9. The monthly routine.** (1) Close Excel so the master is not locked. (2) Save a copy of this month's master workbook, for example into `C:\MFAnalyser\data\inbox` on the server or anywhere on your own PC (never point the app at the live OneDrive file). (3) In the console open **Upload** and choose the copy; wait for the validation result. (4) Open the new version under **Versions** and review the diff against the active version: logic changes are listed formula by formula, data growth and structural changes are counted. (5) **Activate** it. Dashboards, funds and movement now read the new month; the previous version stays available for comparison.
+
+**10. Uninstall.** `deploy\uninstall.ps1` removes the service, the backup task and the firewall rule and keeps the data, backups and config.
 
 ## Deployment notes
 
 - **One backend process.** Run uvicorn with a single worker (the default; never `--workers 2+`). The engine state cache, the sheet cache, the run limiter and background jobs are all in-process; a second process would double memory and split the caches.
 - **Sizing.** On the 15-sheet master each live engine state is about 300 MB. `MFA_STATE_CACHE_ENTRIES` (default 3) bounds how many stay cached: the baseline plus the two most recent what-ifs. `MFA_MAX_CONCURRENT_RUNS` (default 1) serialises engine runs: a second user's run answers 409 with `Retry-After` and the dashboard waits and retries by itself ("another run is in progress"). Budget 2 GB of RAM for two concurrent users plus interpretation headroom, and 500 MB of disk per uploaded version (raw sheets, run values, exports).
 - **Concurrency behaviour.** Two users may run what-ifs against the same version; runs execute one at a time and each is persisted with its own overrides. Uploading and activating a new version while another user is mid-session is safe: versions are immutable, the other user's runs and views keep reading their own version, and the version list simply shows which one is active.
-- **Settings** come from `MFA_*` environment variables (`backend/.env.example`): data directory, database URL (SQLite by default; Postgres via SQLAlchemy), upload limit, validation thresholds, run concurrency and cache sizes.
+- **Settings** come from `MFA_*` environment variables (`backend/.env.example`), from `backend/.env` in development, and in production from the config file the installer writes (`C:\MFAnalyser\config.env`, or `MFA_CONFIG_FILE`): data, backup, log and static directories, host and port, database URL (SQLite by default; Postgres via SQLAlchemy), upload limit, validation thresholds, run concurrency and cache sizes, the password hash and cookie secret. `MFA_ENVIRONMENT=production` refuses to start without the password hash and secret.
+- **SQLite** runs in WAL mode with `synchronous=NORMAL`, a 5 s busy timeout and foreign keys on (set on every connection in `app/storage/db.py`), so the nightly backup and a reader never block a writer.
+- **The access gate** is one shared password: PBKDF2-HMAC-SHA256 hash in the config, an HttpOnly `SameSite=Lax` session cookie signed with `itsdangerous`, every `/api` route behind it except health and the auth endpoints, three free failures per address and then a growing delay. The LAN is plain HTTP, so the cookie is not marked `Secure`; put a TLS proxy in front before exposing it beyond the office network. Without a hash (development, tests) there is no gate.
 
 Keep the master free of circular references: the analyser reports a cycle readably and refuses to evaluate it rather than iterating around it. After fixing formulas in the master, force a full recalculation in Excel (Ctrl+Alt+F9) before saving the copy, so the cached values the validator compares against are current.
 

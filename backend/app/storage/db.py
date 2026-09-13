@@ -6,10 +6,19 @@ Phase 0 only proves connectivity; tables (workbook_versions, runs, ...) arrive w
 from collections.abc import Iterator
 from functools import lru_cache
 
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
+
+# SQLite hardening: WAL lets the backup and a reader run while a writer commits, NORMAL sync
+# is durable enough under WAL, and the busy timeout turns "database is locked" into a wait.
+SQLITE_PRAGMAS = (
+    "PRAGMA journal_mode=WAL",
+    "PRAGMA synchronous=NORMAL",
+    "PRAGMA busy_timeout=5000",
+    "PRAGMA foreign_keys=ON",
+)
 
 
 class Base(DeclarativeBase):
@@ -19,8 +28,19 @@ class Base(DeclarativeBase):
 @lru_cache
 def get_engine() -> Engine:
     url = get_settings().resolved_database_url
-    connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
-    return create_engine(url, connect_args=connect_args, future=True)
+    is_sqlite = url.startswith("sqlite")
+    connect_args = {"check_same_thread": False, "timeout": 5} if is_sqlite else {}
+    engine = create_engine(url, connect_args=connect_args, future=True)
+    if is_sqlite and not url.endswith(":memory:"):
+
+        @event.listens_for(engine, "connect")
+        def _pragmas(dbapi_connection, _record) -> None:  # noqa: ANN001
+            cursor = dbapi_connection.cursor()
+            for pragma in SQLITE_PRAGMAS:
+                cursor.execute(pragma)
+            cursor.close()
+
+    return engine
 
 
 @lru_cache

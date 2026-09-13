@@ -9,6 +9,7 @@ import { Button, EmptyState, JobChip, ProgressBar } from "@/components";
 import { DEFAULT_FORMAT } from "@/lib/format";
 import { FormatContext } from "@/lib/FormatContext";
 import { useAsync } from "@/lib/useAsync";
+import { useAuth } from "@/modules/auth/useAuth";
 import { CalculationsPage } from "@/modules/calculations/CalculationsPage";
 import { InputsPage } from "@/modules/inputs/InputsPage";
 import { OutputsPage } from "@/modules/outputs/OutputsPage";
@@ -49,6 +50,7 @@ export default function App() {
   const [researchTick, setResearchTick] = useState(0);
   const { scope, setScope, applied: scopeApplied } = useScope();
   const viewer = useViewer(config.data?.viewer_name);
+  const auth = useAuth();
 
   const versionList = versions.data ?? [];
   const activeVersion = versionList.find((v) => v.status === "active") ?? null;
@@ -161,6 +163,7 @@ export default function App() {
       viewerInitials={initials(viewer.name)}
       viewerName={viewer.name}
       onOpenProfile={() => go("admin")}
+      onSignOut={auth.required ? () => void auth.signOut() : undefined}
     />
   );
   const scopeBar = (

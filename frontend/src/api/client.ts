@@ -11,7 +11,10 @@ export class ApiError extends Error {
 
 const BASE = "/api";
 
-async function handle<T>(response: Response): Promise<T> {
+/** Fired on the window when any request outside the auth endpoints answers 401. */
+export const UNAUTHENTICATED_EVENT = "mfa:unauthenticated";
+
+async function handle<T>(response: Response, path: string): Promise<T> {
   if (!response.ok) {
     let body: unknown;
     let detail = `${response.status} ${response.statusText}`;
@@ -21,6 +24,9 @@ async function handle<T>(response: Response): Promise<T> {
       if (typeof d === "string") detail = d;
     } catch {
       body = undefined;
+    }
+    if (response.status === 401 && !path.startsWith("/auth/") && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(UNAUTHENTICATED_EVENT));
     }
     throw new ApiError(response.status, detail, body);
   }
@@ -33,7 +39,7 @@ export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { Accept: "application/json", ...init?.headers },
   });
-  return handle<T>(response);
+  return handle<T>(response, path);
 }
 
 export async function apiSend<T>(method: "POST" | "PATCH" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
@@ -42,14 +48,14 @@ export async function apiSend<T>(method: "POST" | "PATCH" | "PUT" | "DELETE", pa
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  return handle<T>(response);
+  return handle<T>(response, path);
 }
 
 export async function apiUpload<T>(path: string, file: File): Promise<T> {
   const form = new FormData();
   form.append("file", file, file.name);
   const response = await fetch(`${BASE}${path}`, { method: "POST", body: form, headers: { Accept: "application/json" } });
-  return handle<T>(response);
+  return handle<T>(response, path);
 }
 
 /** Build a query string, skipping undefined values. */
