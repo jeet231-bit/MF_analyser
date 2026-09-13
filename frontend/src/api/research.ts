@@ -214,6 +214,8 @@ export interface EntityMeasure {
 
 export interface EntityDetail extends Envelope {
   entity: EntityRow;
+  /** Labels for the keys of `entity.dims`, from the semantic map. */
+  dimensions: { key: string; label: string }[];
   row: number;
   measures: EntityMeasure[];
   phases: { group: string; groupLabel: string; label: string; value: number | null; categoryMean: number | null; unit: string | null }[];

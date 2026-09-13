@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { getResearchSummary } from "@/api/research";
+import { useState } from "react";
+import { getResearchSummary, type EntityQuery } from "@/api/research";
 import { useAsync } from "@/lib/useAsync";
 import { mockApi } from "@/test/mockApi";
 import { version } from "@/test/fixtures";
@@ -34,7 +35,14 @@ function makeActions(): ResearchActions {
     openAdmin: vi.fn(),
     openVersions: vi.fn(),
     openUpload: vi.fn(),
+    goBack: vi.fn(),
   };
+}
+
+/** The Funds page is controlled by App; this stands in for it. */
+function Funds({ actions, initial }: { actions: ResearchActions; initial?: EntityQuery }) {
+  const [query, setQuery] = useState<EntityQuery | undefined>(initial);
+  return <FundsPage actions={actions} query={query} onQuery={setQuery} />;
 }
 
 function Dashboard({ actions }: { actions: ResearchActions }) {
@@ -126,7 +134,7 @@ describe("FundsPage", () => {
       },
     });
     const actions = makeActions();
-    render(<FundsPage actions={actions} initialQuery={{ quartile: [1] }} />);
+    render(<Funds actions={actions} initial={{ quartile: [1] }} />);
     expect(await screen.findByText("WhiteOak Capital Aggressive Hybrid Fund")).toBeInTheDocument();
     expect(calls[0].url).toContain("quartile=1");
     expect(screen.getByRole("group", { name: "Quartile" }).querySelector('[aria-pressed="true"]')).toHaveTextContent("Q1");
@@ -149,11 +157,20 @@ describe("FundsPage", () => {
     fireEvent.click(within(pivot).getByRole("button", { name: "Plan" }));
     await waitFor(() => expect(calls.at(-1)!.url).toContain("groupBy=plan"));
     expect(await screen.findAllByTestId("group-row")).toHaveLength(2);
-    expect(screen.getAllByTestId("group-row")[0]).toHaveTextContent("Direct · 2 funds");
+    expect(screen.getAllByTestId("group-row")[0]).toHaveTextContent(/Direct.*2 funds/);
     expect(screen.getAllByTestId("group-row")[0]).toHaveTextContent("avg 81.70");
 
     fireEvent.click(screen.getByText("Kotak Nifty Bank Index Fund"));
     expect(actions.openFund).toHaveBeenCalledWith("Kotak Bank Index - Dir");
+
+    // A group row of a drillable pivot opens only that group's funds, and the filter is shown and removable.
+    fireEvent.click(screen.getByRole("button", { name: "Show only Direct" }));
+    await waitFor(() => expect(calls.at(-1)!.url).toContain("plan=Direct"));
+    expect(calls.at(-1)!.url).not.toContain("groupBy");
+    const filters = await screen.findByTestId("active-filters");
+    expect(filters).toHaveTextContent("Direct");
+    fireEvent.click(within(filters).getByRole("button", { name: "Remove Plan filter Direct" }));
+    await waitFor(() => expect(calls.at(-1)!.url).not.toContain("plan=Direct"));
   });
 });
 
@@ -161,11 +178,28 @@ describe("FundDetailPage", () => {
   it("shows tiles, the rank hero with the quartile rule, peers, history, and opens lineage on a cell", async () => {
     const calls = mockApi({
       "GET /api/research/entities/WhiteOak%20Aggressive%20-%20Reg": entityDetail,
+      "GET /api/research/entities": entitiesPage,
       "GET /api/workbooks/abc12345def/lineage/Composite%20Ranks!Z412": { sheet: "Composite Ranks", cell: "Z412", value: 1, type: "number", kind: "formula", formula: "=IF(...)", reads: [] },
     });
     const actions = makeActions();
-    render(<FundDetailPage fundKey="WhiteOak Aggressive - Reg" actions={actions} />);
+    render(<FundDetailPage fundKey="WhiteOak Aggressive - Reg" actions={actions} backLabel="funds · WhiteOak Capital" />);
     expect(await screen.findByRole("heading", { name: "WhiteOak Capital Aggressive Hybrid Fund" })).toBeInTheDocument();
+
+    // Who this fund is, labelled in words: every dimension with its name, and the master row.
+    const about = screen.getByLabelText("About this fund");
+    expect(within(about).getByText("AMC")).toBeInTheDocument();
+    expect(within(about).getByText("WhiteOak Capital")).toBeInTheDocument();
+    expect(within(about).getByText("Position in the master")).toBeInTheDocument();
+    expect(within(about).getByText(/Row 412/)).toBeInTheDocument();
+    // Back goes to the previous screen by name.
+    fireEvent.click(screen.getByRole("button", { name: "← Back to funds · WhiteOak Capital" }));
+    expect(actions.goBack).toHaveBeenCalled();
+    // The AMC's other funds: prev/next in the head, the list below, and the drill-through.
+    const siblings = await screen.findByTestId("amc-siblings");
+    expect(siblings).toHaveTextContent("More from WhiteOak Capital");
+    expect(calls.some((c) => c.url.includes("/api/research/entities?") && c.url.includes("amc=WhiteOak+Capital"))).toBe(true);
+    fireEvent.click(within(siblings).getByRole("button", { name: "Open the list →" }));
+    expect(actions.openFunds).toHaveBeenCalledWith({ amc: "WhiteOak Capital" });
     expect(screen.getByText(narrative(/ranks 3 of 42 rated funds/))).toBeInTheDocument();
     expect(screen.getAllByText("84.20").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("/ 42")).toBeInTheDocument();

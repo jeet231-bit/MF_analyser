@@ -11,14 +11,39 @@ import { Chip, Chips, ConfidentialFooter, LinkButton, NotConfigured, PageHead, Q
 
 const PAGE = 100;
 
-/** Mount with a key derived from initialQuery: a new drill-through starts a fresh page. */
-export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { actions: ResearchActions; initialQuery?: EntityQuery; footer?: string | null; scope?: Scope; scopeBar?: ReactNode; }) {
+/** Pivots whose group rows drill into that group's funds (they are also filters). */
+const DRILLABLE = ["category", "amc", "plan"] as const;
+type Drillable = (typeof DRILLABLE)[number];
+const isDrillable = (key: string | undefined): key is Drillable => (DRILLABLE as readonly string[]).includes(key ?? "");
+
+/**
+ * The funds list. Its query (filters, pivot, sort, page) is owned by the caller so that the
+ * screen comes back exactly as it was after a drill-through: App keeps it in the history entry.
+ */
+export function FundsPage({
+  actions,
+  query: outer,
+  onQuery,
+  footer,
+  scope,
+  scopeBar,
+}: {
+  actions: ResearchActions;
+  query?: EntityQuery;
+  onQuery: (next: EntityQuery) => void;
+  footer?: string | null;
+  scope?: Scope;
+  scopeBar?: ReactNode;
+}) {
   const settings = useFormat();
-  const [query, setQuery] = useState<EntityQuery>({ page: 1, size: PAGE, ...initialQuery });
-  const [search, setSearch] = useState(initialQuery?.q ?? "");
+  const query = useMemo<EntityQuery>(() => ({ page: 1, size: PAGE, ...outer }), [outer]);
+  const [search, setSearch] = useState(query.q ?? "");
   useEffect(() => {
-    const t = setTimeout(() => setQuery((q) => (q.q === (search || undefined) ? q : { ...q, q: search || undefined, page: 1 })), 250);
+    const t = setTimeout(() => {
+      if (query.q !== (search || undefined)) onQuery({ ...query, q: search || undefined, page: 1 });
+    }, 250);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce the typed text only
   }, [search]);
 
   const data = useAsync(() => getResearchEntities(query, scope), [JSON.stringify(query), scopeParam(scope)]);
@@ -27,12 +52,13 @@ export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { 
   const rankKey = body?.measures.find((m) => m.role === "rank" && m.primary)?.key;
   const qKey = body?.measures.find((m) => m.role === "quartile" && m.primary)?.key;
 
-  const update = (patch: Partial<EntityQuery>) => setQuery((q) => ({ ...q, ...patch, page: patch.page ?? 1 }));
+  const update = (patch: Partial<EntityQuery>) => onQuery({ ...query, ...patch, page: patch.page ?? 1 });
 
   if (data.status === "error") return <EmptyState tone="error" title="Could not load the funds" description={data.error} action={<Button onClick={data.reload}>Retry</Button>} />;
   if (!body) return <Skeleton rows={2} />;
   if (!body.configured) return <NotConfigured problems={body.problems} onOpenAdmin={actions.openAdmin} />;
 
+  const dimLabel = (key: string) => body.dimensions.find((d) => d.key === key)?.label ?? key;
   const pivots: { key: string; label: string }[] = [
     ...body.dimensions,
     ...body.measures.filter((m) => m.role === "factor").map((m) => ({ key: `${m.key}_band`, label: `${m.label} band` })),
@@ -42,12 +68,19 @@ export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { 
   const sortable = (key: string, dirDefault: "asc" | "desc") => () =>
     update({ sort: key, dir: body.sort === key ? (body.dir === "asc" ? "desc" : "asc") : dirDefault });
   const exportQuery = { ...query, page: undefined, size: undefined };
+  const active: { key: Drillable; value: string }[] = DRILLABLE.flatMap((k) => (query[k] ? [{ key: k, value: query[k] as string }] : []));
+  const drill = isDrillable(query.groupBy) ? query.groupBy : null;
+  const title = active.length === 1 ? active[0].value : "Funds";
 
   return (
     <div>
       <PageHead
-        title="Funds"
-        sub={`${formatCount(body.total)} funds${query.keys ? " in this selection" : ""} · click any row for the full record`}
+        title={title}
+        sub={
+          active.length === 1
+            ? `${dimLabel(active[0].key)} · ${formatCount(body.total)} funds · click any row for the full record`
+            : `${formatCount(body.total)} funds${query.keys ? " in this selection" : ""} · click any row for the full record`
+        }
         actions={
           <ExportMenu
             items={[
@@ -59,6 +92,26 @@ export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { 
       />
       {scopeBar}
 
+      {active.length > 0 && (
+        <div className="mb-[12px] flex flex-wrap items-center gap-[6px] text-[12.5px] text-muted" data-testid="active-filters">
+          <span>Showing</span>
+          {active.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => update({ [f.key]: undefined })}
+              className="inline-flex items-center gap-[6px] rounded-full glass-inset px-[10px] py-[3px] font-semibold text-ink hover:text-negative"
+              aria-label={`Remove ${dimLabel(f.key)} filter ${f.value}`}
+            >
+              <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">{dimLabel(f.key)}</span>
+              {f.value}
+              <span aria-hidden>×</span>
+            </button>
+          ))}
+          <LinkButton onClick={() => actions.openFunds({})}>All funds</LinkButton>
+        </div>
+      )}
+
       <div className="mb-[16px] flex flex-wrap items-center gap-[7px] rounded-lg glass px-[14px] py-[12px]" role="group" aria-label="Analyse funds by">
         <span className="mr-[4px] text-[10.5px] font-bold uppercase tracking-[0.1em] text-muted">Analyse funds by</span>
         <Chip pressed={!query.groupBy} onClick={() => update({ groupBy: undefined })}>
@@ -69,6 +122,7 @@ export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { 
             {p.label}
           </Chip>
         ))}
+        {drill && <span className="ml-auto text-[11.5px] text-muted">Click a {dimLabel(drill).toLowerCase()} row to see only its funds</span>}
       </div>
 
       <div className="mb-[16px] flex flex-wrap items-center gap-[8px]">
@@ -123,12 +177,19 @@ export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { 
           value={(query.quartile ?? []).map(String)}
           onChange={(next) => update({ quartile: next.length ? next.map(Number) : undefined })}
         />
-        {query.keys && (
-          <LinkButton onClick={() => actions.openFunds({})}>Clear selection ×</LinkButton>
-        )}
+        {query.keys && <LinkButton onClick={() => actions.openFunds({})}>Clear selection ×</LinkButton>}
       </div>
 
-      <FundsTable body={body} columns={columns} rankKey={rankKey} qKey={qKey} onSort={sortable} onOpen={actions.openFund} settings={settings} />
+      <FundsTable
+        body={body}
+        columns={columns}
+        rankKey={rankKey}
+        qKey={qKey}
+        onSort={sortable}
+        onOpen={actions.openFund}
+        onOpenGroup={drill ? (value) => update({ [drill]: value, groupBy: undefined }) : undefined}
+        settings={settings}
+      />
 
       <p className="m-0 mt-[12px] flex flex-wrap items-center gap-[12px] px-[2px] text-xs text-muted">
         <span>
@@ -149,6 +210,7 @@ function FundsTable({
   qKey,
   onSort,
   onOpen,
+  onOpenGroup,
   settings,
 }: {
   body: EntitiesPage;
@@ -157,6 +219,7 @@ function FundsTable({
   qKey?: string;
   onSort: (key: string, dirDefault: "asc" | "desc") => () => void;
   onOpen: (key: string) => void;
+  onOpenGroup?: (value: string) => void;
   settings: ReturnType<typeof useFormat>;
 }) {
   const th = (label: string, key?: string, numeric = true, dirDefault: "asc" | "desc" = "desc") => (
@@ -226,9 +289,22 @@ function FundsTable({
                 const members = rowsByGroup.get(g.key) ?? [];
                 if (members.length === 0) return null;
                 return [
-                  <tr key={`g-${g.key}`} className="bg-surface-lifted" data-testid="group-row">
+                  <tr
+                    key={`g-${g.key}`}
+                    className={cn("bg-surface-lifted", onOpenGroup && "cursor-pointer hover:bg-accent-soft")}
+                    data-testid="group-row"
+                    onClick={onOpenGroup ? () => onOpenGroup(g.key) : undefined}
+                    title={onOpenGroup ? `Show only ${g.label}` : undefined}
+                  >
                     <td className="px-[14px] py-[8px] font-heading text-xs font-semibold text-ink" colSpan={2}>
-                      {g.label} <span className="tabular font-normal text-muted">· {formatCount(g.count)} funds</span>
+                      {onOpenGroup ? (
+                        <button type="button" className="font-heading text-xs font-semibold text-accent hover:underline" aria-label={`Show only ${g.label}`}>
+                          {g.label} →
+                        </button>
+                      ) : (
+                        g.label
+                      )}{" "}
+                      <span className="tabular font-normal text-muted">· {formatCount(g.count)} funds</span>
                     </td>
                     {columns.map((m) => (
                       <td key={m.key} className="tabular px-[14px] py-[8px] text-right text-xs font-semibold text-ink-2">

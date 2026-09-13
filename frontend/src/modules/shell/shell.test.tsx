@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { model, version } from "@/test/fixtures";
 import { summary } from "@/test/researchFixtures";
 import { buildNavigation, buildResearchNav, buildWorkbookNav, RAIL_KEY, readPinned, readView, VIEW_KEY, writePinned, writeView } from "./navigation";
 import { AppShell } from "./AppShell";
+import { describeLocation, useAppHistory } from "./history";
 import { Rail } from "./Rail";
 import { TopBar } from "./TopBar";
 
@@ -161,5 +162,42 @@ describe("AppShell", () => {
       </AppShell>,
     );
     expect(screen.getByTestId("shell-column").className).toContain("--rail-open");
+  });
+});
+
+describe("useAppHistory (Back stays inside the app and restores the screen)", () => {
+  it("pushes screens, replaces filters in place, and pops back to the previous screen with them", async () => {
+    window.history.replaceState(null, "");
+    const { result } = renderHook(() => useAppHistory(() => ({ mode: "research", page: "dashboard" })));
+    expect(result.current.location.page).toBe("dashboard");
+    expect(result.current.canGoBack).toBe(false);
+
+    act(() => result.current.navigate({ mode: "research", page: "funds", funds: { groupBy: "amc" } }));
+    act(() => result.current.replace({ funds: { amc: "Axis" } }));
+    expect(result.current.location.funds).toEqual({ amc: "Axis" });
+    act(() => result.current.navigate({ mode: "research", page: "fund", fund: "Axis Value - Dir" }));
+    expect(result.current.location.fund).toBe("Axis Value - Dir");
+    expect(describeLocation(result.current.previous)).toBe("funds · Axis");
+    expect(result.current.canGoBack).toBe(true);
+
+    act(() => result.current.back({ mode: "research", page: "funds" }));
+    await waitFor(() => expect(result.current.location.page).toBe("funds"));
+    expect(result.current.location.funds).toEqual({ amc: "Axis" }); // the filter survived the round trip
+    expect(describeLocation(result.current.previous)).toBe("dashboard");
+  });
+
+  it("falls back to a given screen when there is nothing to go back to", () => {
+    window.history.replaceState(null, "");
+    const { result } = renderHook(() => useAppHistory(() => ({ mode: "research", page: "dashboard" })));
+    act(() => result.current.back({ mode: "research", page: "funds" }));
+    expect(result.current.location.page).toBe("funds");
+  });
+
+  it("names screens for the back link", () => {
+    expect(describeLocation(null)).toBeNull();
+    expect(describeLocation({ mode: "research", page: "funds" })).toBe("all funds");
+    expect(describeLocation({ mode: "research", page: "funds", funds: { category: "Direct-Thematic", q: "kotak" } })).toBe("funds · Direct-Thematic · “kotak”");
+    expect(describeLocation({ mode: "workbook", page: "sheet", sheet: "Report" })).toBe("Report");
+    expect(describeLocation({ mode: "research", page: "fund", fund: "x" })).toBe("the previous fund");
   });
 });

@@ -173,6 +173,8 @@ def test_entity_detail(client: TestClient, config) -> None:
     _upload(client, "master.xlsx")
     body = client.get("/api/research/entities/Beta One - Dir").json()
     assert body["configured"] is True
+    labels = {d["key"]: d["label"] for d in body["dimensions"]}
+    assert set(labels) >= set(body["entity"]["dims"]) and all(labels.values())
     m = {x["key"]: x for x in body["measures"]}
     assert m["rank"]["value"] == 1 and m["quartile"]["value"] == 1
     assert (

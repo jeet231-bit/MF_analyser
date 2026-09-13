@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { getResearchEntity, type EntityMeasure } from "@/api/research";
+import { getResearchEntities, getResearchEntity, type EntityMeasure } from "@/api/research";
 import { Button, EmptyState } from "@/components";
 import { cn } from "@/lib/cn";
 import { formatCount } from "@/lib/format";
@@ -18,11 +18,27 @@ function cellTarget(cell: string | null | undefined): LineageTarget | null {
   return { sheet: cell.slice(0, i).replace(/^'|'$/g, ""), cell: cell.slice(i + 1) };
 }
 
-export function FundDetailPage({ fundKey, actions, footer }: { fundKey: string; actions: ResearchActions; footer?: string | null }) {
+/** The dimensions whose facts open a filtered fund list. */
+const LINKED: Record<string, "category" | "amc" | "plan"> = { category: "category", amc: "amc", plan: "plan" };
+
+export function FundDetailPage({
+  fundKey,
+  actions,
+  footer,
+  backLabel,
+}: {
+  fundKey: string;
+  actions: ResearchActions;
+  footer?: string | null;
+  /** Name of the screen Back returns to ("all funds", "funds · Axis", "dashboard"); null when there is none. */
+  backLabel?: string | null;
+}) {
   const data = useAsync(() => getResearchEntity(fundKey), [fundKey]);
   const settings = useFormat();
   const watch = useWatchlist();
   const [trace, setTrace] = useState<LineageTarget | null>(null);
+  const amc = data.data?.configured ? (data.data.entity.dims.amc ?? null) : null;
+  const siblings = useAsync(() => (amc ? getResearchEntities({ amc, size: 200 }) : Promise.resolve(null)), [amc]);
 
   if (data.status === "error") {
     return (
@@ -53,6 +69,15 @@ export function FundDetailPage({ fundKey, actions, footer }: { fundKey: string; 
   const watching = watch.has(d.entity.key);
   const explanation = d.quartileExplanation ?? [];
   const versionId = d.version_id ?? "";
+  const dimLabel = (key: string) => d.dimensions?.find((x) => x.key === key)?.label ?? key;
+  const facts = Object.entries(d.entity.dims).filter(([, v]) => v);
+
+  const family = siblings.data?.configured ? siblings.data.rows : [];
+  const me = family.findIndex((r) => r.key === d.entity.key);
+  const prev = me > 0 ? family[me - 1] : null;
+  const next = me >= 0 && me < family.length - 1 ? family[me + 1] : null;
+  const others = family.filter((r) => r.key !== d.entity.key);
+  const familyQ = siblings.data?.configured ? siblings.data.measures.find((m) => m.role === "quartile" && m.primary)?.key : undefined;
 
   const tile = (label: string, value: string, note?: string, tone: "up" | "down" | "muted" = "muted", target?: LineageTarget | null) => (
     <button
@@ -73,28 +98,59 @@ export function FundDetailPage({ fundKey, actions, footer }: { fundKey: string; 
     <div>
       <PageHead
         back={
-          <LinkButton onClick={() => actions.openFunds({})} className="mb-[6px]">
-            ← All funds
+          <LinkButton onClick={actions.goBack} className="mb-[6px]">
+            ← Back to {backLabel ?? "all funds"}
           </LinkButton>
         }
         title={d.entity.label}
         sub={d.entity.sub ?? d.entity.key}
         actions={
-          <Button aria-pressed={watching} onClick={() => watch.toggle({ key: d.entity.key, label: d.entity.label, sub: d.entity.sub })}>
-            {watching ? "★ Watching" : "☆ Watch"}
-          </Button>
+          <>
+            {amc && family.length > 1 && (
+              <span className="flex items-center gap-[4px]" role="group" aria-label={`Other funds from ${amc}`}>
+                <Button size="sm" disabled={!prev} onClick={prev ? () => actions.openFund(prev.key) : undefined} title={prev?.label} aria-label={prev ? `Previous fund from ${amc}: ${prev.label}` : "No previous fund from this AMC"}>
+                  ← Prev
+                </Button>
+                <span className="tabular text-[11.5px] text-muted">
+                  {me + 1} of {family.length}
+                </span>
+                <Button size="sm" disabled={!next} onClick={next ? () => actions.openFund(next.key) : undefined} title={next?.label} aria-label={next ? `Next fund from ${amc}: ${next.label}` : "No next fund from this AMC"}>
+                  Next →
+                </Button>
+              </span>
+            )}
+            <Button aria-pressed={watching} onClick={() => watch.toggle({ key: d.entity.key, label: d.entity.label, sub: d.entity.sub })}>
+              {watching ? "★ Watching" : "☆ Watch"}
+            </Button>
+          </>
         }
       />
-      <div className="-mt-[12px] mb-[18px] flex flex-wrap gap-[6px]">
-        {Object.entries(d.entity.dims)
-          .filter(([, v]) => v)
-          .map(([k, v]) => (
-            <span key={k} className="rounded-[6px] border border-hairline bg-surface-lifted px-[8px] py-[3px] text-[11.5px] text-ink-2">
-              {v}
-            </span>
-          ))}
-        <span className="rounded-[6px] border border-hairline bg-surface-lifted px-[8px] py-[3px] text-[11.5px] text-ink-2">Row {d.row}</span>
-      </div>
+
+      {/* Who this fund is: every dimension labelled, in words a newcomer can read. */}
+      <dl className="-mt-[6px] mb-[18px] grid gap-[8px] sm:grid-cols-2 lg:grid-cols-4" aria-label="About this fund">
+        {facts.map(([key, value]) => {
+          const filter = LINKED[key];
+          return (
+            <div key={key} className="min-w-0 rounded-md glass-inset px-[12px] py-[8px]">
+              <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted">{dimLabel(key)}</dt>
+              <dd className="m-0 mt-[1px] flex flex-wrap items-baseline gap-x-[8px] text-[13px] font-semibold text-ink">
+                <span className="min-w-0 break-words">{String(value)}</span>
+                {filter && (
+                  <LinkButton className="text-[11.5px] font-semibold" onClick={() => actions.openFunds({ [filter]: String(value) })}>
+                    all funds →
+                  </LinkButton>
+                )}
+              </dd>
+            </div>
+          );
+        })}
+        <div className="min-w-0 rounded-md glass-inset px-[12px] py-[8px]">
+          <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted">Position in the master</dt>
+          <dd className="m-0 mt-[1px] text-[13px] font-semibold text-ink">
+            Row {formatCount(d.row)} <span className="font-normal text-muted">of the fund sheet</span>
+          </dd>
+        </div>
+      </dl>
       <Narrative text={d.narrative} className="mb-[16px]" />
 
       <div className="mb-[18px] grid gap-[18px] md:grid-cols-[1.4fr_1fr]">
@@ -157,11 +213,28 @@ export function FundDetailPage({ fundKey, actions, footer }: { fundKey: string; 
             />
           ))}
         </RCard>
+        {amc && others.length > 0 && (
+          <RCard
+            className="md:col-span-12"
+            eyebrow={dimLabel("amc")}
+            title={`More from ${amc}`}
+            badge={formatCount(family.length)}
+            sub="Every other fund this house runs, in rank order · click one to open it"
+            action={<LinkButton onClick={() => actions.openFunds({ amc })}>Open the list →</LinkButton>}
+            data-testid="amc-siblings"
+          >
+            <div className="grid gap-x-[24px] md:grid-cols-2">
+              {others.map((r) => (
+                <MoverRow key={r.key} name={r.label} context={r.dims.category ?? r.sub} right={familyQ ? <QuartilePill q={r.measures[familyQ]} /> : undefined} onClick={() => actions.openFund(r.key)} />
+              ))}
+            </div>
+          </RCard>
+        )}
         {d.history.length > 1 && (
           <RCard className="md:col-span-12" title="History" sub="Rank and quartile in every genuine monthly upload">
             <ol className="m-0 flex list-none flex-wrap gap-[8px] p-0">
               {d.history.map((h) => (
-                <li key={h.version_id} className="min-w-[120px] rounded-sm border border-hairline bg-surface-lifted px-[12px] py-[8px]">
+                <li key={h.version_id} className="min-w-[120px] rounded-sm glass-inset px-[12px] py-[8px]">
                   <div className="text-[11px] text-muted">{h.date ?? h.filename}</div>
                   <div className="tabular font-heading text-lg font-semibold text-ink">{h.rank ?? "—"}</div>
                   <QuartilePill q={h.quartile} />

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getConfig } from "@/api/config";
 import { getModel } from "@/api/model";
-import { getResearchConfig, getResearchSummary, scopeParam, type EntityQuery } from "@/api/research";
+import { getResearchConfig, getResearchSummary, scopeParam } from "@/api/research";
 import { listRuns } from "@/api/runs";
 import { anomalyTotal, getValidation } from "@/api/validation";
 import { listWorkbooks } from "@/api/workbooks";
@@ -29,6 +29,7 @@ import { greeting, initials, useViewer } from "@/modules/research/useViewer";
 import { OverridesBar } from "@/modules/runs/OverridesBar";
 import { useRunSession } from "@/modules/runs/useRunSession";
 import { AppShell } from "@/modules/shell/AppShell";
+import { describeLocation, useAppHistory, type AppLocation } from "@/modules/shell/history";
 import { isResearchPage, moduleSheets, readPinned, readView, validationPill, writePinned, writeView, type AppMode, type PageId } from "@/modules/shell/navigation";
 import { Rail } from "@/modules/shell/Rail";
 import { TopBar } from "@/modules/shell/TopBar";
@@ -41,11 +42,11 @@ export default function App() {
   const config = useAsync(getConfig, []);
   const versions = useAsync(listWorkbooks, []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [view, setView] = useState(readView);
+  const history = useAppHistory(readView);
+  const view = history.location;
   const [pinned, setPinnedState] = useState(readPinned);
-  const [selectedFund, setSelectedFund] = useState<string | null>(null);
-  const [fundsQuery, setFundsQuery] = useState<EntityQuery | undefined>(undefined);
-  const [selectedSheet, setSelectedSheet] = useState<string | null>(null);
+  const selectedFund = view.fund ?? null;
+  const selectedSheet = view.sheet ?? null;
   const [busy, setBusy] = useState<{ active: boolean; label?: string }>({ active: false });
   const [researchTick, setResearchTick] = useState(0);
   const { scope, setScope, applied: scopeApplied } = useScope();
@@ -76,7 +77,7 @@ export default function App() {
   useEffect(() => {
     document.title = config.data?.display_name ? `${config.data.display_name} · MF Analyser` : "MF Analyser";
   }, [config.data?.display_name]);
-  useEffect(() => writeView(view), [view]);
+  useEffect(() => writeView({ mode: view.mode, page: view.page }), [view.mode, view.page]);
 
   const onBusy = useCallback((active: boolean, label?: string) => setBusy({ active, label }), []);
   const session = useRunSession(effectiveId, onBusy, runs.reload);
@@ -96,13 +97,17 @@ export default function App() {
   const summaryData = summary.status === "ready" ? summary.data : null;
   const footer = summaryData?.configured ? summaryData.footer : null;
 
-  const go = useCallback((page: PageId, sheet?: string) => {
-    const mode: AppMode = isResearchPage(page) ? "research" : "workbook";
-    if (sheet !== undefined) setSelectedSheet(sheet);
-    setView({ mode, page });
-    window.scrollTo({ top: 0 });
-  }, []);
-  const setMode = useCallback((mode: AppMode) => setView({ mode, page: mode === "research" ? "dashboard" : "overview" }), []);
+  const { navigate, back: goBackTo } = history;
+  const go = useCallback(
+    (page: PageId, sheet?: string) => {
+      const mode: AppMode = isResearchPage(page) ? "research" : "workbook";
+      const loc: AppLocation = { mode, page };
+      if (sheet !== undefined) loc.sheet = sheet;
+      navigate(loc);
+    },
+    [navigate],
+  );
+  const setMode = useCallback((mode: AppMode) => navigate({ mode, page: mode === "research" ? "dashboard" : "overview" }), [navigate]);
   const setPinned = useCallback((next: boolean) => {
     writePinned(next);
     setPinnedState(next);
@@ -117,14 +122,9 @@ export default function App() {
 
   const actions: ResearchActions = useMemo(
     () => ({
-      openFund: (key) => {
-        setSelectedFund(key);
-        go("fund");
-      },
-      openFunds: (query) => {
-        setFundsQuery(query && Object.keys(query).length ? query : undefined);
-        go("funds");
-      },
+      openFund: (key) => navigate({ mode: "research", page: "fund", fund: key }),
+      openFunds: (query) => navigate({ mode: "research", page: "funds", funds: query && Object.keys(query).length ? query : undefined }),
+      goBack: () => goBackTo({ mode: "research", page: "funds" }),
       openCategories: () => go("categories"),
       openMovement: () => go("movement"),
       openInsights: () => go("insights"),
@@ -132,7 +132,7 @@ export default function App() {
       openVersions: () => go("versions"),
       openUpload: () => go("upload"),
     }),
-    [go],
+    [go, navigate, goBackTo],
   );
 
   const rail = (
@@ -226,9 +226,13 @@ export default function App() {
   } else if (page === "insights") {
     content = <InsightsPage actions={actions} runId={summaryData?.run_id ?? null} scope={scope} scopeBar={scopeBar} />;
   } else if (page === "funds") {
-    content = <FundsPage key={JSON.stringify(fundsQuery ?? {})} actions={actions} initialQuery={fundsQuery} footer={footer} scope={scope} scopeBar={scopeBar} />;
+    content = <FundsPage actions={actions} query={view.funds} onQuery={(q) => history.replace({ funds: q })} footer={footer} scope={scope} scopeBar={scopeBar} />;
   } else if (page === "fund") {
-    content = selectedFund ? <FundDetailPage fundKey={selectedFund} actions={actions} footer={footer} /> : <FundsPage actions={actions} footer={footer} scope={scope} scopeBar={scopeBar} />;
+    content = selectedFund ? (
+      <FundDetailPage key={selectedFund} fundKey={selectedFund} actions={actions} footer={footer} backLabel={describeLocation(history.previous)} />
+    ) : (
+      <FundsPage actions={actions} query={view.funds} onQuery={(q) => history.replace({ funds: q })} footer={footer} scope={scope} scopeBar={scopeBar} />
+    );
   } else if (page === "categories") {
     content = <CategoriesPage actions={actions} footer={footer} scope={scope} scopeBar={scopeBar} />;
   } else if (page === "movement") {

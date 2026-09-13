@@ -145,6 +145,7 @@ export const groupedPage: EntitiesPage = {
 export const entityDetail: EntityDetail = {
   ...envelope,
   entity: entityRows[0],
+  dimensions: entitiesPage.dimensions,
   row: 412,
   measures: [
     { key: "score", label: "Composite score", role: "score", value: 84.2, display: "84.20", unit: null, format: "number", primary: true, categoryRank: 3, categoryCount: 42, cell: "Composite Ranks!T412" },

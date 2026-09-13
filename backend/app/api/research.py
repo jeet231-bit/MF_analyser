@@ -1523,6 +1523,10 @@ def research_entity(
     out.update(
         {
             "entity": _entity_dict(table, e),
+            "dimensions": [
+                {"key": k, "label": table.map.dimensions[k].label}
+                for k in table.resolved.dimensions
+            ],
             "row": e.row,
             "measures": measures,
             "phases": phases,
