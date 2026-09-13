@@ -36,7 +36,7 @@ export function StatTile({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-xl bg-surface px-[20px] py-[18px] shadow-soft", className)}>
+    <div className={cn("rounded-xl glass rise px-[20px] py-[18px]", className)}>
       <div className="flex items-center gap-[10px]">
         {icon && (
           <span className="grid h-[34px] w-[34px] flex-none place-items-center rounded-full bg-accent-soft text-accent" aria-hidden>

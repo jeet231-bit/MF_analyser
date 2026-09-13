@@ -18,7 +18,7 @@ export function EmptyState({
     <div
       role={tone === "error" ? "alert" : undefined}
       className={cn(
-        "flex flex-col items-start gap-[8px] rounded-xl border border-dashed border-hairline bg-surface px-[24px] py-[28px] shadow-soft",
+        "flex flex-col items-start gap-[8px] rounded-xl border border-dashed border-hairline bg-glass px-[24px] py-[28px] backdrop-blur-md rise",
         className,
       )}
     >

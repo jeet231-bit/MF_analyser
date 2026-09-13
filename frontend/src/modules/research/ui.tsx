@@ -81,16 +81,55 @@ export function PageHead({ title, sub, actions, back }: { title: ReactNode; sub?
   );
 }
 
-export function RCard({ title, sub, action, className, children, ...rest }: { title?: ReactNode; sub?: ReactNode; action?: ReactNode; className?: string; children: ReactNode; style?: CSSProperties; "data-testid"?: string }) {
+export type CardTone = "plain" | "mint" | "sky" | "sun" | "rose" | "violet";
+const toneTint: Record<CardTone, string> = { plain: "", mint: "tint-mint", sky: "tint-sky", sun: "tint-sun", rose: "tint-rose", violet: "tint-violet" };
+
+/**
+ * The research card: frosted glass with an optional small-caps eyebrow above the title, a count
+ * badge beside it and a round action at the right; `tone` tints the glass, `index` staggers the
+ * entrance.
+ */
+export function RCard({
+  title,
+  sub,
+  eyebrow,
+  badge,
+  action,
+  tone = "plain",
+  index,
+  className,
+  style,
+  children,
+  ...rest
+}: {
+  title?: ReactNode;
+  sub?: ReactNode;
+  eyebrow?: ReactNode;
+  badge?: ReactNode;
+  action?: ReactNode;
+  tone?: CardTone;
+  index?: number;
+  className?: string;
+  children: ReactNode;
+  style?: CSSProperties;
+  "data-testid"?: string;
+}) {
+  const stagger = index !== undefined ? ({ "--i": index } as CSSProperties) : undefined;
   return (
-    <section className={cn("min-w-0 rounded-xl bg-surface shadow-soft px-[20px] py-[19px]", className)} {...rest}>
-      {(title || action) && (
+    <section className={cn("min-w-0 rounded-xl glass rise px-[20px] py-[19px]", toneTint[tone], className)} style={{ ...stagger, ...style }} {...rest}>
+      {(title || action || eyebrow) && (
         <header className="mb-[14px] flex items-start justify-between gap-[10px]">
-          <div>
-            {title && <h3 className="m-0 font-heading text-[14.5px] font-semibold text-ink">{title}</h3>}
+          <div className="min-w-0">
+            {eyebrow && <div className="mb-[3px] text-[10px] font-bold uppercase tracking-[0.14em] text-accent">{eyebrow}</div>}
+            {title && (
+              <h3 className="m-0 flex flex-wrap items-center gap-[8px] font-heading text-[15.5px] font-bold text-ink">
+                {title}
+                {badge !== undefined && badge !== null && <span className="tabular rounded-full glass-inset px-[9px] py-[2px] text-[11px] font-semibold text-ink-2">{badge}</span>}
+              </h3>
+            )}
             {sub && <p className="m-0 mt-[2px] text-xs text-muted">{sub}</p>}
           </div>
-          {action}
+          {action && <div className="flex flex-none items-center">{action}</div>}
         </header>
       )}
       {children}
@@ -111,7 +150,7 @@ const toneClass = { up: "text-positive", down: "text-negative", muted: "text-mut
 /** The research stat tile: small label, 27 px figure, one line under it. */
 export function StatCard({ label, value, note, tone = "muted", className }: { label: string; value: ReactNode; note?: ReactNode; tone?: keyof typeof toneClass; className?: string }) {
   return (
-    <div className={cn("rounded-xl bg-surface shadow-soft px-[20px] py-[19px]", className)}>
+    <div className={cn("rounded-xl glass rise px-[20px] py-[19px]", className)}>
       <div className="text-[12.5px] font-semibold text-ink-2">{label}</div>
       <div className="tabular mt-[4px] font-heading text-[27px] font-extrabold leading-[1.15] tracking-[-0.02em] text-ink" data-testid="stat-value">
         {value}
@@ -124,8 +163,7 @@ export function StatCard({ label, value, note, tone = "muted", className }: { la
 export function Hero({ eyebrow, big, bigSuffix, sub, children, className }: { eyebrow: string; big: ReactNode; bigSuffix?: ReactNode; sub?: ReactNode; children?: ReactNode; className?: string }) {
   return (
     <div
-      className={cn("flex flex-col gap-[16px] rounded-xl border border-hero-line shadow-soft p-[22px] text-hero-ink", className)}
-      style={{ background: "linear-gradient(152deg, var(--hero-a) 0%, var(--hero) 58%)" }}
+      className={cn("flex flex-col gap-[16px] rounded-xl glass tint-sky rise p-[22px] text-hero-ink", className)}
     >
       <div>
         <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-hero-muted">{eyebrow}</div>
@@ -144,7 +182,7 @@ export function HeroTiles({ tiles }: { tiles: { value: ReactNode; label: string 
   return (
     <div className="grid gap-[8px]" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
       {tiles.map((t) => (
-        <div key={t.label} className="rounded-[14px] bg-hero-tile px-[12px] py-[11px] shadow-soft">
+        <div key={t.label} className="rounded-[14px] glass-inset px-[12px] py-[11px]">
           <div className="tabular font-heading text-[19px] font-semibold leading-[1.1]">{t.value}</div>
           <div className="mt-[2px] text-[10.5px] text-hero-muted">{t.label}</div>
         </div>
@@ -344,7 +382,7 @@ export function Skeleton({ rows = 3 }: { rows?: number }) {
   return (
     <div aria-busy="true" className="space-y-[12px]">
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="h-[96px] animate-pulse rounded-xl bg-surface/70" />
+        <div key={i} className="h-[96px] rounded-xl shimmer" style={{ animationDelay: `${i * 120}ms` }} />
       ))}
     </div>
   );

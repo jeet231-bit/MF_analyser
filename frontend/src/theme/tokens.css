@@ -1,16 +1,22 @@
 /*
   Design tokens (CLAUDE.md rule 5). This is the ONLY file that may contain colour literals.
-  Register: a soft mint ground, white 24 px cards with a soft shadow, a teal accent with a
-  yellow highlight for bars, a curved teal menu whose active item is a white bubble, and a
-  sky-blue gradient header. Light is the default; dark is applied via [data-theme="dark"]
-  which follows the system unless the user toggles it (see src/theme/useTheme.ts).
+  Register: an ambient gradient ground (soft mint with sky and sun blooms) under frosted-glass
+  cards (translucent white, backdrop blur, a bright hairline and an inner highlight), a teal
+  accent with a yellow highlight for bars, a curved translucent teal menu whose active item is
+  a white bubble, tinted glass for the summary band and the KPI tiles, and inset sub-tiles
+  inside cards. Cards rise in on load with a short stagger; motion is off under
+  prefers-reduced-motion. Light is the default; dark is applied via [data-theme="dark"] which
+  follows the system unless the user toggles it (see src/theme/useTheme.ts).
 */
 @import "tailwindcss";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 :root {
-  --ground: #eef3f1;
+  --ground: #eaf1ee;
+  --ambient-a: #c9e6ff; /* sky bloom */
+  --ambient-b: #ffe7a8; /* sun bloom */
+  --ambient-c: #bfe8da; /* mint bloom */
   --surface: #ffffff;
   --surface-lifted: #f4f8f6;
   --ink: #1b2b28;
@@ -27,6 +33,20 @@
   --warning-soft: #fff1d6;
   --negative: #d64545;
   --negative-soft: #fbe3e3;
+
+  /* frosted glass */
+  --glass: rgb(255 255 255 / 0.58);
+  --glass-strong: rgb(255 255 255 / 0.78);
+  --glass-line: rgb(255 255 255 / 0.75);
+  --glass-inset: rgb(255 255 255 / 0.5);
+  --glass-inset-line: rgb(255 255 255 / 0.65);
+  --glass-shine: rgb(255 255 255 / 0.9);
+  --glass-blur: 18px;
+  --tint-mint: rgb(210 240 228 / 0.62);
+  --tint-sky: rgb(212 232 250 / 0.66);
+  --tint-sun: rgb(255 236 178 / 0.66);
+  --tint-rose: rgb(255 222 222 / 0.6);
+  --tint-violet: rgb(228 220 255 / 0.62);
 
   /* the curved teal menu */
   --rail: #1e6b59;
@@ -65,7 +85,10 @@
 }
 
 [data-theme="dark"] {
-  --ground: #0f1a17;
+  --ground: #0d1614;
+  --ambient-a: #16324a;
+  --ambient-b: #3a2f12;
+  --ambient-c: #123a30;
   --surface: #16241f;
   --surface-lifted: #1c2c27;
   --ink: #e8f0ec;
@@ -82,6 +105,18 @@
   --warning-soft: #3a2e12;
   --negative: #e06a6a;
   --negative-soft: #3a1e1e;
+
+  --glass: rgb(28 44 39 / 0.55);
+  --glass-strong: rgb(28 44 39 / 0.78);
+  --glass-line: rgb(255 255 255 / 0.12);
+  --glass-inset: rgb(255 255 255 / 0.06);
+  --glass-inset-line: rgb(255 255 255 / 0.1);
+  --glass-shine: rgb(255 255 255 / 0.16);
+  --tint-mint: rgb(30 80 66 / 0.5);
+  --tint-sky: rgb(30 60 90 / 0.5);
+  --tint-sun: rgb(90 72 20 / 0.45);
+  --tint-rose: rgb(90 36 36 / 0.45);
+  --tint-violet: rgb(60 46 110 / 0.5);
 
   --rail: #123f35;
   --rail-ink: #e8f0ec;
@@ -135,6 +170,10 @@
   --color-white: #ffffff;
   --color-transparent: transparent;
   --color-ink-2: var(--ink-2);
+  --color-glass: var(--glass);
+  --color-glass-strong: var(--glass-strong);
+  --color-glass-line: var(--glass-line);
+  --color-glass-inset: var(--glass-inset);
   --color-rail: var(--rail);
   --color-rail-ink: var(--rail-ink);
   --color-rail-muted: var(--rail-muted);
@@ -174,8 +213,97 @@
   --radius-xl: 24px;
 
   --shadow-*: initial;
-  --shadow-soft: 0 6px 24px rgb(20 40 35 / 0.06);
-  --shadow-elevated: 0 10px 32px rgb(20 40 35 / 0.1);
+  --shadow-soft: 0 8px 28px rgb(20 40 35 / 0.07);
+  --shadow-elevated: 0 14px 40px rgb(20 40 35 / 0.14);
+
+  --animate-rise: rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+}
+
+/* Frosted glass: the one card surface. `--i` staggers the entrance (see .rise). */
+@utility glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  border: 1px solid var(--glass-line);
+  box-shadow:
+    var(--shadow-soft),
+    inset 0 1px 0 var(--glass-shine);
+}
+@utility glass-strong {
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  border: 1px solid var(--glass-line);
+  box-shadow:
+    var(--shadow-soft),
+    inset 0 1px 0 var(--glass-shine);
+}
+/* A sub-tile inside a card (the nested boxes in the reference dashboards). */
+@utility glass-inset {
+  background: var(--glass-inset);
+  border: 1px solid var(--glass-inset-line);
+  box-shadow: inset 0 1px 0 var(--glass-shine);
+}
+/* Tinted glass for the sticky-note style cards: they retarget the glass colour, so they
+   compose with .glass whatever the cascade order. */
+@utility tint-mint {
+  --glass: var(--tint-mint);
+}
+@utility tint-sky {
+  --glass: var(--tint-sky);
+}
+@utility tint-sun {
+  --glass: var(--tint-sun);
+}
+@utility tint-rose {
+  --glass: var(--tint-rose);
+}
+@utility tint-violet {
+  --glass: var(--tint-violet);
+}
+/* Entrance: rise in, staggered by the --i custom property (60 ms per step). */
+@utility rise {
+  animation: var(--animate-rise);
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+/* Interactive cards lift a little under the pointer. */
+@utility lift {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      var(--shadow-elevated),
+      inset 0 1px 0 var(--glass-shine);
+  }
+}
+/* Loading placeholder: a moving sheen over glass. */
+@utility shimmer {
+  background: linear-gradient(100deg, var(--glass) 30%, var(--glass-strong) 50%, var(--glass) 70%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+  border: 1px solid var(--glass-line);
 }
 
 @layer base {
@@ -189,6 +317,13 @@
   body {
     margin: 0;
     min-height: 100vh;
+    /* The ambient ground: three soft blooms the glass can blur. */
+    background-color: var(--ground);
+    background-image:
+      radial-gradient(60rem 36rem at 88% -10%, var(--ambient-a), transparent 60%),
+      radial-gradient(48rem 30rem at -10% 100%, var(--ambient-b), transparent 60%),
+      radial-gradient(40rem 28rem at 30% 40%, var(--ambient-c), transparent 65%);
+    background-attachment: fixed;
   }
   h1,
   h2,
@@ -202,5 +337,13 @@
   }
   ::selection {
     background: var(--accent-soft);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rise,
+    .shimmer,
+    .lift {
+      animation: none;
+      transition: none;
+    }
   }
 }

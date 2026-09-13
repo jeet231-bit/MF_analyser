@@ -9,7 +9,7 @@ interface CardProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
 /** White 24 px surface with a soft shadow. The single elevation level in the system. */
 export function Card({ title, action, className, children, ...rest }: CardProps) {
   return (
-    <section className={cn("rounded-xl bg-surface shadow-soft", className)} {...rest}>
+    <section className={cn("rounded-xl glass rise", className)} {...rest}>
       {(title || action) && (
         <header className="flex items-center justify-between px-[20px] pb-[4px] pt-[18px]">
           {title && <h2 className="font-heading text-[15px] font-bold text-ink">{title}</h2>}

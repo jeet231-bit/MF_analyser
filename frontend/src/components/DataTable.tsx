@@ -44,7 +44,7 @@ export function DataTable<T>({
   };
 
   return (
-    <div className={cn("overflow-auto rounded-lg bg-surface shadow-soft", className)} style={{ maxHeight }}>
+    <div className={cn("overflow-auto rounded-lg glass", className)} style={{ maxHeight }}>
       <table className="w-full border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-surface-lifted">
           <tr>

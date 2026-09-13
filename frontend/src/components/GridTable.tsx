@@ -85,7 +85,7 @@ export function GridTable({
         </div>
       )}
       <div
-        className={cn("overflow-auto rounded-lg bg-surface shadow-soft", loading && "opacity-60")}
+        className={cn("overflow-auto rounded-lg glass", loading && "opacity-60")}
         style={{ maxHeight }}
         aria-busy={loading || undefined}
       >

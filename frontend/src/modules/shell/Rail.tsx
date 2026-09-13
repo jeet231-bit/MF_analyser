@@ -75,7 +75,7 @@ export function Rail({ displayName, mode, model, activeItem, activeSheet, onNavi
       aria-label="Main"
       data-pinned={pinned || undefined}
       className={cn(
-        "group/rail fixed bottom-[12px] left-[12px] top-[12px] z-40 flex w-[calc(var(--rail-w)-12px)] flex-col gap-[4px] overflow-y-auto overflow-x-hidden rounded-[28px] bg-rail px-[12px] py-[16px] text-rail-ink shadow-elevated transition-[width] duration-200",
+        "group/rail fixed bottom-[12px] left-[12px] top-[12px] z-40 flex w-[calc(var(--rail-w)-12px)] flex-col gap-[4px] overflow-y-auto overflow-x-hidden rounded-[28px] border border-rail-line/60 bg-rail/90 px-[12px] py-[16px] text-rail-ink shadow-elevated backdrop-blur-md transition-[width] duration-200",
         "hover:w-[var(--rail-open)] data-[pinned]:w-[var(--rail-open)]",
         "[&_.rail-label]:pointer-events-none [&_.rail-label]:opacity-0 hover:[&_.rail-label]:pointer-events-auto hover:[&_.rail-label]:opacity-100 data-[pinned]:[&_.rail-label]:pointer-events-auto data-[pinned]:[&_.rail-label]:opacity-100",
       )}

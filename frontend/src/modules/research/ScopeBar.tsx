@@ -47,7 +47,7 @@ export function ScopeBar({ scope, description, options, onApply, versions, versi
   const labelClass = "mb-[4px] block text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted";
 
   return (
-    <section className={cn("mb-[18px] overflow-hidden rounded-xl bg-surface shadow-soft", applied && "ring-2 ring-accent/30")} aria-label="Scope">
+    <section className={cn("mb-[18px] overflow-hidden rounded-xl glass rise", applied && "ring-2 ring-accent/30")} aria-label="Scope">
       <button
         type="button"
         aria-expanded={open}

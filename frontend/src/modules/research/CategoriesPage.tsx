@@ -42,7 +42,7 @@ export function CategoriesPage({ actions, footer, scope, scopeBar }: { actions: 
       <Narrative text={body.narrative} className="mb-[16px]" />
       <div className="grid gap-[18px] md:grid-cols-12">
         {body.rows.map((c) => (
-          <article key={c.key} className="min-w-0 rounded-xl bg-surface shadow-soft px-[20px] py-[19px] md:col-span-3" aria-label={c.key}>
+          <article key={c.key} className="min-w-0 rounded-xl glass rise lift px-[20px] py-[19px] md:col-span-3" aria-label={c.key}>
             <h3 className="m-0 font-heading text-[13.5px] font-semibold text-ink">{c.key}</h3>
             <p className="m-0 mt-[2px] text-xs text-muted">
               {formatCount(c.rated)} of {formatCount(c.count)} funds rated

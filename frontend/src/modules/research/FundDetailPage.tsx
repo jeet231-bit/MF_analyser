@@ -60,7 +60,7 @@ export function FundDetailPage({ fundKey, actions, footer }: { fundKey: string; 
       type="button"
       disabled={!target}
       onClick={target ? () => setTrace(target) : undefined}
-      className={cn("rounded-xl bg-surface shadow-soft px-[16px] py-[14px] text-left", target && "hover:border-accent")}
+      className={cn("rounded-xl glass rise lift px-[16px] py-[14px] text-left", target && "hover:border-accent")}
       aria-label={target ? `${label}: ${value}. Trace this number` : undefined}
     >
       <div className="text-[11.5px] font-medium text-muted">{label}</div>

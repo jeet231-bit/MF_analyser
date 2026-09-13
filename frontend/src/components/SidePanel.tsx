@@ -29,7 +29,7 @@ export function SidePanel({
     <aside
       role="dialog"
       aria-label={typeof title === "string" ? title : undefined}
-      className={cn("fixed inset-y-[12px] right-[12px] z-30 flex flex-col rounded-xl bg-surface shadow-elevated")}
+      className={cn("fixed inset-y-[12px] right-[12px] z-30 flex flex-col rounded-xl glass-strong rise")}
       style={{ width, maxWidth: "calc(100vw - 24px)" }}
     >
       <header className="flex items-center justify-between px-[20px] pb-[8px] pt-[18px]">

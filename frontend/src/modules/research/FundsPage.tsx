@@ -59,7 +59,7 @@ export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { 
       />
       {scopeBar}
 
-      <div className="mb-[16px] flex flex-wrap items-center gap-[7px] rounded-lg bg-surface shadow-soft px-[14px] py-[12px]" role="group" aria-label="Analyse funds by">
+      <div className="mb-[16px] flex flex-wrap items-center gap-[7px] rounded-lg glass px-[14px] py-[12px]" role="group" aria-label="Analyse funds by">
         <span className="mr-[4px] text-[10.5px] font-bold uppercase tracking-[0.1em] text-muted">Analyse funds by</span>
         <Chip pressed={!query.groupBy} onClick={() => update({ groupBy: undefined })}>
           None
@@ -72,7 +72,7 @@ export function FundsPage({ actions, initialQuery, footer, scope, scopeBar }: { 
       </div>
 
       <div className="mb-[16px] flex flex-wrap items-center gap-[8px]">
-        <label className="flex min-w-[200px] flex-1 items-center gap-[8px] rounded-full bg-surface px-[14px] shadow-soft">
+        <label className="flex min-w-[200px] flex-1 items-center gap-[8px] rounded-full glass px-[14px]">
           <span className="text-muted" aria-hidden>
             ⌕
           </span>
@@ -203,7 +203,7 @@ function FundsTable({
   );
 
   return (
-    <div className="overflow-x-auto rounded-lg bg-surface shadow-soft">
+    <div className="overflow-x-auto rounded-lg glass rise">
       <table className="w-full min-w-[720px] border-collapse text-[13px]">
         <thead>
           <tr>

@@ -56,7 +56,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
   if (phase.kind === "unreachable") {
     return (
       <div className="grid min-h-screen place-items-center bg-ground px-[16px]">
-        <div className="max-w-[420px] rounded-[24px] bg-surface p-[28px] text-center shadow-soft">
+        <div className="max-w-[420px] rounded-[24px] glass-strong rise p-[28px] text-center">
           <h1 className="font-heading text-[18px] font-bold text-ink">The server is not answering</h1>
           <p className="mt-[8px] text-[13px] text-muted">{phase.detail}</p>
           <p className="mt-[8px] text-[13px] text-muted">Check that the MF Analyser service is running, then reload this page.</p>
@@ -98,7 +98,7 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
 
   return (
     <main className="grid min-h-screen place-items-center bg-ground px-[16px]">
-      <form onSubmit={submit} className="w-full max-w-[380px] rounded-[24px] bg-surface p-[28px] shadow-soft" aria-labelledby="login-title">
+      <form onSubmit={submit} className="w-full max-w-[380px] rounded-[24px] glass-strong rise p-[28px]" aria-labelledby="login-title">
         <div className="mb-[20px] flex items-center gap-[12px]">
           <span className="grid h-[40px] w-[40px] place-items-center rounded-[14px] bg-accent font-heading text-[15px] font-bold text-white" aria-hidden>
             MF
