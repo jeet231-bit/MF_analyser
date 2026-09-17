@@ -241,7 +241,7 @@ export function MoverRow({ name, context, right, delta, highlight, onClick }: { 
       className={cn(
         "flex w-full items-center gap-[11px] border-b border-hairline py-[10px] text-left last:border-b-0",
         highlight && "rounded-sm bg-accent-soft px-[8px]",
-        onClick && "hover:bg-surface-lifted",
+        onClick && "rounded-sm hover:bg-ink/5",
       )}
     >
       <div className="min-w-0 flex-1">

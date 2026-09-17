@@ -88,7 +88,7 @@ export function DashboardPage({
               {asOf ? ` · as of ${asOf}` : ""}
             </span>
           </div>
-          <Narrative text={s.executive} onHero className="max-w-[88ch] text-[14.5px] leading-[1.62]" />
+          <Narrative text={s.executive} onHero className="text-[14.5px] leading-[1.62]" />
         </section>
       )}
 
@@ -193,7 +193,7 @@ function WatchlistCard({ actions, className }: { actions: ResearchActions; class
                 right={
                   <>
                     <QuartilePill q={q ?? null} />
-                    <button type="button" aria-label={`Remove ${i.label} from watchlist`} onClick={() => remove(i.key)} className="text-xs text-muted hover:text-negative">
+                    <button type="button" aria-label={`Remove ${i.label} from watchlist`} onClick={() => remove(i.key)} className="px-[4px] text-[14px] leading-none text-ink-2 hover:text-negative">
                       ×
                     </button>
                   </>
