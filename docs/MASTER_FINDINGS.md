@@ -68,6 +68,16 @@ Most of these names look like recent launches, which would make them "too young"
 
 **Status: open, for the research team.** Entering the first-NAV date for these seventeen schemes on the First NAV sheet closes the item; the card empties by itself on the next upload.
 
+## 6. The pivot sheets hold stale outputs
+
+**What the workbook says.** Sixteen sheets carry pivot tables (17 in all) that summarise Composite Ranks, Summary-Performance, CY Returns, Bull-Bear Returns, Report, P2P Perf and the two index sheets. Excel refreshes a pivot only when someone asks it to, and each pivot records when that last happened. In the 11 September master: the two Composite Ranks pivots were refreshed on 10 September; the CY Returns and Summary-Performance pivots on 4 September; Bull-Bear on 3 September; the index pivots on 5 September; the three Report pivots on 15 August; the P2P Perf expense-ratio pivots on 11 August; the Index-CY ranking pivot on 13 August.
+
+**What the analyser found.** Recomputing each pivot from the same source range, with the filters Excel saved, the two Composite Ranks pivots reconcile cell for cell (418 numbers on PIVOT-Composite, none out). The Report pivots (Perf-Category, Perf-Category-Scheme, Perf-AMC-Scheme), the expense-ratio pivots and the index-roll pivots do not: their cached rows carry the numbers of the data as it stood a month earlier. For instance the Perf-Category row for Aggressive Hybrid Fund shows CY averages that differ from the current Report rows by around a third of a percentage point.
+
+**What it affects.** Nothing in the rankings; pivots are outputs. It affects anyone reading a pivot sheet in Excel as if it were current. The analyser's Pivots screen recomputes every pivot from the engine's numbers each time it is opened, so the console never shows a stale pivot; each pivot card names the date Excel last refreshed its own copy.
+
+**Status: open, for the research team.** Press "Refresh All" (Data ribbon) before saving the monthly master, or treat the Pivots screen as the reference.
+
 ## Smaller observations
 
 - Six index funds appear twice as lookup keys on the Domain sheet (rows 386 to 397): Axis Nifty Energy, Edelweiss Nifty REITs, Kotak Nifty Bank, Navi Nifty REITs, UTI BSE India Sector Leaders and UTI Nifty 500. Excel's exact-match lookups take the first occurrence silently. If the two rows ever carry different classifications, the second one will never be used. Harmless today; worth deduplicating.

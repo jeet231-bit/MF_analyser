@@ -387,3 +387,68 @@ export function researchExportUrl(
   }
   return `${base}${qs({ format, from: query.from, to: query.to, measure: query.measure, scope: scopeParam(scope) })}`;
 }
+
+// ---- pivots: the workbook's own pivot tables, recomputed from the engine --------------------
+
+export interface PivotValueSpec {
+  label: string;
+  field: string;
+  agg: string; // average | sum | count | countNums | min | max
+}
+
+export interface PivotQuery {
+  filters: Record<string, string[]>;
+  rows: string[];
+  cols: string[];
+  values: PivotValueSpec[];
+}
+
+export interface PivotSummary {
+  id: string;
+  name: string;
+  sheet: string;
+  anchor: string;
+  source: { sheet: string; ref: string; records: number; live: boolean; refreshed: string | null };
+  fields: { name: string; numeric: boolean }[];
+  layout: { rows: string[]; cols: string[]; filters: string[]; values: PivotValueSpec[] };
+  savedFilters: Record<string, string[]>;
+}
+
+export interface PivotListing extends Envelope {
+  pivots: PivotSummary[];
+  /** Global-scope dimension -> pivot filter field it pre-fills (from dashboard.config.json). */
+  scopeFields: Record<string, string>;
+}
+
+export interface PivotRow {
+  keys: string[];
+  kind: "leaf" | "subtotal" | "total";
+  n: number;
+  /** Per column key, one number per value. */
+  cells: (number | null)[][];
+}
+
+export interface PivotTable extends Envelope {
+  id: string;
+  rowFields: string[];
+  colFields: string[];
+  colKeys: string[][];
+  values: PivotValueSpec[];
+  rows: PivotRow[];
+  total: PivotRow;
+  records: number;
+  matched: number;
+  live: boolean;
+  options: Record<string, string[]>;
+  fieldKinds: Record<string, "text" | "number">;
+  query: PivotQuery;
+}
+
+export const listPivots = (versionId?: string) => apiGet<PivotListing>(`/research/pivots${qs({ version_id: versionId })}`);
+
+export const getPivot = (id: string, query?: PivotQuery, versionId?: string) =>
+  apiGet<PivotTable>(`/research/pivot${qs({ id, spec: query ? JSON.stringify(query) : undefined, version_id: versionId })}`);
+
+export function pivotExportUrl(id: string, format: "csv" | "xlsx", query?: PivotQuery): string {
+  return `/api/research/pivot/export${qs({ id, format, spec: query ? JSON.stringify(query) : undefined })}`;
+}

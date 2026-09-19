@@ -175,6 +175,39 @@ class WorkbookSummary(BaseModel):
     sheet_names: list[str] = Field(default_factory=list)
 
 
+class PivotField(BaseModel):
+    """One column of a pivot's source range, in cache order (index 0 = first column)."""
+
+    name: str
+    index: int
+    numeric: bool = False
+
+
+class PivotValue(BaseModel):
+    label: str
+    field: str
+    agg: str = "sum"  # sum | count | average | max | min | countNums | product
+
+
+class PivotSpec(BaseModel):
+    """A pivot table as the workbook defines it (row/column/filter/value fields and the
+    selections Excel saved), read from the OOXML pivot parts: never hand-configured."""
+
+    name: str
+    sheet: str
+    anchor: str
+    source_sheet: str
+    source_ref: str
+    records: int = 0
+    refreshed: str | None = None  # when Excel last refreshed the cached output (ISO date-time)
+    fields: list[PivotField] = Field(default_factory=list)
+    rows: list[str] = Field(default_factory=list)
+    cols: list[str] = Field(default_factory=list)
+    filters: list[str] = Field(default_factory=list)
+    values: list[PivotValue] = Field(default_factory=list)
+    saved_filters: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class RawWorkbook(BaseModel):
     filename: str
     epoch: Literal[1900, 1904] = 1900
@@ -184,6 +217,7 @@ class RawWorkbook(BaseModel):
     tables: list[TableDef] = Field(default_factory=list)
     functions: dict[str, int] = Field(default_factory=dict)
     sheets: list[RawSheet] = Field(default_factory=list)
+    pivots: list[PivotSpec] = Field(default_factory=list)
 
     def sheet(self, name: str) -> RawSheet | None:
         return next((s for s in self.sheets if s.name == name), None)

@@ -1149,6 +1149,11 @@
         "title": "34 funds have no first NAV date on First NAV",
         "detail": "Their First Date reads \"--\" and their composite is \"--\", so they cannot be told apart from young launches. Seventeen schemes, both plans each; see docs/MASTER_FINDINGS.md.",
         "status": "open"
+      },
+      {
+        "title": "Pivot sheets hold stale outputs",
+        "detail": "Excel refreshes a pivot only when asked. In the 11 Sep master, the pivots over Report, P2P Perf and the index sheets were last refreshed between 11 and 15 Aug and no longer match their source data; only the Composite Ranks pivots (refreshed 10 Sep) reconcile. The Pivots screen recomputes every pivot from the current numbers.",
+        "status": "open"
       }
     ],
     "minGroupCount": 10,
@@ -1194,7 +1199,15 @@
         "note": "{checked} formula cells reconciled with Excel",
         "tone": "positive"
       }
-    ]
+    ],
+    "pivots": {
+      "note": "Pivot tables come from the workbook itself; this only says which global-scope dimension pre-fills which pivot filter field.",
+      "scopeFields": {
+        "plan": "Sub Plan",
+        "category": "Scheme Sub Nature",
+        "amc": "AMC"
+      }
+    }
   },
   "viewer": {
     "defaultName": "Jeet",

@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.dashboard_config import DashboardConfig
-from app.exports.descriptor import ExportColumn, ExportView, provenance_for
+from app.exports.descriptor import ExportColumn, ExportView, provenance_for, slug
 from app.research.insights import ComputedInsight
 from app.research.table import Entity, ResearchTable
 from app.storage.models import Run, WorkbookVersion
@@ -189,4 +189,61 @@ def insights_view(
         row_labels=labels,
         rows=rows,
         provenance=provenance_for(session, run, version, cfg, "research insights"),
+    )
+
+
+def slug_of(text: str) -> str:
+    return slug(text)
+
+
+def pivot_view(
+    session: Session,
+    version: WorkbookVersion,
+    run: Run,
+    cfg: DashboardConfig,
+    spec: Any,
+    query: Any,
+    table: dict[str, Any],
+) -> ExportView:
+    """A computed pivot as a flat table: the row fields, then one column per column key and
+    value; subtotals and the grand total are rows like any other, labelled by kind."""
+    row_fields: list[str] = table["rowFields"]
+    columns = [
+        ExportColumn(key=f"row{i}", label=name, format="text", kind="field")
+        for i, name in enumerate(row_fields)
+    ]
+    columns.append(ExportColumn(key="kind", label="Row type", format="text", kind="field"))
+    columns.append(ExportColumn(key="n", label="Records", format="integer", kind="field"))
+    for ci, ck in enumerate(table["colKeys"] or [[]]):
+        prefix = " · ".join(ck) + " · " if ck else ""
+        for vi, v in enumerate(table["values"]):
+            fmt = "integer" if v["agg"] in ("count", "countNums") else "number"
+            columns.append(
+                ExportColumn(
+                    key=f"c{ci}v{vi}", label=f"{prefix}{v['label']}", format=fmt, kind="output"
+                )
+            )
+    rows: list[list[Any]] = []
+    labels: list[str | None] = []
+    for r in [*table["rows"], table["total"]]:
+        keys = list(r["keys"]) + [None] * (len(row_fields) - len(r["keys"]))
+        cells = (
+            [c for group in r["cells"] for c in group]
+            if r["cells"]
+            else [None] * (len(columns) - len(row_fields) - 2)
+        )
+        rows.append(keys + [r["kind"], r["n"]] + cells)
+        labels.append(" › ".join(r["keys"]))
+    filters = (
+        ", ".join(f"{k} = {' | '.join(v)}" for k, v in query.filters.items() if v) or "no filter"
+    )
+    return ExportView(
+        id=slug(spec.sheet),
+        title=f"{spec.sheet} · {spec.name}",
+        subtitle=f"{filters} · {table['matched']} of {table['records']} records · {'engine values' if table['live'] else 'cached values'}",
+        columns=columns,
+        row_label_header="Row",
+        row_labels=labels,
+        rows=rows,
+        provenance=provenance_for(session, run, version, cfg, f"pivot {spec.sheet} · {filters}"),
     )

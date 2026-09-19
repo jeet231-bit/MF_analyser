@@ -20,8 +20,9 @@ from openpyxl.worksheet.formula import ArrayFormula, DataTableFormula
 
 from app.parser.cellvalues import coerce_value
 from app.parser.inventory import FunctionInventory
-from app.parser.models import CellColumns, RawSheet, RawWorkbook, SheetState
+from app.parser.models import CellColumns, PivotSpec, RawSheet, RawWorkbook, SheetState
 from app.parser.package import SheetPart, inspect_package
+from app.parser.pivots import parse_pivots
 
 log = logging.getLogger(__name__)
 
@@ -207,8 +208,10 @@ def load_raw_workbook(
     warnings: list[str] = []
     if info.has_macros or suffix == ".xlsm":
         warnings.append(MACRO_WARNING)
+    pivots: list[PivotSpec] = []
     if info.has_pivots:
         warnings.append(PIVOT_WARNING)
+        pivots = parse_pivots(path)
     if info.has_external_links:
         warnings.append(EXTERNAL_LINK_WARNING)
 
@@ -256,4 +259,5 @@ def load_raw_workbook(
         tables=[t for part in info.sheets for t in part.tables],
         functions=inventory.as_dict(),
         sheets=sheets,
+        pivots=pivots,
     )

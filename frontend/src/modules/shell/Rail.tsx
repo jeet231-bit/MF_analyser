@@ -14,6 +14,7 @@ export interface RailProps {
   anomalyCount: number;
   summary: ResearchSummary | null;
   insightCount?: number;
+  pivotCount?: number;
   openFindings?: number;
   pinned: boolean;
   onPin: (pinned: boolean) => void;
@@ -24,6 +25,7 @@ const PAGE_ICONS: Record<string, IconName> = {
   insights: "insights",
   funds: "funds",
   categories: "categories",
+  pivots: "pivots",
   movement: "movement",
   overview: "overview",
   inputs: "inputs",
@@ -40,8 +42,8 @@ const GROUP_ICONS: Record<string, IconName> = { Outputs: "output", Calculations:
  * pinned (Workbook mode pins it, since sheet names cannot be icons). It overlays the content
  * when open, so the page keeps its width.
  */
-export function Rail({ displayName, mode, model, activeItem, activeSheet, onNavigate, anomalyCount, summary, insightCount, openFindings = 0, pinned, onPin }: RailProps) {
-  const researchNav = buildResearchNav(summary, insightCount);
+export function Rail({ displayName, mode, model, activeItem, activeSheet, onNavigate, anomalyCount, summary, insightCount, pivotCount, openFindings = 0, pinned, onPin }: RailProps) {
+  const researchNav = buildResearchNav(summary, insightCount, pivotCount);
   const groups = buildWorkbookNav(model, anomalyCount);
   const adminDot = openFindings > 0 || anomalyCount > 0;
   const label = (text: string, extra?: string) => (

@@ -5,7 +5,7 @@ import type { PillTone } from "@/components";
 
 export type AppMode = "research" | "workbook";
 
-export type ResearchPageId = "dashboard" | "insights" | "funds" | "fund" | "categories" | "movement" | "admin" | "upload";
+export type ResearchPageId = "dashboard" | "insights" | "funds" | "fund" | "categories" | "pivots" | "movement" | "admin" | "upload";
 export type WorkbookPageId = "overview" | "inputs" | "analysis" | "calculations" | "outputs" | "validation" | "versions" | "sheet";
 export type PageId = ResearchPageId | WorkbookPageId;
 
@@ -69,7 +69,7 @@ export function buildNavigation(model: LogicModel | null, anomalyCount = 0): Nav
 }
 
 /** Research rail: the six screens, with live counts where the summary has them. */
-export function buildResearchNav(summary: ResearchSummary | null, insightCount?: number): NavItem[] {
+export function buildResearchNav(summary: ResearchSummary | null, insightCount?: number, pivotCount?: number): NavItem[] {
   const u = summary?.configured ? summary.universe : undefined;
   const movement = summary?.configured ? summary.movement : undefined;
   return [
@@ -77,6 +77,7 @@ export function buildResearchNav(summary: ResearchSummary | null, insightCount?:
     { id: "insights", label: "Insights", enabled: true, sheets: [], count: insightCount },
     { id: "funds", label: "Funds", enabled: true, sheets: [], count: u?.total },
     { id: "categories", label: "Categories", enabled: true, sheets: [], count: u?.categories },
+    { id: "pivots", label: "Pivots", enabled: true, sheets: [], count: pivotCount },
     { id: "movement", label: "Movement", enabled: true, sheets: [], count: movement ? movement.moved : undefined },
   ];
 }
@@ -144,7 +145,7 @@ export interface ViewState {
   page: PageId;
 }
 
-const RESEARCH_PAGES: ResearchPageId[] = ["dashboard", "insights", "funds", "fund", "categories", "movement", "admin", "upload"];
+const RESEARCH_PAGES: ResearchPageId[] = ["dashboard", "insights", "funds", "fund", "categories", "pivots", "movement", "admin", "upload"];
 const WORKBOOK_PAGES: WorkbookPageId[] = ["overview", "inputs", "analysis", "calculations", "outputs", "validation", "versions", "sheet"];
 
 export function isResearchPage(page: PageId): page is ResearchPageId {

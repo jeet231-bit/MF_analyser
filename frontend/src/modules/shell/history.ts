@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { EntityQuery } from "@/api/research";
+import type { EntityQuery, PivotQuery } from "@/api/research";
 import type { AppMode, PageId } from "./navigation";
 
 /** One screen of the app: the page plus whatever it needs to be re-shown exactly. */
@@ -10,6 +10,8 @@ export interface AppLocation {
   fund?: string;
   /** The Funds page's filters, sort, pivot and page, kept so Back lands on the same list. */
   funds?: EntityQuery;
+  /** The Pivots screen: which pivot is open (null = the list) and its layout. */
+  pivot?: { id: string | null; query?: PivotQuery };
 }
 
 interface Entry extends AppLocation {
@@ -100,6 +102,7 @@ const PAGE_NAMES: Partial<Record<PageId, string>> = {
   funds: "funds",
   fund: "the previous fund",
   categories: "categories",
+  pivots: "pivots",
   movement: "movement",
   admin: "admin",
   upload: "upload",
@@ -118,6 +121,7 @@ export function describeLocation(loc: AppLocation | null): string | null {
     const parts = [q.amc, q.category, q.plan, q.q ? `“${q.q}”` : undefined].filter(Boolean);
     return parts.length ? `funds · ${parts.join(" · ")}` : "all funds";
   }
+  if (loc.page === "pivots" && loc.pivot?.id) return `pivot ${loc.pivot.id.split("::")[0]}`;
   if (loc.page === "sheet" && loc.sheet) return loc.sheet;
   return PAGE_NAMES[loc.page] ?? loc.page;
 }

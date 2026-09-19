@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getConfig } from "@/api/config";
 import { getModel } from "@/api/model";
-import { getResearchConfig, getResearchSummary, scopeParam } from "@/api/research";
+import { getResearchConfig, getResearchSummary, listPivots, scopeParam } from "@/api/research";
 import { listRuns } from "@/api/runs";
 import { anomalyTotal, getValidation } from "@/api/validation";
 import { listWorkbooks } from "@/api/workbooks";
@@ -21,6 +21,7 @@ import { FundDetailPage } from "@/modules/research/FundDetailPage";
 import { FundsPage } from "@/modules/research/FundsPage";
 import { InsightsPage } from "@/modules/research/InsightsPage";
 import { MovementPage } from "@/modules/research/MovementPage";
+import { PivotsPage } from "@/modules/research/PivotsPage";
 import { ScopeBar } from "@/modules/research/ScopeBar";
 import type { ResearchActions } from "@/modules/research/types";
 import { UploadPage } from "@/modules/research/UploadPage";
@@ -73,6 +74,7 @@ export default function App() {
   );
   const summary = useAsync(() => getResearchSummary(undefined, scope), [researchTick, versionList.length, activeVersion?.id, scopeParam(scope)]);
   const researchConfig = useAsync(() => getResearchConfig(), [researchTick, activeVersion?.id]);
+  const pivots = useAsync(() => listPivots(), [researchTick, activeVersion?.id]);
 
   useEffect(() => {
     document.title = config.data?.display_name ? `${config.data.display_name} · MF Analyser` : "MF Analyser";
@@ -147,6 +149,7 @@ export default function App() {
       summary={summaryData}
       insightCount={researchConfig.data?.configured ? researchConfig.data.insights?.length : undefined}
       openFindings={researchConfig.data?.findings?.filter((f) => f.status === "open").length ?? 0}
+      pivotCount={pivots.data?.configured ? pivots.data.pivots.length : undefined}
       pinned={pinned || view.mode === "workbook"}
       onPin={setPinned}
     />
@@ -235,6 +238,18 @@ export default function App() {
     );
   } else if (page === "categories") {
     content = <CategoriesPage actions={actions} footer={footer} scope={scope} scopeBar={scopeBar} />;
+  } else if (page === "pivots") {
+    content = (
+      <PivotsPage
+        pivots={pivots}
+        location={view.pivot ?? { id: null }}
+        onOpen={(id) => navigate({ mode: "research", page: "pivots", pivot: { id } })}
+        onQuery={(query) => history.replace({ pivot: { id: view.pivot?.id ?? null, query } })}
+        scope={scope}
+        actions={actions}
+        footer={footer}
+      />
+    );
   } else if (page === "movement") {
     content = <MovementPage actions={actions} footer={footer} scope={scope} scopeBar={scopeBar} />;
   } else if (page === "admin") {

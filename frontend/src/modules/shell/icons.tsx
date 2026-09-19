@@ -32,6 +32,12 @@ const icons = {
       <rect x="13" y="13" width="8" height="7" rx="1.5" />
     </svg>
   ),
+  pivots: (
+    <svg {...base}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 9h18M8 9v11M3 14h18" />
+    </svg>
+  ),
   movement: (
     <svg {...base}>
       <path d="M4 17l5-5 3.5 3.5L20 8" />

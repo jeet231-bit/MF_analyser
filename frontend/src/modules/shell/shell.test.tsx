@@ -18,7 +18,8 @@ describe("navigation", () => {
 
   it("builds the research rail with live counts and the workbook rail with sheets grouped by role", () => {
     const research = buildResearchNav(summary, 12);
-    expect(research.map((n) => n.id)).toEqual(["dashboard", "insights", "funds", "categories", "movement"]);
+    expect(research.map((n) => n.id)).toEqual(["dashboard", "insights", "funds", "categories", "pivots", "movement"]);
+    expect(buildResearchNav(summary, 12, 17).find((n) => n.id === "pivots")?.count).toBe(17);
     expect(research.find((n) => n.id === "funds")?.count).toBe(3232);
     expect(research.find((n) => n.id === "categories")?.count).toBe(200);
     expect(research.find((n) => n.id === "movement")?.count).toBe(86);

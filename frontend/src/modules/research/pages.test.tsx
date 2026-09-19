@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
-import { getResearchSummary, type EntityQuery } from "@/api/research";
+import { getResearchSummary, listPivots, type EntityQuery, type PivotQuery } from "@/api/research";
 import { useAsync } from "@/lib/useAsync";
 import { mockApi } from "@/test/mockApi";
 import { version } from "@/test/fixtures";
 import { EMPTY_SCOPE } from "@/api/research";
-import { categories, entitiesPage, entityDetail, groupedPage, insights, movement, movementUnavailable, notConfigured, researchConfig, summary } from "@/test/researchFixtures";
+import { categories, entitiesPage, entityDetail, groupedPage, insights, movement, movementUnavailable, notConfigured, pivotListing, pivotTable, researchConfig, summary } from "@/test/researchFixtures";
 import { AdminPage } from "./AdminPage";
 import { CategoriesPage } from "./CategoriesPage";
 import { DashboardPage } from "./DashboardPage";
@@ -13,6 +13,8 @@ import { FundDetailPage } from "./FundDetailPage";
 import { FundsPage } from "./FundsPage";
 import { InsightsPage } from "./InsightsPage";
 import { MovementPage } from "./MovementPage";
+import { defaultQuery, type PivotLocation } from "./pivotQuery";
+import { PivotsPage } from "./PivotsPage";
 import type { ResearchActions } from "./types";
 import { UploadPage } from "./UploadPage";
 import { WATCHLIST_KEY } from "./useWatchlist";
@@ -311,5 +313,67 @@ describe("AdminPage and UploadPage", () => {
     expect(screen.getByRole("heading", { name: "Upload version" })).toBeInTheDocument();
     expect(screen.getByText("Recalculate and check against Excel")).toBeInTheDocument();
     expect(screen.getByText("You activate it")).toBeInTheDocument();
+  });
+});
+
+function Pivots({ actions, location, onOpen, onQuery }: { actions: ResearchActions; location: PivotLocation; onOpen: (id: string | null) => void; onQuery: (q: PivotQuery) => void }) {
+  const pivots = useAsync(() => listPivots(), []);
+  return <PivotsPage pivots={pivots} location={location} onOpen={onOpen} onQuery={onQuery} scope={{ ...EMPTY_SCOPE, dims: { plan: "Regular" } }} actions={actions} />;
+}
+
+describe("PivotsPage", () => {
+  it("lists the workbook's pivots grouped by source, labelled live or cached, and opens one", async () => {
+    mockApi({ "GET /api/research/pivots": pivotListing });
+    const onOpen = vi.fn();
+    render(<Pivots actions={makeActions()} location={{ id: null }} onOpen={onOpen} onQuery={vi.fn()} />);
+    expect(await screen.findByRole("heading", { name: "Pivots" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Pivots over Composite Ranks" })).toBeInTheDocument();
+    const cards = screen.getAllByTestId("pivot-card");
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveTextContent("live from the engine");
+    expect(cards[1]).toHaveTextContent("cached values");
+    expect(cards[0]).toHaveTextContent("Rows: Scheme Name");
+    fireEvent.click(screen.getByRole("button", { name: "Open pivot PIVOT-Composite" }));
+    expect(onOpen).toHaveBeenCalledWith("PIVOT-Composite::PivotTable1");
+  });
+
+  it("pre-fills Excel's saved filters plus the global scope, renders the table, and edits the layout", async () => {
+    const calls = mockApi({ "GET /api/research/pivots": pivotListing, "GET /api/research/pivot": pivotTable });
+    const onQuery = vi.fn();
+    const actions = makeActions();
+    render(<Pivots actions={actions} location={{ id: "PIVOT-Composite::PivotTable1" }} onOpen={vi.fn()} onQuery={onQuery} />);
+    expect(await screen.findByRole("heading", { name: "PIVOT-Composite" })).toBeInTheDocument();
+    // The scope's plan (Regular) overrides Excel's saved Sub Plan (Direct) through scopeFields.
+    const url = calls.find((c) => c.url.startsWith("/api/research/pivot?"))!.url;
+    const sent = JSON.parse(new URLSearchParams(url.split("?")[1]).get("spec")!) as PivotQuery;
+    expect(sent.filters).toEqual({ Universe: ["Yes"], "Sub Plan": ["Regular"] });
+    expect(sent.rows).toEqual(["Scheme Name"]);
+
+    const grid = await screen.findByTestId("pivot-grid");
+    expect(within(grid).getByText("Kotak Nifty Bank Index Fund")).toBeInTheDocument();
+    expect(within(grid).getByText("Grand total").closest("tr")).toHaveAttribute("data-kind", "total");
+    expect(within(grid).getByText("1,22,954.00")).toBeInTheDocument();
+    expect(grid).toHaveTextContent("2 of 3,232 records match");
+
+    // Filters: every value of the data is offered; choosing one updates the layout in place.
+    const picker = screen.getByTestId("filter-Scheme Nature");
+    fireEvent.click(within(picker).getByText("Scheme Nature"));
+    fireEvent.click(within(picker).getByLabelText("Hybrid"));
+    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({ filters: { Universe: ["Yes"], "Sub Plan": ["Regular"], "Scheme Nature": ["Hybrid"] } }));
+
+    // Rows and values are chips over the pivot's own fields.
+    fireEvent.click(within(screen.getByRole("group", { name: "Row fields" })).getByRole("button", { name: "Scheme Nature" }));
+    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({ rows: ["Scheme Name", "Scheme Nature"] }));
+    fireEvent.change(screen.getByLabelText("Aggregation for Corpus (In crs.)"), { target: { value: "sum" } });
+    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({ values: [expect.objectContaining({ field: "Corpus (In crs.)", agg: "sum" }), expect.anything()] }));
+
+    // A leaf row label drills into Funds.
+    fireEvent.click(within(grid).getByRole("button", { name: "Axis Value Fund" }));
+    expect(actions.openFunds).toHaveBeenCalledWith({ q: "Axis Value Fund" });
+  });
+
+  it("builds Excel's layout as the default query", () => {
+    const q = defaultQuery(pivotListing.pivots[0], undefined, {});
+    expect(q).toEqual({ filters: { Universe: ["Yes"], "Sub Plan": ["Direct"] }, rows: ["Scheme Name"], cols: [], values: pivotListing.pivots[0].layout.values });
   });
 });

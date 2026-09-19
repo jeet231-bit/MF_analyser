@@ -1,4 +1,4 @@
-import type { CategoriesResponse, EntitiesPage, EntityDetail, EntityRow, InsightsResponse, MeasureMeta, MovementResponse, ResearchConfig, ResearchSummary } from "@/api/research";
+import type { PivotListing, PivotTable, CategoriesResponse, EntitiesPage, EntityDetail, EntityRow, InsightsResponse, MeasureMeta, MovementResponse, ResearchConfig, ResearchSummary } from "@/api/research";
 
 const envelope = {
   configured: true,
@@ -308,4 +308,70 @@ export const researchConfig: ResearchConfig = {
   ],
   quartileRule: { unrankedBelow: 4, unrankedValue: "--" },
   minGroupCount: 10,
+};
+
+export const pivotListing: PivotListing = {
+  ...envelope,
+  pivots: [
+    {
+      id: "PIVOT-Composite::PivotTable1",
+      name: "PivotTable1",
+      sheet: "PIVOT-Composite",
+      anchor: "A7:L55",
+      source: { sheet: "Composite Ranks", ref: "A9:W3241", records: 3232, live: true, refreshed: "2026-09-10T11:52:00" },
+      fields: [
+        { name: "Universe", numeric: false },
+        { name: "Scheme Name", numeric: false },
+        { name: "Scheme Nature", numeric: false },
+        { name: "Sub Plan", numeric: false },
+        { name: "Corpus (In crs.)", numeric: true },
+        { name: "RANK-Composite", numeric: true },
+      ],
+      layout: {
+        rows: ["Scheme Name"],
+        cols: [],
+        filters: ["Universe", "Scheme Nature", "Sub Plan"],
+        values: [
+          { label: "Corpus (Rs. crs.)", field: "Corpus (In crs.)", agg: "average" },
+          { label: "RANK - Composite", field: "RANK-Composite", agg: "average" },
+        ],
+      },
+      savedFilters: { Universe: ["Yes"], "Sub Plan": ["Direct"] },
+    },
+    {
+      id: "Pivot 1-Indices-Roll::PivotTable1",
+      name: "PivotTable1",
+      sheet: "Pivot 1-Indices-Roll",
+      anchor: "A10:I45",
+      source: { sheet: "Indices-Roll Perf", ref: "A9:L134", records: 125, live: false, refreshed: "2026-09-05T09:58:00" },
+      fields: [
+        { name: "Index", numeric: false },
+        { name: "Asset Class", numeric: false },
+        { name: "1Y-Roll (2y)", numeric: true },
+      ],
+      layout: { rows: ["Index"], cols: [], filters: ["Asset Class"], values: [{ label: "1Y Roll (2y)", field: "1Y-Roll (2y)", agg: "average" }] },
+      savedFilters: { "Asset Class": ["Equity"] },
+    },
+  ],
+  scopeFields: { plan: "Sub Plan" },
+};
+
+export const pivotTable: PivotTable = {
+  ...envelope,
+  id: "PIVOT-Composite::PivotTable1",
+  rowFields: ["Scheme Name"],
+  colFields: [],
+  colKeys: [],
+  values: pivotListing.pivots[0].layout.values,
+  rows: [
+    { keys: ["Axis Value Fund"], kind: "leaf", n: 1, cells: [[1834.2, 3]] },
+    { keys: ["Kotak Nifty Bank Index Fund"], kind: "leaf", n: 1, cells: [[122954, 7]] },
+  ],
+  total: { keys: ["Total"], kind: "total", n: 2, cells: [[62394.1, 5]] },
+  records: 3232,
+  matched: 2,
+  live: true,
+  options: { Universe: ["No", "Yes"], "Scheme Nature": ["Equity", "Hybrid", "Other"], "Sub Plan": ["Direct", "Regular"] },
+  fieldKinds: { Universe: "text", "Scheme Name": "text", "Scheme Nature": "text", "Sub Plan": "text", "Corpus (In crs.)": "number", "RANK-Composite": "number" },
+  query: { filters: { Universe: ["Yes"], "Sub Plan": ["Direct"] }, rows: ["Scheme Name"], cols: [], values: pivotListing.pivots[0].layout.values },
 };

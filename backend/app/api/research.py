@@ -4,6 +4,7 @@ is configured; an incomplete map yields a 200 with problems, never a 500."""
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import statistics
@@ -19,6 +20,7 @@ from app.exports.csv_export import write_csv
 from app.exports.xlsx import write_workbook
 from app.research import export as rexport
 from app.research import insights as engine
+from app.research import pivot as pivot_engine
 from app.research import scope as scoping
 from app.research import snapshots as snaps
 from app.research.insights import (
@@ -38,7 +40,8 @@ from app.research.table import (
     register_cache,
     resolve_for_version,
 )
-from app.storage import diffs, validation, workbooks
+from app.storage import diffs, logic, validation, workbooks
+from app.storage import pivots as pivot_store
 from app.storage import runs as run_store
 from app.storage import views as view_store
 from app.storage.db import get_session
@@ -1563,3 +1566,187 @@ def compute_insights_for_report(
 
 
 __all__ = ["router", "compute_movement", "compute_insights_for_report", "math"]
+
+
+# ---- pivots: the workbook's own pivot tables, recomputed from the engine -------------------
+
+
+def _pivot_context(
+    session: Session, version_id: str | None, run_id: str | None
+) -> tuple[WorkbookVersion, Run] | dict[str, Any]:
+    """Pivots need a version with a baseline run; they do not need the research map."""
+    version = _pick_version(session, version_id)
+    if version is None:
+        return _not_configured(
+            ["no version with a baseline run yet; upload and validate a master first"]
+        )
+    if run_id:
+        try:
+            run = run_store.get_run(session, run_id)
+        except run_store.RunNotFoundError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Run not found.") from exc
+        if run.status != "ok":
+            return _not_configured([f"run {run_id[:8]} is {run.status}"], version)
+        version = workbooks.get_version(session, run.version_id)
+    else:
+        run = run_store.baseline_run(session, version.id)
+        if run is None:
+            return _not_configured(
+                [f"version {version.id[:8]} has no baseline run yet; validate it first"], version
+            )
+    return version, run
+
+
+def _in_scope(session: Session, version: WorkbookVersion) -> set[str]:
+    try:
+        model = logic.get_model(session, version.id)
+    except logic.ModelNotFoundError:
+        return set()
+    return {sm.name for sm in model.sheets if sm.in_scope}
+
+
+def _pivot_query(spec, raw: str | None) -> pivot_engine.PivotQuery:
+    if not raw:
+        return pivot_engine.PivotQuery.default_for(spec)
+    try:
+        data = json.loads(raw)
+        return pivot_engine.PivotQuery.model_validate(data)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"bad pivot spec: {exc}"
+        ) from exc
+
+
+def _pivot_frame(
+    session: Session, version: WorkbookVersion, run: Run, spec
+) -> pivot_engine.PivotFrame:
+    live = spec.source_sheet in _in_scope(session, version)
+    key = (version.id, run.id, pivot_store.pivot_id(spec))
+    try:
+        return pivot_engine.frame_cache.get(
+            key, lambda: pivot_engine.load_frame(session, version, run, spec, live)
+        )
+    except pivot_engine.PivotError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
+def _scope_fields() -> dict[str, str]:
+    research = load_dashboard_config().research
+    if not isinstance(research, dict):
+        return {}
+    pivots = research.get("pivots")
+    if not isinstance(pivots, dict):
+        return {}
+    fields = pivots.get("scopeFields")
+    return {str(k): str(v) for k, v in fields.items()} if isinstance(fields, dict) else {}
+
+
+@router.get("/pivots")
+def list_pivots(
+    session: SessionDep,
+    version_id: Annotated[str | None, Query()] = None,
+    run_id: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    """Every pivot table the active workbook defines, with its layout and where it reads from."""
+    ctx = _pivot_context(session, version_id, run_id)
+    if isinstance(ctx, dict):
+        return {**ctx, "pivots": [], "scopeFields": {}}
+    version, run = ctx
+    specs = pivot_store.specs_for(session, version)
+    in_scope = _in_scope(session, version)
+    out = []
+    for spec in specs:
+        out.append(
+            {
+                "id": pivot_store.pivot_id(spec),
+                "name": spec.name,
+                "sheet": spec.sheet,
+                "anchor": spec.anchor,
+                "source": {
+                    "sheet": spec.source_sheet,
+                    "ref": spec.source_ref,
+                    "records": spec.records,
+                    "live": spec.source_sheet in in_scope,
+                    "refreshed": spec.refreshed,
+                },
+                "fields": [{"name": f.name, "numeric": f.numeric} for f in spec.fields],
+                "layout": {
+                    "rows": spec.rows,
+                    "cols": spec.cols,
+                    "filters": spec.filters,
+                    "values": [v.model_dump() for v in spec.values],
+                },
+                "savedFilters": spec.saved_filters,
+            }
+        )
+    return {
+        "configured": bool(out),
+        "problems": [] if out else ["the active workbook has no pivot tables"],
+        "version_id": version.id,
+        "run_id": run.id,
+        "pivots": out,
+        "scopeFields": _scope_fields(),
+    }
+
+
+@router.get("/pivot")
+def get_pivot(
+    session: SessionDep,
+    id: Annotated[str, Query(description="<sheet>::<pivot name> from /pivots")],  # noqa: A002
+    spec: Annotated[
+        str | None, Query(description="PivotQuery JSON; omitted = Excel's layout")
+    ] = None,
+    version_id: Annotated[str | None, Query()] = None,
+    run_id: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    """A pivot computed from the run's values for any layout over its fields."""
+    ctx = _pivot_context(session, version_id, run_id)
+    if isinstance(ctx, dict):
+        return ctx
+    version, run = ctx
+    pspec = pivot_store.find(session, version, id)
+    if pspec is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"No pivot {id!r} in this version.")
+    query = _pivot_query(pspec, spec)
+    frame = _pivot_frame(session, version, run, pspec)
+    try:
+        table = pivot_engine.compute(frame, query)
+    except pivot_engine.PivotError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    wanted = list(dict.fromkeys(list(pspec.filters) + list(query.filters)))
+    table["options"] = {name: frame.options(name) for name in wanted}
+    table["fieldKinds"] = pivot_engine.field_kinds(frame)
+    table["query"] = query.model_dump()
+    table["id"] = id
+    table["version_id"] = version.id
+    table["run_id"] = run.id
+    table["configured"] = True
+    return table
+
+
+@router.get("/pivot/export")
+def export_pivot(
+    session: SessionDep,
+    id: Annotated[str, Query()],  # noqa: A002
+    format: Annotated[Literal["csv", "xlsx"], Query()],  # noqa: A002
+    spec: Annotated[str | None, Query()] = None,
+    version_id: Annotated[str | None, Query()] = None,
+    run_id: Annotated[str | None, Query()] = None,
+):
+    ctx = _pivot_context(session, version_id, run_id)
+    if isinstance(ctx, dict):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, {"message": "no version", "problems": ctx["problems"]}
+        )
+    version, run = ctx
+    pspec = pivot_store.find(session, version, id)
+    if pspec is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"No pivot {id!r} in this version.")
+    query = _pivot_query(pspec, spec)
+    frame = _pivot_frame(session, version, run, pspec)
+    try:
+        table = pivot_engine.compute(frame, query)
+    except pivot_engine.PivotError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    view = rexport.pivot_view(session, version, run, load_dashboard_config(), pspec, query, table)
+    return _send(view, format, f"pivot-{rexport.slug_of(pspec.sheet)}-{version.id[:8]}")
