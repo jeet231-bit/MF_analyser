@@ -284,12 +284,20 @@ def explore_view(
             ExportColumn(key="dValue", label=f"Change{since}", format=value_format, kind="output")
         )
     columns.append(
-        ExportColumn(key="medianRank", label="Median rank", format="number", kind="output")
+        ExportColumn(
+            key="medianPosition",
+            label="Median position in category (share of ranked funds)",
+            format="percent",
+            kind="output",
+        )
     )
     if compared:
         columns.append(
             ExportColumn(
-                key="dRank", label=f"Median rank change{since}", format="number", kind="output"
+                key="dPosition",
+                label=f"Median position change{since}",
+                format="percent",
+                kind="output",
             )
         )
 
@@ -305,9 +313,9 @@ def explore_view(
         ]
         if compared:
             out.append(d.get("value"))
-        out.append(row["medianRank"])
+        out.append(row["medianPosition"])
         if compared:
-            out.append(d.get("medianRank"))
+            out.append(d.get("medianPosition"))
         return out
 
     rows = [line(r) for r in body["groups"]]

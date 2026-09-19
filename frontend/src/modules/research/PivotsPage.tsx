@@ -19,7 +19,7 @@ import { useAsync } from "@/lib/useAsync";
 import { formatMeasure } from "./format";
 import { defaultQuery, type PivotLocation } from "./pivotQuery";
 import type { ResearchActions } from "./types";
-import { ConfidentialFooter, LinkButton, Narrative, NotConfigured, PageHead, QuartileBar, RCard, Skeleton } from "./ui";
+import { ConfidentialFooter, LinkButton, Narrative, Note, NotConfigured, PageHead, QuartileBar, QuartileLegend, RCard, Skeleton } from "./ui";
 import { WorkbookPivot } from "./WorkbookPivot";
 
 /** Groupings the Funds page can filter by, so a row can drill into its own funds. */
@@ -198,7 +198,18 @@ function ExploreView({
         )}
       </RCard>
 
-      <Narrative text={body.narrative} className="mb-[16px] text-[14px]" />
+      <Narrative text={body.narrative} className="mb-[14px] text-[14px]" />
+      {body.quartilesByConstruction && (
+        <Note className="mb-[12px]">
+          The workbook sets quartiles within each category, and every {body.by.label.toLowerCase()} here is made of whole categories, so each one splits into four roughly equal parts by construction. The quartile columns are hidden because they would only repeat that. Group by something that cuts across categories, such as AMC or a corpus band, to compare quartiles.
+        </Note>
+      )}
+      {body.measure.role === "rank" && (
+        <Note className="mb-[12px]">
+          Ranks are counted within each category, so an average rank favours groups that sit in small categories. The median position column corrects for that and is the fairer comparison.
+        </Note>
+      )}
+      <GridLegend body={body} comparing={comparing} previous={previous} />
 
       <ExploreGrid
         body={body}
@@ -256,7 +267,9 @@ function ExploreGrid({
   onDrill?: (label: string) => void;
 }) {
   const meta = { ...body.measure, primary: false };
-  const values = body.groups.map((g) => g.value).filter((v): v is number => v !== null);
+  const showQuartiles = !body.quartilesByConstruction;
+  // Shading compares eligible groups only: a group below the minimum is listed, never ranked.
+  const values = body.groups.filter((g) => !g.small).map((g) => g.value).filter((v): v is number => v !== null);
   const low = values.length ? Math.min(...values) : 0;
   const high = values.length ? Math.max(...values) : 0;
   const heat = (v: number | null): number => {
@@ -266,22 +279,27 @@ function ExploreGrid({
   };
   const th = "sticky top-0 whitespace-nowrap border-b border-hairline bg-surface-lifted px-[12px] py-[10px] text-left font-heading text-[10.5px] font-semibold uppercase tracking-[0.07em] text-muted";
   const pct = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `${formatNumber(v * 100, { decimals: 0 })}%`);
+  const position = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `top ${formatNumber(Math.max(v * 100, 1), { decimals: 0 })}%`);
 
-  const cells = (g: ExploreGroup | ExploreResponse["totals"], total = false) => (
+  const cells = (g: ExploreGroup | ExploreResponse["totals"], total = false, small = false) => (
     <>
       <td className="px-[12px] py-[10px] text-right">
         <div className="tabular text-ink">{formatCount(g.funds)}</div>
         {comparing && <Delta value={g.delta?.funds} betterWhen="neither" render={(n) => formatCount(n)} className="text-right" />}
       </td>
-      <td className="px-[12px] py-[10px]">
-        <QuartileBar counts={g.quartiles} height={18} className="min-w-[110px]" />
-      </td>
-      <td className="px-[12px] py-[10px] text-right">
-        <div className="tabular text-ink">{pct(g.q1Share)}</div>
-        {comparing && <Delta value={g.delta?.q1Share} render={(n) => `${formatNumber(n * 100, { decimals: 0 })}pp`} className="text-right" />}
-      </td>
+      {showQuartiles && (
+        <td className="px-[12px] py-[10px]">
+          <QuartileBar counts={g.quartiles} height={18} className="min-w-[110px]" />
+        </td>
+      )}
+      {showQuartiles && (
+        <td className="px-[12px] py-[10px] text-right">
+          <div className="tabular text-ink">{pct(g.q1Share)}</div>
+          {comparing && <Delta value={g.delta?.q1Share} render={(n) => `${formatNumber(n * 100, { decimals: 0 })}pp`} className="text-right" />}
+        </td>
+      )}
       <td className="relative px-[12px] py-[10px] text-right">
-        {!total && (
+        {!total && !small && (
           <span
             aria-hidden
             className="absolute inset-y-[6px] left-0 rounded-sm bg-accent-soft"
@@ -292,8 +310,8 @@ function ExploreGrid({
         {comparing && <Delta value={g.delta?.value} betterWhen={body.measure.higherIsBetter ? "higher" : "lower"} render={(n) => formatMeasure(n, meta, settings)} className="relative text-right" />}
       </td>
       <td className="px-[12px] py-[10px] text-right">
-        <div className="tabular text-ink">{g.medianRank === null ? "—" : formatNumber(g.medianRank, { decimals: 0 })}</div>
-        {comparing && <Delta value={g.delta?.medianRank} betterWhen="lower" render={(n) => formatNumber(n, { decimals: 0 })} className="text-right" />}
+        <div className="tabular text-ink">{position(g.medianPosition)}</div>
+        {comparing && <Delta value={g.delta?.medianPosition} betterWhen="lower" render={(n) => `${formatNumber(n * 100, { decimals: 0 })}pp`} className="text-right" />}
       </td>
     </>
   );
@@ -305,18 +323,20 @@ function ExploreGrid({
           <tr>
             <th className={th}>{body.by.label}</th>
             <th className={cn(th, "text-right")}>Funds</th>
-            <th className={th}>Quartile mix</th>
-            <th className={cn(th, "text-right")}>Top quartile</th>
+            {showQuartiles && <th className={th}>Quartile mix</th>}
+            {showQuartiles && <th className={cn(th, "text-right")}>Top quartile</th>}
             <th className={cn(th, "text-right")}>
               {AGG_LABELS[body.agg] ?? body.agg} {body.measure.label.toLowerCase()}
             </th>
-            <th className={cn(th, "text-right")}>Median rank</th>
+            <th className={cn(th, "text-right")} title="The middle fund's rank divided by the ranked funds in its own category">
+              Median position
+            </th>
           </tr>
         </thead>
         <tbody>
           {body.groups.length === 0 && (
             <tr>
-              <td colSpan={6} className="px-[12px] py-[24px] text-center text-muted">
+              <td colSpan={showQuartiles ? 6 : 4} className="px-[12px] py-[24px] text-center text-muted">
                 No fund in scope carries this grouping.
               </td>
             </tr>
@@ -337,7 +357,7 @@ function ExploreGrid({
                   {comparing && g.delta?.new && <span className="rounded-full bg-accent-soft px-[6px] py-px font-semibold text-accent">new</span>}
                 </div>
               </td>
-              {cells(g)}
+              {cells(g, false, g.small)}
             </tr>
           ))}
           <tr className="bg-accent-soft font-bold" data-testid="explore-total">
@@ -349,6 +369,32 @@ function ExploreGrid({
           </tr>
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** What the colours in the table mean, stated once above it. */
+function GridLegend({ body, comparing, previous }: { body: ExploreResponse; comparing: boolean; previous: string | null }) {
+  return (
+    <div className="mb-[10px] flex flex-wrap items-center gap-x-[22px] gap-y-[8px] px-[2px] text-[11.5px] text-ink-2" data-testid="grid-legend">
+      {!body.quartilesByConstruction && (
+        <span className="flex items-center gap-[8px]">
+          <span className="font-semibold text-muted">Quartile mix</span>
+          <QuartileLegend />
+        </span>
+      )}
+      <span className="flex items-center gap-[6px]">
+        <span className="h-[10px] w-[22px] rounded-[3px] bg-accent-soft" aria-hidden />
+        Shading: how close a group is to the best {body.measure.label.toLowerCase()}, among groups with {body.minGroupCount}+ rated funds
+      </span>
+      {comparing && (
+        <span className="flex items-center gap-[6px]">
+          <span className="font-semibold text-positive">▲▼</span> change since {previous ?? "last month"}: green is better, red is worse
+        </span>
+      )}
+      <span className="flex items-center gap-[6px]">
+        <span className="rounded-full bg-warning-soft px-[6px] py-px font-semibold text-warning">few rated</span> fewer than {body.minGroupCount} rated funds: listed last, never ranked
+      </span>
     </div>
   );
 }

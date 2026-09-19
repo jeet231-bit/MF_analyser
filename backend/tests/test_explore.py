@@ -60,9 +60,10 @@ def config(tmp_path, monkeypatch):
             "default": "Grouped by {dimension}: {groups} in all, {eligible} with at least {min_group} rated funds."
         },
         {
-            "default": "{top} holds the most top-quartile funds, {top_q1} of {top_rated} rated.",
+            "default": "{top} has the highest top-quartile share, {top_q1} of its {top_rated} rated funds.",
             "requires": ["top"],
         },
+        {"default": "{best} leads on {measure} at {best_value}.", "requires": ["best"]},
         {
             "default": "Since {previous}, {riser} improved most on {measure}, by {riser_delta}.",
             "requires": ["riser", "previous"],
@@ -124,7 +125,8 @@ def test_groups_match_the_workbooks_own_arithmetic(client: TestClient, config) -
         assert rows[name]["quartiles"]["1"] == sum(1 for q in quartiles[name] if q == 1)
     # Sorted by the measure, best first, because a higher score is better.
     assert body["sort"] == "value" and body["dir"] == "desc"
-    values = [g["value"] for g in body["groups"] if g["value"] is not None]
+    # Eligible groups first, best first; groups below the minimum after them.
+    values = [g["value"] for g in body["groups"] if g["value"] is not None and not g["small"]]
     assert values == sorted(values, reverse=True)
     # The grand total is every fund, not the sum of the groups.
     assert body["totals"]["funds"] == len(FUNDS)
@@ -209,7 +211,7 @@ def test_sorting_limit_aggregations_and_errors(client: TestClient, config) -> No
 
     _code, ranked = get(by="amc", measure="rank", limit=0)
     assert ranked["dir"] == "asc"  # a lower rank is better, so the best group comes first
-    ranks = [g["value"] for g in ranked["groups"] if g["value"] is not None]
+    ranks = [g["value"] for g in ranked["groups"] if g["value"] is not None and not g["small"]]
     assert ranks == sorted(ranks)
 
     _code, by_size = get(by="amc", measure="corpus", agg="sum", sort="funds", dir="desc", limit=2)
@@ -269,3 +271,70 @@ def test_not_configured_is_a_200_with_problems(client: TestClient, config) -> No
     _upload(client, "master.xlsx")
     body = client.get("/api/research/explore", params={"by": "amc"}).json()
     assert body["configured"] is False and body["problems"] and body["groups"] == []
+
+
+def test_small_groups_are_listed_after_every_eligible_group(client: TestClient, config) -> None:
+    _upload(client, "master.xlsx")
+    body = client.get(
+        "/api/research/explore", params={"by": "category", "measure": "score", "limit": 0}
+    ).json()
+    flags = [g["small"] for g in body["groups"]]
+    assert flags == sorted(flags)  # every eligible group before the first small one
+    assert body["smallCount"] == sum(flags)
+
+
+def test_a_grouping_made_of_whole_categories_says_its_quartiles_are_equal(
+    client: TestClient, config
+) -> None:
+    _upload(client, "master.xlsx")
+    by_cat = client.get(
+        "/api/research/explore", params={"by": "category", "measure": "quartile"}
+    ).json()
+    assert by_cat["quartilesByConstruction"] is True
+    assert by_cat["sort"] == "value"  # a share that is 25 % by construction never leads
+    assert "highest top-quartile share" not in by_cat["narrative"]
+    assert "leads on" not in by_cat["narrative"]  # an average quartile of 2.5 is not a lead
+    by_cat_score = client.get(
+        "/api/research/explore", params={"by": "category", "measure": "score"}
+    ).json()
+    assert "leads on Score" in by_cat_score["narrative"]  # a score still compares across them
+    by_amc = client.get("/api/research/explore", params={"by": "amc", "measure": "quartile"}).json()
+    assert by_amc["quartilesByConstruction"] is False
+    assert by_amc["sort"] == "q1_share"
+
+
+def test_median_position_is_rank_over_ranked_funds_in_the_category(
+    client: TestClient, config
+) -> None:
+    _upload(client, "master.xlsx")
+    body = client.get(
+        "/api/research/explore", params={"by": "amc", "measure": "score", "limit": 0}
+    ).json()
+    exp = expected("base")
+    ranked_in: dict[str, int] = {}
+    for f in FUNDS:
+        if isinstance(exp[f[0]]["rank"], int | float):
+            ranked_in[f[CATEGORY]] = ranked_in.get(f[CATEGORY], 0) + 1
+    for g in body["groups"]:
+        positions = [
+            exp[f[0]]["rank"] / ranked_in[f[CATEGORY]]
+            for f in FUNDS
+            if f[AMC] == g["label"] and isinstance(exp[f[0]]["quartile"], int | float)
+        ]
+        want = statistics.median(positions) if positions else None
+        assert g["medianPosition"] == (pytest.approx(want) if want is not None else None)
+        assert g["medianPosition"] is None or 0 < g["medianPosition"] <= 1
+
+
+def test_insight_cards_name_their_rule_in_workbook_terms(client: TestClient, config) -> None:
+    _upload(client, "master.xlsx")
+    body = client.get("/api/research/summary").json()
+    best_value = body["callouts"][0]
+    assert best_value["key"] == "best_value"
+    assert best_value["rule"].startswith("Quartile")  # the measure's label (or the header found)
+    assert "(Funds, column K)" in best_value["rule"] and "(Funds, column O)" in best_value["rule"]
+    assert " and " in best_value["rule"]
+    insights = client.get("/api/research/insights").json()["insights"]
+    by_key = {i["key"]: i for i in insights}
+    assert "in the best half" in by_key["cheap_half"]["rule"]
+    assert "is blank or --" in by_key["unrated_young"]["rule"]

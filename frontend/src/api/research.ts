@@ -298,6 +298,8 @@ export interface Insight {
   total: number;
   measure: string | null;
   drill: { sort?: string; dir?: "asc" | "desc"; keys?: string[] };
+  /** The test behind the name, in the workbook's own column headers. */
+  rule?: string | null;
   problems: string[];
   status: "ok" | "empty" | "unavailable" | "problem";
   note: string | null;
@@ -463,7 +465,7 @@ export interface ExploreDelta {
   q1: number | null;
   q1Share: number | null;
   value: number | null;
-  medianRank: number | null;
+  medianPosition: number | null;
   new: boolean;
 }
 
@@ -475,7 +477,8 @@ export interface ExploreGroup {
   quartiles: Record<string, number>;
   q1Share: number | null;
   value: number | null;
-  medianRank: number | null;
+  /** Median of rank / ranked funds in each fund's own category: 0.2 = top 20 %. */
+  medianPosition: number | null;
   /** Fewer rated funds than the workbook's own minimum: shown, never ranked. */
   small: boolean;
   delta: ExploreDelta | null;
@@ -487,7 +490,7 @@ export interface ExploreTotals {
   quartiles: Record<string, number>;
   q1Share: number | null;
   value: number | null;
-  medianRank: number | null;
+  medianPosition: number | null;
   delta: ExploreDelta | null;
 }
 
@@ -524,6 +527,9 @@ export interface ExploreResponse extends Envelope {
   dir: "asc" | "desc";
   limit: number;
   minGroupCount: number;
+  /** Every group holds whole categories, so its quartiles split evenly by construction. */
+  quartilesByConstruction: boolean;
+  smallCount: number;
   groups: ExploreGroup[];
   groupCount: number;
   totals: ExploreTotals;

@@ -8,7 +8,7 @@ import { useAsync } from "@/lib/useAsync";
 import { Icon, type IconName } from "@/modules/shell/icons";
 import { formatRankDelta } from "./format";
 import type { ResearchActions } from "./types";
-import { BarList, ConfidentialFooter, LinkButton, MoverRow, Narrative, NotConfigured, PageHead, QuartileBar, QuartileLegend, QuartilePill, RCard, Skeleton } from "./ui";
+import { BarList, ConfidentialFooter, LinkButton, MoverRow, Narrative, NotConfigured, PageHead, QuartileBar, QuartileLegend, QuartilePill, RCard, RuleLine, Skeleton } from "./ui";
 import { useWatchlist } from "./useWatchlist";
 
 /* The dashboard answers three questions in order: what is true, what changed, and where to
@@ -276,6 +276,7 @@ function Callout({ insight, tone, index, actions }: { insight: Insight; tone: (t
       </div>
       <div className="tabular mt-[12px] font-heading text-[30px] font-extrabold leading-[1.1] tracking-[-0.025em] text-ink">{formatCount(insight.count)}</div>
       <Narrative text={insight.sentence} className="mt-[4px] text-[12px] leading-[1.5]" />
+      <RuleLine rule={insight.rule} className="mt-[6px]" />
       {keys.length > 0 && <div className="mt-[8px] font-heading text-[12px] font-semibold text-accent">See all {formatCount(insight.count)} →</div>}
     </button>
   );

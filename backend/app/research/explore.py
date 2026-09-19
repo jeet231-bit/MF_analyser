@@ -8,6 +8,16 @@ so every number carries its own change.
 This is the part the workbook cannot do. Its pivots read one flat sheet and know only the
 month they were last refreshed in; this reads the joined table (rank, quartile, returns,
 bull and bear, cost, corpus, all per fund) and compares two months.
+
+Two traps of the workbook's own rules are handled here, not left to the reader:
+
+* Ranks and quartiles are computed **within each category**. A grouping made of whole
+  categories (the category itself, the plan, the sub-nature) therefore splits into four
+  equal quartiles by construction; the view says so (``quartilesByConstruction``) instead of
+  presenting 25 % as a finding.
+* A raw rank depends on the size of its category (5th of 8 is not 5th of 200), so a group's
+  rank is reported as its **median position**, the rank divided by the ranked funds in the
+  fund's own category: 0.2 reads "top 20 %" in any category.
 """
 
 from __future__ import annotations
@@ -22,7 +32,7 @@ from app.research.semantic import MeasureSpec
 from app.research.table import Entity, ResearchTable
 
 AGGREGATIONS = ("mean", "median", "sum", "min", "max")
-SORTS = ("value", "q1_share", "funds", "rated", "median_rank", "change", "label")
+SORTS = ("value", "q1_share", "funds", "rated", "median_position", "change", "label")
 BAND_SUFFIX = "_band"
 DEFAULT_LIMIT = 15
 
@@ -39,7 +49,7 @@ class GroupSummary:
     rated: int = 0
     quartiles: dict[int, int] = field(default_factory=lambda: {1: 0, 2: 0, 3: 0, 4: 0})
     value: float | None = None
-    median_rank: float | None = None
+    median_position: float | None = None  # rank / ranked funds in the fund's own category
 
     @property
     def q1_share(self) -> float | None:
@@ -148,6 +158,21 @@ def group_entities(table: ResearchTable, by: str, kind: str) -> dict[str, list[E
     return groups
 
 
+def nests_categories(table: ResearchTable, groups: dict[str, list[Entity]]) -> bool:
+    """True when every rated fund's category sits wholly inside one group. Quartiles are cut
+    within categories, so such a grouping splits into four equal parts by construction."""
+    owner: dict[str, str] = {}
+    seen = False
+    for label, rows in groups.items():
+        for e in rows:
+            if not table.rated(e) or e.category is None:
+                continue
+            seen = True
+            if owner.setdefault(e.category, label) != label:
+                return False
+    return seen
+
+
 def _aggregate(agg: str, values: list[float]) -> float | None:
     if not values:
         return None
@@ -167,14 +192,25 @@ def _aggregate(agg: str, values: list[float]) -> float | None:
     raise ExploreError(f"unsupported aggregation {agg!r}")
 
 
+def position_of(table: ResearchTable, e: Entity) -> float | None:
+    """A rated fund's rank as a share of the ranked funds in its own category (0.2 = top 20 %)."""
+    rank_key = table.primary_key("rank")
+    if rank_key is None or not table.rated(e) or e.category is None:
+        return None
+    rank = e.measures.get(rank_key)
+    info = table.categories.get(e.category)
+    if rank is None or info is None or info.ranked <= 0:
+        return None
+    return rank / info.ranked
+
+
 def summarise(
     table: ResearchTable, key: str, rows: list[Entity], measure_key: str, agg: str
 ) -> GroupSummary:
     q_key = table.primary_key("quartile")
-    rank_key = table.primary_key("rank")
     out = GroupSummary(key=key, label=key, funds=len(rows))
     values: list[float] = []
-    ranks: list[float] = []
+    positions: list[float] = []
     for e in rows:
         if q_key is not None and (q := e.measures.get(q_key)) is not None:
             out.rated += 1
@@ -182,10 +218,10 @@ def summarise(
                 out.quartiles[int(q)] += 1
         if (v := e.measures.get(measure_key)) is not None:
             values.append(v)
-        if rank_key is not None and (r := e.measures.get(rank_key)) is not None:
-            ranks.append(r)
+        if (p := position_of(table, e)) is not None:
+            positions.append(p)
     out.value = _aggregate(agg, values)
-    out.median_rank = statistics.median(ranks) if ranks else None
+    out.median_position = statistics.median(positions) if positions else None
     return out
 
 
@@ -205,23 +241,43 @@ def _delta(now: float | None, then: float | None) -> float | None:
     return now - then
 
 
-def _sort_value(row: dict[str, Any], sort: str, higher_is_better: bool) -> tuple[int, float]:
-    """Missing values always sort last, whichever direction the caller asked for."""
-    raw = {
+def _sort_raw(row: dict[str, Any], sort: str) -> float | None:
+    return {
         "value": row["value"],
         "q1_share": row["q1Share"],
         "funds": float(row["funds"]),
         "rated": float(row["rated"]),
-        "median_rank": row["medianRank"],
+        "median_position": row["medianPosition"],
         "change": (row["delta"] or {}).get("value"),
-        "label": None,
     }[sort]
-    if sort == "label":
-        return (0, 0.0)
-    if raw is None:
-        return (1, 0.0)
-    del higher_is_better
-    return (0, float(raw))
+
+
+def _row(
+    key: str, s: GroupSummary, was: GroupSummary | None, compared: bool, min_group: int
+) -> dict[str, Any]:
+    delta: dict[str, Any] | None = None
+    if compared:
+        delta = {
+            "funds": s.funds - was.funds if was else None,
+            "rated": s.rated - was.rated if was else None,
+            "q1": s.quartiles[1] - was.quartiles[1] if was else None,
+            "q1Share": _delta(s.q1_share, was.q1_share) if was else None,
+            "value": _delta(s.value, was.value) if was else None,
+            "medianPosition": _delta(s.median_position, was.median_position) if was else None,
+            "new": was is None,
+        }
+    return {
+        "key": key,
+        "label": s.label,
+        "funds": s.funds,
+        "rated": s.rated,
+        "quartiles": {str(q): n for q, n in s.quartiles.items()},
+        "q1Share": s.q1_share,
+        "value": s.value,
+        "medianPosition": s.median_position,
+        "small": s.rated < min_group,
+        "delta": delta,
+    }
 
 
 def explore(
@@ -244,86 +300,50 @@ def explore(
     min_group = table.map.minGroupCount
 
     groups = group_entities(table, by_key, kind)
+    by_construction = nests_categories(table, groups)
     summaries = {k: summarise(table, k, rows, spec.key, agg) for k, rows in groups.items()}
     before: dict[str, GroupSummary] = {}
     if previous is not None:
         prev_groups = group_entities(previous, by_key, kind)
         before = {k: summarise(previous, k, rows, spec.key, agg) for k, rows in prev_groups.items()}
+    rows = [
+        _row(k, s, before.get(k), previous is not None, min_group) for k, s in summaries.items()
+    ]
 
-    rows: list[dict[str, Any]] = []
-    for key, s in summaries.items():
-        was = before.get(key)
-        delta: dict[str, Any] | None = None
-        if previous is not None:
-            delta = {
-                "funds": s.funds - was.funds if was else None,
-                "rated": s.rated - was.rated if was else None,
-                "q1": s.quartiles[1] - was.quartiles[1] if was else None,
-                "q1Share": _delta(s.q1_share, was.q1_share) if was else None,
-                "value": _delta(s.value, was.value) if was else None,
-                "medianRank": _delta(s.median_rank, was.median_rank) if was else None,
-                "new": was is None,
-            }
-        rows.append(
-            {
-                "key": key,
-                "label": s.label,
-                "funds": s.funds,
-                "rated": s.rated,
-                "quartiles": {str(q): n for q, n in s.quartiles.items()},
-                "q1Share": s.q1_share,
-                "value": s.value,
-                "medianRank": s.median_rank,
-                "small": s.rated < min_group,
-                "delta": delta,
-            }
-        )
-
-    sort_key = sort or ("q1_share" if spec.role == "quartile" else "value")
+    # A quartile share means nothing when it is 25 % by construction, so it never leads there.
+    sort_key = sort or ("q1_share" if spec.role == "quartile" and not by_construction else "value")
     if direction is None:
-        direction = (
-            "asc"
-            if (sort_key in ("value", "change") and not spec.higherIsBetter)
-            or sort_key in ("median_rank", "label")
-            else "desc"
+        lower_first = (sort_key in ("value", "change") and not spec.higherIsBetter) or sort_key in (
+            "median_position",
+            "label",
         )
+        direction = "asc" if lower_first else "desc"
     reverse = direction == "desc"
-    if sort_key == "label":
-        rows.sort(key=lambda r: r["label"].casefold(), reverse=reverse)
-    else:
-        rows.sort(
-            key=lambda r: (_sort_value(r, sort_key, spec.higherIsBetter), r["label"].casefold())
-        )
-        present = [r for r in rows if _sort_value(r, sort_key, spec.higherIsBetter)[0] == 0]
-        missing = [r for r in rows if _sort_value(r, sort_key, spec.higherIsBetter)[0] == 1]
-        present.sort(
-            key=lambda r: _sort_value(r, sort_key, spec.higherIsBetter)[1], reverse=reverse
-        )
-        rows = present + missing
+    # Listed, never ranked: groups below the minimum sit after every eligible group, and a
+    # missing value sits last within its tier, whichever direction was asked for.
+    ranked = [r for r in rows if not r["small"]]
+    few = [r for r in rows if r["small"]]
+
+    def ordered(tier: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if sort_key == "label":
+            return sorted(tier, key=lambda r: r["label"].casefold(), reverse=reverse)
+        present = [r for r in tier if _sort_raw(r, sort_key) is not None]
+        missing = [r for r in tier if _sort_raw(r, sort_key) is None]
+        present.sort(key=lambda r: r["label"].casefold())
+        present.sort(key=lambda r: _sort_raw(r, sort_key), reverse=reverse)
+        return present + sorted(missing, key=lambda r: r["label"].casefold())
+
+    rows = ordered(ranked) + ordered(few)
 
     total = summarise(table, "", table.entities, spec.key, agg)
     total_was = (
         summarise(previous, "", previous.entities, spec.key, agg) if previous is not None else None
     )
-    totals = {
-        "funds": total.funds,
-        "rated": total.rated,
-        "quartiles": {str(q): n for q, n in total.quartiles.items()},
-        "q1Share": total.q1_share,
-        "value": total.value,
-        "medianRank": total.median_rank,
-        "delta": None
-        if total_was is None
-        else {
-            "funds": total.funds - total_was.funds,
-            "rated": total.rated - total_was.rated,
-            "q1": total.quartiles[1] - total_was.quartiles[1],
-            "q1Share": _delta(total.q1_share, total_was.q1_share),
-            "value": _delta(total.value, total_was.value),
-            "medianRank": _delta(total.median_rank, total_was.median_rank),
-            "new": False,
-        },
-    }
+    totals = _row("", total, total_was, previous is not None, 0)
+    for key in ("key", "label", "small"):
+        totals.pop(key)
+    if totals["delta"] is not None:
+        totals["delta"]["new"] = False
 
     shown = rows if limit <= 0 else rows[:limit]
     return {
@@ -344,15 +364,22 @@ def explore(
         "dir": direction,
         "limit": limit,
         "minGroupCount": min_group,
+        "quartilesByConstruction": by_construction,
         "groups": shown,
         "groupCount": len(rows),
+        "smallCount": len(few),
         "totals": totals,
-        "facts": _facts(rows, by_label, spec, min_group, previous is not None),
+        "facts": _facts(rows, by_label, spec, min_group, previous is not None, by_construction),
     }
 
 
 def _facts(
-    rows: list[dict[str, Any]], by_label: str, spec: MeasureSpec, min_group: int, compared: bool
+    rows: list[dict[str, Any]],
+    by_label: str,
+    spec: MeasureSpec,
+    min_group: int,
+    compared: bool,
+    by_construction: bool,
 ) -> dict[str, Any]:
     """Raw numbers the narrative sentences read; formatting happens in the API layer."""
     eligible = [r for r in rows if not r["small"] and r["rated"] > 0]
@@ -364,13 +391,17 @@ def _facts(
         "min_group": min_group,
     }
     if eligible:
-        top = max(eligible, key=lambda r: (r["quartiles"]["1"], r["rated"]))
-        facts.update(
-            {"top": top["label"], "top_q1": top["quartiles"]["1"], "top_rated": top["rated"]}
-        )
-        ranked = [r for r in eligible if r["value"] is not None]
-        if ranked:
-            best = (max if spec.higherIsBetter else min)(ranked, key=lambda r: r["value"])
+        if not by_construction:  # "most Q1 funds" is only a size contest when quartiles are equal
+            top = max(eligible, key=lambda r: (r["q1Share"] or 0, r["rated"]))
+            facts.update(
+                {"top": top["label"], "top_q1": top["quartiles"]["1"], "top_rated": top["rated"]}
+            )
+        valued = [r for r in eligible if r["value"] is not None]
+        # Averaged within-category ranks and quartiles are also equal by construction there.
+        if by_construction and spec.role in ("rank", "quartile"):
+            valued = []
+        if valued:
+            best = (max if spec.higherIsBetter else min)(valued, key=lambda r: r["value"])
             facts.update({"best": best["label"], "best_value": best["value"]})
     if compared:
         moved = [r for r in eligible if (r["delta"] or {}).get("value") is not None]

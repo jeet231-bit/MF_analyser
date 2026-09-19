@@ -106,6 +106,7 @@ export const summary: ResearchSummary = {
       total: 1434,
       measure: null,
       drill: { sort: "rank", dir: "asc", keys: ["Kotak Bank Index - Dir", "WhiteOak Aggressive - Reg"] },
+      rule: "QRTL-BULL = 1 (Bull-Bear Returns, column AZ) and QRTL-BEAR = 1 (Bull-Bear Returns, column BA)",
       problems: [],
       status: "ok",
       note: null,
@@ -423,7 +424,7 @@ export const pivotTable: PivotTable = {
   query: { filters: { Universe: ["Yes"], "Sub Plan": ["Direct"] }, rows: ["Scheme Name"], cols: [], values: pivotListing.pivots[0].layout.values },
 };
 
-const amcGroup = (label: string, funds: number, rated: number, q1: number, value: number, medianRank: number, delta: Record<string, number> | null, small = false) => ({
+const amcGroup = (label: string, funds: number, rated: number, q1: number, value: number, medianPosition: number, delta: Record<string, number> | null, small = false) => ({
   key: label,
   label,
   funds,
@@ -431,9 +432,9 @@ const amcGroup = (label: string, funds: number, rated: number, q1: number, value
   quartiles: { "1": q1, "2": rated - q1, "3": 0, "4": 0 },
   q1Share: rated ? q1 / rated : null,
   value,
-  medianRank,
+  medianPosition,
   small,
-  delta: delta === null ? null : { funds: 0, rated: 0, q1: 0, q1Share: 0, value: 0, medianRank: 0, new: false, ...delta },
+  delta: delta === null ? null : { funds: 0, rated: 0, q1: 0, q1Share: 0, value: 0, medianPosition: 0, new: false, ...delta },
 });
 
 export const exploreResponse: ExploreResponse = {
@@ -445,10 +446,12 @@ export const exploreResponse: ExploreResponse = {
   dir: "asc",
   limit: 15,
   minGroupCount: 10,
+  quartilesByConstruction: false,
+  smallCount: 1,
   groups: [
-    amcGroup("ICICI Prudential Mutual Fund", 132, 58, 21, 24, 22, { value: -2, medianRank: -3, q1: 3, q1Share: 0.04, funds: 2 }),
-    amcGroup("Axis Mutual Fund", 74, 31, 6, 38, 41, { value: 3, medianRank: 2, q1: -1, q1Share: -0.03 }),
-    amcGroup("Tiny Mutual Fund", 4, 3, 0, 55, 60, null, true),
+    amcGroup("ICICI Prudential Mutual Fund", 132, 58, 21, 24, 0.22, { value: -2, medianPosition: -0.03, q1: 3, q1Share: 0.04, funds: 2 }),
+    amcGroup("Axis Mutual Fund", 74, 31, 6, 38, 0.41, { value: 3, medianPosition: 0.02, q1: -1, q1Share: -0.03 }),
+    amcGroup("Tiny Mutual Fund", 4, 0, 0, 1, 0.6, null, true),
   ],
   groupCount: 47,
   totals: {
@@ -457,8 +460,8 @@ export const exploreResponse: ExploreResponse = {
     quartiles: { "1": 335, "2": 368, "3": 344, "4": 387 },
     q1Share: 335 / 1434,
     value: 30,
-    medianRank: 28,
-    delta: { funds: 14, rated: 9, q1: 4, q1Share: 0.01, value: -1, medianRank: -1, new: false },
+    medianPosition: 0.28,
+    delta: { funds: 14, rated: 9, q1: 4, q1Share: 0.01, value: -1, medianPosition: -0.01, new: false },
   },
   compare: { requested: true, available: true, previous: { id: "prev0001", filename: "master-aug.xlsx", date: "31 Aug" }, note: null },
   narrative: "Grouped by AMC: 47 in all, 22 with at least 10 rated funds. ICICI Prudential Mutual Fund holds the most top-quartile funds, 21 of 58 rated.",

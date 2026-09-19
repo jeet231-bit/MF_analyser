@@ -35,6 +35,14 @@ export function QuartileBar({ counts, height = 34, className }: { counts: Record
   const parts = [1, 2, 3, 4].map((q) => ({ q, n: counts[String(q)] ?? 0 }));
   const total = parts.reduce((s, p) => s + p.n, 0);
   const label = `Quartile distribution: ${parts.map((p) => `Q${p.q} ${formatCount(p.n)} funds`).join(", ")}`;
+  if (total === 0) {
+    // Four equal pale segments would read as an even split; say plainly there is nothing to split.
+    return (
+      <div role="img" aria-label="No rated funds" className={cn("grid place-items-center rounded-sm border border-dashed border-hairline text-[10.5px] text-muted", className)} style={{ height }}>
+        no rated funds
+      </div>
+    );
+  }
   return (
     <div role="img" aria-label={label} className={cn("flex gap-[2px] overflow-hidden rounded-sm", className)} style={{ height }}>
       {parts.map((p) => (
@@ -348,6 +356,17 @@ export function PhaseBars({ phases, unit }: { phases: { group: string; groupLabe
         ))}
       </ul>
     </div>
+  );
+}
+
+/** How a named insight is counted, in the workbook's own column headers. */
+export function RuleLine({ rule, className }: { rule?: string | null; className?: string }) {
+  if (!rule) return null;
+  return (
+    <p className={cn("m-0 text-[11px] leading-[1.45] text-muted", className)} data-testid="rule">
+      <span className="font-semibold text-ink-2">Counted as: </span>
+      {rule}
+    </p>
   );
 }
 

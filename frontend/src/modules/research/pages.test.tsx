@@ -82,6 +82,8 @@ describe("DashboardPage", () => {
     expect(cards).toHaveLength(2); // the unavailable one is not rendered
     expect(cards[0]).toHaveTextContent("Q1 in bull and bear");
     expect(cards[0]).toHaveTextContent("36");
+    // A name like "All weather" is never a black box: the card says how it is counted.
+    expect(within(cards[0]).getByTestId("rule")).toHaveTextContent("Counted as: QRTL-BULL = 1 (Bull-Bear Returns, column AZ) and QRTL-BEAR = 1");
     fireEvent.click(cards[0]);
     expect(actions.openFunds).toHaveBeenCalledWith({ keys: ["Kotak Bank Index - Dir", "WhiteOak Aggressive - Reg"], sort: "rank", dir: "asc" });
     expect(screen.getByRole("img", { name: /Quartile distribution: Q1 335 funds/ })).toBeInTheDocument();
@@ -364,8 +366,14 @@ describe("PivotsPage", () => {
       "Quartile mix",
       "Top quartile",
       "average composite rank",
-      "Median rank",
+      "Median position",
     ]);
+    // The colours are explained once, above the table.
+    const legend = screen.getByTestId("grid-legend");
+    expect(legend).toHaveTextContent("Q1 · top");
+    expect(legend).toHaveTextContent("Shading: how close a group is to the best composite rank, among groups with 10+ rated funds");
+    expect(legend).toHaveTextContent("change since 31 Aug: green is better, red is worse");
+    expect(screen.getByText(/Ranks are counted within each category/)).toBeInTheDocument();
     const icici = within(grid).getByText("ICICI Prudential Mutual Fund").closest("tr")!;
     expect(within(icici).getByText("36%")).toBeInTheDocument();
     expect(within(icici).getByText("▼ 2.0")).toHaveClass("text-positive"); // a lower rank is better
@@ -373,7 +381,11 @@ describe("PivotsPage", () => {
     expect(within(icici).getByText("▲ 4pp")).toHaveClass("text-positive");
     const axis = within(grid).getByText("Axis Mutual Fund").closest("tr")!;
     expect(within(axis).getByText("▲ 3.0")).toHaveClass("text-negative");
-    expect(within(grid).getByText("Tiny Mutual Fund").closest("tr")!).toHaveTextContent("few rated");
+    const tiny = within(grid).getByText("Tiny Mutual Fund").closest("tr")!;
+    expect(tiny).toHaveTextContent("few rated");
+    expect(within(tiny).getByRole("img", { name: "No rated funds" })).toHaveTextContent("no rated funds"); // not four equal segments
+    expect(within(icici).getByText("top 22%")).toBeInTheDocument();
+    expect(within(icici).getByText("▼ 3pp")).toHaveClass("text-positive"); // a smaller position is better
     expect(screen.getByTestId("explore-total")).toHaveTextContent("All funds in scope");
 
     fireEvent.click(within(grid).getByRole("button", { name: "ICICI Prudential Mutual Fund" }));
@@ -387,6 +399,20 @@ describe("PivotsPage", () => {
     expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({ compare: false }));
     fireEvent.click(screen.getByRole("button", { name: /Show all 47/ }));
     expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 0 }));
+  });
+
+  it("hides the quartile columns when every group is made of whole categories, and says why", async () => {
+    mockApi({
+      "GET /api/research/pivots": pivotListing,
+      "GET /api/research/explore": { ...exploreResponse, by: { key: "category", label: "Category", kind: "dimension" }, quartilesByConstruction: true },
+    });
+    render(<Pivots actions={makeActions()} location={{ id: null }} onOpen={vi.fn()} onQuery={vi.fn()} />);
+    const grid = await screen.findByTestId("explore-grid");
+    const headers = within(grid).getAllByRole("columnheader").map((h) => h.textContent);
+    expect(headers).not.toContain("Quartile mix");
+    expect(headers).not.toContain("Top quartile");
+    expect(screen.getByText(/splits into four roughly equal parts by construction/)).toBeInTheDocument();
+    expect(screen.getByTestId("grid-legend")).not.toHaveTextContent("Q1 · top");
   });
 
   it("keeps the workbook's own layouts behind a fold and opens one", async () => {

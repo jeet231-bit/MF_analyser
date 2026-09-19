@@ -1127,7 +1127,7 @@
           "default": "Grouped by {dimension}: {groups} in all, {eligible} with at least {min_group} rated funds."
         },
         {
-          "default": "{top} holds the most top-quartile funds, {top_q1} of {top_rated} rated.",
+          "default": "{top} has the highest top-quartile share, {top_q1} of its {top_rated} rated funds.",
           "requires": [
             "top"
           ]
@@ -1236,14 +1236,28 @@
       "note": "Starting points for the Pivots screen: each preset only sets the three dropdowns. What can be grouped by and measured comes from the dimensions and measures above, never from code.",
       "presets": [
         {
-          "label": "Composite rank by category",
-          "by": "category",
-          "measure": "rank",
+          "label": "Top-quartile share by house",
+          "by": "amc",
+          "measure": "quartile",
+          "agg": "mean",
+          "sort": "q1_share"
+        },
+        {
+          "label": "Composite score by house",
+          "by": "amc",
+          "measure": "score",
           "agg": "mean"
         },
         {
-          "label": "Top-quartile share by house",
-          "by": "amc",
+          "label": "Does size help?",
+          "by": "corpus_band",
+          "measure": "quartile",
+          "agg": "mean",
+          "sort": "q1_share"
+        },
+        {
+          "label": "Does cost hurt?",
+          "by": "expense_band",
           "measure": "quartile",
           "agg": "mean",
           "sort": "q1_share"
@@ -1255,28 +1269,10 @@
           "agg": "mean"
         },
         {
-          "label": "Cost by house",
-          "by": "amc",
-          "measure": "expense",
-          "agg": "mean"
-        },
-        {
           "label": "Assets by house",
           "by": "amc",
           "measure": "corpus",
           "agg": "sum"
-        },
-        {
-          "label": "Direct against Regular",
-          "by": "plan",
-          "measure": "rank",
-          "agg": "mean"
-        },
-        {
-          "label": "Does size help?",
-          "by": "corpus_band",
-          "measure": "rank",
-          "agg": "mean"
         }
       ]
     },

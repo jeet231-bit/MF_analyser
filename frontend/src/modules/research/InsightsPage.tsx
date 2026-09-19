@@ -5,7 +5,7 @@ import { Button, EmptyState, ExportMenu } from "@/components";
 import { formatCount } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
 import type { ResearchActions } from "./types";
-import { ConfidentialFooter, LinkButton, Narrative, NotConfigured, PageHead, QuartilePill, SectionHeader, Skeleton } from "./ui";
+import { ConfidentialFooter, LinkButton, Narrative, NotConfigured, PageHead, QuartilePill, RuleLine, SectionHeader, Skeleton } from "./ui";
 
 const SECTION_ICONS = ["◎", "◑", "⌸", "₹", "◈", "✦"];
 
@@ -60,7 +60,8 @@ export function InsightCard({ insight: ins, actions }: { insight: Insight; actio
     <article className="flex min-w-0 flex-col rounded-xl glass rise px-[20px] py-[19px] md:col-span-4" aria-label={ins.title}>
       <div className="mb-[7px] text-[10.5px] font-bold uppercase tracking-[0.1em] text-accent">{ins.eyebrow}</div>
       <h3 className="m-0 mb-[7px] font-heading text-[15.5px] font-semibold tracking-[-0.01em] text-ink">{ins.title}</h3>
-      {ins.status === "ok" && <Narrative text={ins.sentence} className="mb-[12px]" />}
+      {ins.status === "ok" && <Narrative text={ins.sentence} className="mb-[8px]" />}
+      <RuleLine rule={ins.rule} className="mb-[12px]" />
       {ins.status !== "ok" && (
         <p className="m-0 mb-[12px] rounded-sm border border-hairline bg-surface-lifted px-[12px] py-[8px] text-xs text-muted" role="note">
           {ins.note ?? (ins.problems.length ? ins.problems.join("; ") : "Not available on this version.")}

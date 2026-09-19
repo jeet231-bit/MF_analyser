@@ -560,6 +560,52 @@ def _entity_row(
     return InsightRow(e.key, e.label, entity_sub(e), None, "", extra)
 
 
+_FRACTION = {0.25: "quarter", 0.5: "half", 0.1: "tenth", 0.2: "fifth", 1 / 3: "third"}
+_SYMBOL = {"lt": "<", "lte": "≤", "gt": ">", "gte": "≥", "ne": "≠"}
+
+
+def rule_text(table: ResearchTable, spec: InsightSpec) -> str | None:
+    """The insight's test in the workbook's own terms: the column header the map resolved,
+    the sheet and the column letter, so a reader can check it in Excel."""
+    predicates = list(spec.where)
+    if spec.groupBy is not None:
+        predicates += spec.groupBy.where
+    if spec.across is not None:
+        predicates += spec.across.where
+    parts: list[str] = []
+    for p in predicates:
+        if p.measure:
+            ref = table.resolved.measures.get(p.measure)
+            m = table.map.measure(p.measure)
+            name = (ref.label if ref and ref.label else None) or (m.label if m else p.measure)
+            where = f" ({ref.sheet}, column {ref.column})" if ref else ""
+        elif p.dimension:
+            ref = table.resolved.dimensions.get(p.dimension)
+            d = table.map.dimensions.get(p.dimension)
+            name = (ref.label if ref and ref.label else None) or (d.label if d else p.dimension)
+            where = f" ({ref.sheet}, column {ref.column})" if ref else ""
+        else:
+            continue
+        value = p.value
+        if isinstance(value, str) and value.startswith("$"):
+            value = value[1:].replace("_", " ")
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+        share = next(
+            (w for f, w in _FRACTION.items() if abs(f - p.fraction) < 1e-9), f"{p.fraction:.0%}"
+        )
+        phrase = {
+            "eq": f"{name} = {value}",
+            "in": f"{name} is one of {', '.join(str(v) for v in value) if isinstance(value, list) else value}",
+            "top": f"{name} in the best {share}",
+            "bottom": f"{name} in the worst {share}",
+            "notnull": f"{name} has a value",
+            "isnull": f"{name} is blank or --",
+        }.get(p.op) or f"{name} {_SYMBOL.get(p.op, p.op)} {value}"
+        parts.append(phrase + where)
+    return " and ".join(parts) or None
+
+
 def group_values(table: ResearchTable, dimension: str, e: Entity) -> list[str]:
     """The group(s) an entity belongs to on a dimension; a ``split`` separator yields several."""
     v = e.dims.get(dimension)

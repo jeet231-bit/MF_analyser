@@ -694,7 +694,7 @@ def research_summary(
     wanted = _config_section("dashboard").get("callouts")
     if isinstance(wanted, list) and wanted:
         by_key = {c.key: c for c in _computed(session, table)}
-        out["callouts"] = [_insight_dict(by_key[k]) for k in wanted if k in by_key]
+        out["callouts"] = [_insight_dict(by_key[k], table) for k in wanted if k in by_key]
     else:
         out["callouts"] = []
     # Validation and findings.
@@ -1157,9 +1157,15 @@ def _versions_for_insights(session: Session, table: ResearchTable) -> list[Snaps
     return _history(session, None)
 
 
-def _insight_dict(ins: engine.ComputedInsight) -> dict[str, Any]:
+def _insight_dict(
+    ins: engine.ComputedInsight, table: ResearchTable | None = None
+) -> dict[str, Any]:
+    spec = next((i for i in table.map.insights if i.key == ins.key), None) if table else None
     return {
         "key": ins.key,
+        # The test behind the name, in the workbook's own column headers, so a label such as
+        # "All weather" is never a black box.
+        "rule": engine.rule_text(table, spec) if table is not None and spec is not None else None,
         "section": ins.section,
         "eyebrow": ins.eyebrow,
         "title": ins.title,
@@ -1207,7 +1213,7 @@ def research_insights(
         {
             "sections": sections,
             "sectionLabels": table.map.sectionLabels,
-            "insights": [_insight_dict(c) for c in computed],
+            "insights": [_insight_dict(c, table) for c in computed],
             "footer": table.map.footer,
         }
     )
