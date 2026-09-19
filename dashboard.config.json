@@ -1121,6 +1121,30 @@
         {
           "default": "{outside|fund sits|funds sit} outside the universe flag."
         }
+      ],
+      "explore": [
+        {
+          "default": "Grouped by {dimension}: {groups} in all, {eligible} with at least {min_group} rated funds."
+        },
+        {
+          "default": "{top} holds the most top-quartile funds, {top_q1} of {top_rated} rated.",
+          "requires": [
+            "top"
+          ]
+        },
+        {
+          "default": "{best} leads on {measure} at {best_value}.",
+          "requires": [
+            "best"
+          ]
+        },
+        {
+          "default": "Since {previous}, {riser} improved most on {measure}, by {riser_delta}; {faller} slipped most, by {faller_delta}.",
+          "requires": [
+            "riser",
+            "previous"
+          ]
+        }
       ]
     },
     "footer": "Pantomath Group — Equity MF Research Engine · Private & Confidential",
@@ -1207,6 +1231,63 @@
         "category": "Scheme Sub Nature",
         "amc": "AMC"
       }
+    },
+    "explore": {
+      "note": "Starting points for the Pivots screen: each preset only sets the three dropdowns. What can be grouped by and measured comes from the dimensions and measures above, never from code.",
+      "presets": [
+        {
+          "label": "Composite rank by category",
+          "by": "category",
+          "measure": "rank",
+          "agg": "mean"
+        },
+        {
+          "label": "Top-quartile share by house",
+          "by": "amc",
+          "measure": "quartile",
+          "agg": "mean",
+          "sort": "q1_share"
+        },
+        {
+          "label": "1Y rolling by category",
+          "by": "category",
+          "measure": "roll1y",
+          "agg": "mean"
+        },
+        {
+          "label": "Cost by house",
+          "by": "amc",
+          "measure": "expense",
+          "agg": "mean"
+        },
+        {
+          "label": "Assets by house",
+          "by": "amc",
+          "measure": "corpus",
+          "agg": "sum"
+        },
+        {
+          "label": "Direct against Regular",
+          "by": "plan",
+          "measure": "rank",
+          "agg": "mean"
+        },
+        {
+          "label": "Does size help?",
+          "by": "corpus_band",
+          "measure": "rank",
+          "agg": "mean"
+        }
+      ]
+    },
+    "dashboard": {
+      "note": "Which computed insights become the dashboard's 'where to look' cards, in order.",
+      "callouts": [
+        "all_weather",
+        "best_value",
+        "high_vol",
+        "expensive_laggards"
+      ]
     }
   },
   "viewer": {

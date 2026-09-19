@@ -1,4 +1,4 @@
-import type { PivotListing, PivotTable, CategoriesResponse, EntitiesPage, EntityDetail, EntityRow, InsightsResponse, MeasureMeta, MovementResponse, ResearchConfig, ResearchSummary } from "@/api/research";
+import type { ExploreResponse, PivotListing, PivotTable, CategoriesResponse, EntitiesPage, EntityDetail, EntityRow, InsightsResponse, MeasureMeta, MovementResponse, ResearchConfig, ResearchSummary } from "@/api/research";
 
 const envelope = {
   configured: true,
@@ -95,6 +95,53 @@ export const summary: ResearchSummary = {
       { key: "Axis Energy - Reg", label: "Axis Nifty Energy Index Fund", sub: "Regular · Axis", category: "Regular-Sectoral", rankFrom: 31, rankTo: 58, delta: -27, quartileFrom: 2, quartileTo: 3, cause: "market", note: null },
     ],
   },
+  callouts: [
+    {
+      key: "all_weather",
+      section: "behaviour",
+      eyebrow: "All weather",
+      title: "Q1 in bull and bear",
+      sentence: "36 funds sit in the top quartile on both phases.",
+      count: 36,
+      total: 1434,
+      measure: null,
+      drill: { sort: "rank", dir: "asc", keys: ["Kotak Bank Index - Dir", "WhiteOak Aggressive - Reg"] },
+      problems: [],
+      status: "ok",
+      note: null,
+      rows: [],
+    },
+    {
+      key: "best_value",
+      section: "cost",
+      eyebrow: "Best value",
+      title: "Q1 at Q1 cost",
+      sentence: "50 funds deliver Q1 performance at Q1 cost.",
+      count: 50,
+      total: 1434,
+      measure: "expense",
+      drill: { keys: ["Axis Energy - Reg"] },
+      problems: [],
+      status: "ok",
+      note: null,
+      rows: [],
+    },
+    {
+      key: "held_q1",
+      section: "winning",
+      eyebrow: "Consistency",
+      title: "Held Q1 every month",
+      sentence: "",
+      count: 0,
+      total: 1434,
+      measure: null,
+      drill: {},
+      problems: [],
+      status: "unavailable",
+      note: "only one genuine upload so far",
+      rows: [],
+    },
+  ],
   held_q1: { available: true, count: 31, current_q1: 335, versions: 3, from: "30 Jun" },
   history: [
     { id: "old0001", date: "30 Jun", as_of: "2026-06-30" },
@@ -374,4 +421,56 @@ export const pivotTable: PivotTable = {
   options: { Universe: ["No", "Yes"], "Scheme Nature": ["Equity", "Hybrid", "Other"], "Sub Plan": ["Direct", "Regular"] },
   fieldKinds: { Universe: "text", "Scheme Name": "text", "Scheme Nature": "text", "Sub Plan": "text", "Corpus (In crs.)": "number", "RANK-Composite": "number" },
   query: { filters: { Universe: ["Yes"], "Sub Plan": ["Direct"] }, rows: ["Scheme Name"], cols: [], values: pivotListing.pivots[0].layout.values },
+};
+
+const amcGroup = (label: string, funds: number, rated: number, q1: number, value: number, medianRank: number, delta: Record<string, number> | null, small = false) => ({
+  key: label,
+  label,
+  funds,
+  rated,
+  quartiles: { "1": q1, "2": rated - q1, "3": 0, "4": 0 },
+  q1Share: rated ? q1 / rated : null,
+  value,
+  medianRank,
+  small,
+  delta: delta === null ? null : { funds: 0, rated: 0, q1: 0, q1Share: 0, value: 0, medianRank: 0, new: false, ...delta },
+});
+
+export const exploreResponse: ExploreResponse = {
+  ...envelope,
+  by: { key: "amc", label: "AMC", kind: "dimension" },
+  measure: { key: "rank", label: "Composite rank", role: "rank", format: "integer", unit: null, higherIsBetter: false, decimals: 1 },
+  agg: "mean",
+  sort: "value",
+  dir: "asc",
+  limit: 15,
+  minGroupCount: 10,
+  groups: [
+    amcGroup("ICICI Prudential Mutual Fund", 132, 58, 21, 24, 22, { value: -2, medianRank: -3, q1: 3, q1Share: 0.04, funds: 2 }),
+    amcGroup("Axis Mutual Fund", 74, 31, 6, 38, 41, { value: 3, medianRank: 2, q1: -1, q1Share: -0.03 }),
+    amcGroup("Tiny Mutual Fund", 4, 3, 0, 55, 60, null, true),
+  ],
+  groupCount: 47,
+  totals: {
+    funds: 3232,
+    rated: 1434,
+    quartiles: { "1": 335, "2": 368, "3": 344, "4": 387 },
+    q1Share: 335 / 1434,
+    value: 30,
+    medianRank: 28,
+    delta: { funds: 14, rated: 9, q1: 4, q1Share: 0.01, value: -1, medianRank: -1, new: false },
+  },
+  compare: { requested: true, available: true, previous: { id: "prev0001", filename: "master-aug.xlsx", date: "31 Aug" }, note: null },
+  narrative: "Grouped by AMC: 47 in all, 22 with at least 10 rated funds. ICICI Prudential Mutual Fund holds the most top-quartile funds, 21 of 58 rated.",
+  options: {
+    by: [
+      { key: "amc", label: "AMC", kind: "dimension", groups: 47 },
+      { key: "category", label: "Category", kind: "dimension", groups: 200 },
+      { key: "corpus_band", label: "Corpus band", kind: "band", groups: 4 },
+    ],
+    measures,
+    aggs: ["mean", "median", "sum", "min", "max"],
+  },
+  presets: [{ label: "Top-quartile share by house", by: "amc", measure: "quartile", agg: "mean", sort: "q1_share" }],
+  footer: "Test console · confidential",
 };

@@ -1,24 +1,26 @@
 import type { CSSProperties, ReactNode } from "react";
 import { runExportUrl } from "@/api/exports";
-import { getResearchEntities, researchExportUrl, type ResearchSummary, type Scope } from "@/api/research";
+import { getResearchEntities, researchExportUrl, type Insight, type ResearchSummary, type Scope } from "@/api/research";
 import { Button, EmptyState, ExportMenu } from "@/components";
 import { cn } from "@/lib/cn";
 import { formatCount, formatTimestamp } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
 import { Icon, type IconName } from "@/modules/shell/icons";
+import { formatRankDelta } from "./format";
 import type { ResearchActions } from "./types";
 import { BarList, ConfidentialFooter, LinkButton, MoverRow, Narrative, NotConfigured, PageHead, QuartileBar, QuartileLegend, QuartilePill, RCard, Skeleton } from "./ui";
 import { useWatchlist } from "./useWatchlist";
 
-/* Each KPI tile is a tinted glass note (the sticky-note cards of the reference) with an icon bubble. */
-const KPI_TONES: Record<string, { bubble: string; icon: IconName; tint: string }> = {
-  q1: { bubble: "bg-accent text-white", icon: "funds", tint: "tint-mint" },
-  q2: { bubble: "bg-accent text-white", icon: "categories", tint: "tint-mint" },
-  accent: { bubble: "bg-highlight text-ink", icon: "dashboard", tint: "tint-sun" },
-  violet: { bubble: "bg-violet text-white", icon: "insights", tint: "tint-violet" },
-  positive: { bubble: "bg-positive text-white", icon: "validation", tint: "tint-mint" },
-  warning: { bubble: "bg-warning text-white", icon: "admin", tint: "tint-sun" },
-};
+/* The dashboard answers three questions in order: what is true, what changed, and where to
+   look. Counts that are only counts sit in one quiet strip; every card below them is a list
+   the reader can open. */
+
+const CALLOUT_TONES: { tint: string; bubble: string; icon: IconName }[] = [
+  { tint: "tint-mint", bubble: "bg-accent text-white", icon: "funds" },
+  { tint: "tint-sun", bubble: "bg-highlight text-ink", icon: "insights" },
+  { tint: "tint-violet", bubble: "bg-violet text-white", icon: "categories" },
+  { tint: "tint-sky", bubble: "bg-hero-link text-white", icon: "validation" },
+];
 
 export function DashboardPage({
   summary,
@@ -46,6 +48,7 @@ export function DashboardPage({
   const asOf = s.history?.find((h) => h.id === s.version_id)?.date ?? s.history?.[s.history.length - 1]?.date ?? null;
   const scopeText = (s.scope?.description ?? []).join(" · ");
   const leaders = s.category_averages;
+  const callouts = (s.callouts ?? []).filter((c) => c.status === "ok" && c.count > 0);
 
   return (
     <div>
@@ -74,10 +77,7 @@ export function DashboardPage({
       {scopeBar}
 
       {s.executive && (
-        <section
-          aria-label="Executive summary"
-          className="mb-[18px] rounded-xl glass tint-sky rise px-[22px] py-[20px] text-hero-ink"
-        >
+        <section aria-label="Executive summary" className="mb-[18px] rounded-xl glass tint-sky rise px-[22px] py-[20px] text-hero-ink">
           <div className="mb-[11px] flex items-center gap-[11px]">
             <span className="grid h-[32px] w-[32px] flex-none place-items-center rounded-full glass-inset text-hero-link" aria-hidden>
               <Icon name="spark" className="inline-block h-[16px] w-[16px] [&>svg]:h-full [&>svg]:w-full" />
@@ -89,24 +89,29 @@ export function DashboardPage({
             </span>
           </div>
           <Narrative text={s.executive} onHero className="text-[14.5px] leading-[1.62]" />
+          {s.kpis && s.kpis.length > 0 && (
+            <dl className="mt-[15px] flex flex-wrap gap-x-[26px] gap-y-[8px] border-t border-hero-line pt-[13px]" data-testid="kpi-row">
+              {s.kpis.map((k) => (
+                <div key={k.label} className="flex items-baseline gap-[7px]">
+                  <dt className="text-[11.5px] text-hero-muted">{k.label}</dt>
+                  <dd className="tabular m-0 font-heading text-[15.5px] font-bold text-hero-ink">{k.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
         </section>
       )}
 
-      {s.kpis && s.kpis.length > 0 && (
-        <div className="mb-[18px] grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4" data-testid="kpi-row">
-          {s.kpis.map((k, i) => (
-            <div key={k.label} className={cn("rounded-[24px_24px_24px_10px] glass rise lift px-[20px] py-[18px]", (KPI_TONES[k.tone] ?? KPI_TONES.accent).tint)} style={{ "--i": i + 1 } as CSSProperties}>
-              <div className="flex items-center gap-[10px]">
-                <span className={cn("grid h-[34px] w-[34px] flex-none place-items-center rounded-full", (KPI_TONES[k.tone] ?? KPI_TONES.accent).bubble)} aria-hidden>
-                  <Icon name={(KPI_TONES[k.tone] ?? KPI_TONES.accent).icon} className="inline-block h-[17px] w-[17px] [&>svg]:h-full [&>svg]:w-full" />
-                </span>
-                <div className="text-[13px] font-semibold text-ink-2">{k.label}</div>
-              </div>
-              <div className="tabular mt-[12px] font-heading text-[30px] font-extrabold leading-[1.1] tracking-[-0.025em] text-ink">{k.value}</div>
-              {k.note && <div className="mt-[4px] text-xs text-muted">{k.note}</div>}
-            </div>
-          ))}
-        </div>
+      <WhatChanged summary={s} actions={actions} />
+
+      {callouts.length > 0 && (
+        <section aria-label="Where to look" className="mb-[18px]">
+          <div className="grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4" data-testid="callout-row">
+            {callouts.map((c, i) => (
+              <Callout key={c.key} insight={c} tone={CALLOUT_TONES[i % CALLOUT_TONES.length]} index={i + 1} actions={actions} />
+            ))}
+          </div>
+        </section>
       )}
 
       <div className="grid gap-[18px] md:grid-cols-12">
@@ -165,6 +170,114 @@ export function DashboardPage({
       )}
       <ConfidentialFooter text={s.footer} />
     </div>
+  );
+}
+
+/** The month, not the statistics: what moved since the previous upload, and who moved most. */
+function WhatChanged({ summary, actions }: { summary: ResearchSummary; actions: ResearchActions }) {
+  const m = summary.movement;
+  if (!m || m.same_month) return null;
+  const changed = m.moved + m.entries + m.exits;
+  if (changed === 0) return null;
+  const since = m.previous.date ?? m.previous.filename;
+  const figures: { label: string; value: number; onClick?: () => void }[] = [
+    { label: "Changed rank", value: m.moved, onClick: actions.openMovement },
+    { label: "Moved up", value: m.up, onClick: actions.openMovement },
+    { label: "Moved down", value: m.down, onClick: actions.openMovement },
+    { label: "New to the universe", value: m.entries },
+    { label: "Gone", value: m.exits },
+  ].filter((f) => f.value > 0);
+
+  return (
+    <section aria-label="What changed" className="mb-[18px] rounded-xl glass rise px-[22px] py-[18px]" data-testid="what-changed">
+      <header className="mb-[13px] flex flex-wrap items-center gap-[11px]">
+        <span className="grid h-[32px] w-[32px] flex-none place-items-center rounded-full bg-accent-soft text-accent" aria-hidden>
+          <Icon name="movement" className="inline-block h-[16px] w-[16px] [&>svg]:h-full [&>svg]:w-full" />
+        </span>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-accent">Since {since}</div>
+          <h2 className="m-0 font-heading text-[15.5px] font-bold text-ink">What changed</h2>
+        </div>
+        <LinkButton className="ml-auto" onClick={actions.openMovement}>
+          Open movement →
+        </LinkButton>
+      </header>
+
+      <dl className="m-0 mb-[14px] flex flex-wrap gap-x-[24px] gap-y-[8px]">
+        {figures.map((f) => (
+          <div key={f.label} className="flex items-baseline gap-[7px]">
+            <dd className="tabular m-0 font-heading text-[19px] font-bold text-ink">{formatCount(f.value)}</dd>
+            <dt className="text-[12px] text-muted">
+              {f.onClick ? (
+                <button type="button" onClick={f.onClick} className="hover:text-accent">
+                  {f.label}
+                </button>
+              ) : (
+                f.label
+              )}
+            </dt>
+          </div>
+        ))}
+        {m.repairs > 0 && (
+          <div className="flex items-baseline gap-[7px]">
+            <dd className="tabular m-0 font-heading text-[19px] font-bold text-warning">{formatCount(m.repairs)}</dd>
+            <dt className="text-[12px] text-muted">of those are data repairs, not market movement</dt>
+          </div>
+        )}
+      </dl>
+
+      {m.top.length > 0 && (
+        <div className="grid gap-x-[24px] md:grid-cols-2">
+          {m.top.map((mv) => {
+            const delta = formatRankDelta(mv.delta);
+            return (
+              <MoverRow
+                key={mv.key}
+                name={mv.label}
+                context={
+                  <>
+                    {mv.category ?? mv.sub} · rank {formatCount(mv.rankFrom)} → {formatCount(mv.rankTo)}
+                    {mv.cause === "repair" ? " · repaired row" : ""}
+                  </>
+                }
+                right={<QuartilePill q={mv.quartileTo} />}
+                delta={delta}
+                onClick={() => actions.openFund(mv.key)}
+              />
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** One "where to look" card: a computed insight as a count with its own list behind it. */
+function Callout({ insight, tone, index, actions }: { insight: Insight; tone: (typeof CALLOUT_TONES)[number]; index: number; actions: ResearchActions }) {
+  const keys = insight.drill.keys ?? [];
+  const open = () => keys.length > 0 && actions.openFunds({ keys, sort: insight.drill.sort, dir: insight.drill.dir });
+  return (
+    <button
+      type="button"
+      onClick={open}
+      disabled={keys.length === 0}
+      style={{ "--i": index } as CSSProperties}
+      className={cn("rounded-[24px_24px_24px_10px] glass rise lift px-[20px] py-[18px] text-left disabled:cursor-default", tone.tint)}
+      data-testid="callout"
+    >
+      <div className="flex items-center gap-[10px]">
+        <span className={cn("grid h-[34px] w-[34px] flex-none place-items-center rounded-full", tone.bubble)} aria-hidden>
+          <Icon name={tone.icon} className="inline-block h-[17px] w-[17px] [&>svg]:h-full [&>svg]:w-full" />
+        </span>
+        <div className="min-w-0">
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-accent">{insight.eyebrow}</div>
+          <div className="truncate text-[13px] font-semibold text-ink-2">{insight.title}</div>
+        </div>
+      </div>
+      <div className="tabular mt-[12px] font-heading text-[30px] font-extrabold leading-[1.1] tracking-[-0.025em] text-ink">{formatCount(insight.count)}</div>
+      <Narrative text={insight.sentence} className="mt-[4px] text-[12px] leading-[1.5]" />
+      {keys.length > 0 && <div className="mt-[8px] font-heading text-[12px] font-semibold text-accent">See all {formatCount(insight.count)} →</div>}
+    </button>
   );
 }
 

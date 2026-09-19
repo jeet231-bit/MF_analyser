@@ -247,3 +247,82 @@ def pivot_view(
         rows=rows,
         provenance=provenance_for(session, run, version, cfg, f"pivot {spec.sheet} · {filters}"),
     )
+
+
+def explore_view(
+    session: Session,
+    version: WorkbookVersion,
+    run: Run,
+    cfg: DashboardConfig,
+    body: dict[str, Any],
+    scope: str,
+) -> ExportView:
+    """A grouping as a flat table: one row per group, the grand total last, every change
+    beside the number it belongs to."""
+    measure = body["measure"]
+    value_format = "number" if measure.get("decimals") else measure["format"]
+    compared = bool(body["compare"]["available"])
+    previous = (body["compare"]["previous"] or {}).get("date") if compared else None
+    since = f" since {previous}" if previous else ""
+    columns = [
+        ExportColumn(key="funds", label="Funds", format="integer", kind="field"),
+        ExportColumn(key="rated", label="Rated", format="integer", kind="field"),
+        *[
+            ExportColumn(key=f"q{q}", label=f"Q{q}", format="integer", kind="field")
+            for q in (1, 2, 3, 4)
+        ],
+        ExportColumn(key="q1Share", label="Top-quartile share", format="percent", kind="output"),
+        ExportColumn(
+            key="value",
+            label=measure["label"] + (f" ({measure['unit']})" if measure["unit"] else ""),
+            format=value_format,
+            kind="output",
+        ),
+    ]
+    if compared:
+        columns.append(
+            ExportColumn(key="dValue", label=f"Change{since}", format=value_format, kind="output")
+        )
+    columns.append(
+        ExportColumn(key="medianRank", label="Median rank", format="number", kind="output")
+    )
+    if compared:
+        columns.append(
+            ExportColumn(
+                key="dRank", label=f"Median rank change{since}", format="number", kind="output"
+            )
+        )
+
+    def line(row: dict[str, Any]) -> list[Any]:
+        d = row.get("delta") or {}
+        q = row["quartiles"]
+        out: list[Any] = [
+            row["funds"],
+            row["rated"],
+            *[q.get(str(n), 0) for n in (1, 2, 3, 4)],
+            row["q1Share"],
+            row["value"],
+        ]
+        if compared:
+            out.append(d.get("value"))
+        out.append(row["medianRank"])
+        if compared:
+            out.append(d.get("medianRank"))
+        return out
+
+    rows = [line(r) for r in body["groups"]]
+    labels: list[str | None] = [r["label"] for r in body["groups"]]
+    rows.append(line(body["totals"]))
+    labels.append("All")
+    return ExportView(
+        id=slug(f"by-{body['by']['key']}"),
+        title=f"{measure['label']} by {body['by']['label']}",
+        subtitle=f"{body['agg']} · {scope}" + (f" · compared with {previous}" if previous else ""),
+        columns=columns,
+        row_label_header=body["by"]["label"],
+        row_labels=labels,
+        rows=rows,
+        provenance=provenance_for(
+            session, run, version, cfg, f"{measure['label']} by {body['by']['label']} · {scope}"
+        ),
+    )

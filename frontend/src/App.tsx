@@ -243,9 +243,12 @@ export default function App() {
       <PivotsPage
         pivots={pivots}
         location={view.pivot ?? { id: null }}
-        onOpen={(id) => navigate({ mode: "research", page: "pivots", pivot: { id } })}
-        onQuery={(query) => history.replace({ pivot: { id: view.pivot?.id ?? null, query } })}
+        query={view.explore ?? {}}
+        onQuery={(q) => history.replace({ explore: q })}
+        onOpen={(id) => navigate({ mode: "research", page: "pivots", pivot: { id }, explore: view.explore })}
+        onPivotQuery={(q) => history.replace({ pivot: { id: view.pivot?.id ?? null, query: q } })}
         scope={scope}
+        scopeBar={scopeBar}
         actions={actions}
         footer={footer}
       />

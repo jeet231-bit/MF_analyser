@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
-import { getResearchSummary, listPivots, type EntityQuery, type PivotQuery } from "@/api/research";
+import { getResearchSummary, listPivots, type EntityQuery, type ExploreQuery, type PivotQuery } from "@/api/research";
 import { useAsync } from "@/lib/useAsync";
 import { mockApi } from "@/test/mockApi";
 import { version } from "@/test/fixtures";
 import { EMPTY_SCOPE } from "@/api/research";
-import { categories, entitiesPage, entityDetail, groupedPage, insights, movement, movementUnavailable, notConfigured, pivotListing, pivotTable, researchConfig, summary } from "@/test/researchFixtures";
+import { categories, entitiesPage, entityDetail, exploreResponse, groupedPage, insights, movement, movementUnavailable, notConfigured, pivotListing, pivotTable, researchConfig, summary } from "@/test/researchFixtures";
 import { AdminPage } from "./AdminPage";
 import { CategoriesPage } from "./CategoriesPage";
 import { DashboardPage } from "./DashboardPage";
@@ -62,10 +62,28 @@ describe("DashboardPage", () => {
     const exec = screen.getByRole("region", { name: "Executive summary" });
     expect(exec).toHaveTextContent("All funds · every category · every AMC · both plans · as of 31 Aug");
     expect(within(exec).getByText(narrative(/ICICI Prudential Mutual Fund holds the most Q1 funds/))).toBeInTheDocument();
+    // The counts that are only counts sit in one quiet strip inside the summary.
     const kpis = within(screen.getByTestId("kpi-row"));
-    expect(kpis.getAllByText(/./).length).toBeGreaterThan(0);
     expect(kpis.getByText("All-weather funds")).toBeInTheDocument();
     expect(kpis.getByText("100.00%")).toBeInTheDocument();
+
+    // Then the month: what moved, and who moved most.
+    const changed = within(screen.getByTestId("what-changed"));
+    expect(changed.getByText("Since 31 Aug")).toBeInTheDocument();
+    expect(changed.getByText("86").closest("div")).toHaveTextContent("Changed rank");
+    expect(changed.getByText(/data repairs/)).toBeInTheDocument();
+    fireEvent.click(changed.getByRole("button", { name: /Kotak Nifty Bank Index Fund/ }));
+    expect(actions.openFund).toHaveBeenCalledWith("Kotak Bank Index - Dir");
+    fireEvent.click(changed.getByRole("button", { name: "Open movement →" }));
+    expect(actions.openMovement).toHaveBeenCalled();
+
+    // Then where to look: only the cards that have something in them, each opening its list.
+    const cards = within(screen.getByTestId("callout-row")).getAllByTestId("callout");
+    expect(cards).toHaveLength(2); // the unavailable one is not rendered
+    expect(cards[0]).toHaveTextContent("Q1 in bull and bear");
+    expect(cards[0]).toHaveTextContent("36");
+    fireEvent.click(cards[0]);
+    expect(actions.openFunds).toHaveBeenCalledWith({ keys: ["Kotak Bank Index - Dir", "WhiteOak Aggressive - Reg"], sort: "rank", dir: "asc" });
     expect(screen.getByRole("img", { name: /Quartile distribution: Q1 335 funds/ })).toBeInTheDocument();
     expect(screen.getByText(narrative(/draws from all 74 ranked categories/))).toBeInTheDocument();
     expect(screen.getByText("Median ranked category")).toBeInTheDocument();
@@ -316,63 +334,96 @@ describe("AdminPage and UploadPage", () => {
   });
 });
 
-function Pivots({ actions, location, onOpen, onQuery }: { actions: ResearchActions; location: PivotLocation; onOpen: (id: string | null) => void; onQuery: (q: PivotQuery) => void }) {
+function Pivots({ actions, location, onOpen, onQuery, onPivotQuery }: { actions: ResearchActions; location: PivotLocation; onOpen: (id: string | null) => void; onQuery: (q: ExploreQuery) => void; onPivotQuery?: (q: PivotQuery) => void }) {
   const pivots = useAsync(() => listPivots(), []);
-  return <PivotsPage pivots={pivots} location={location} onOpen={onOpen} onQuery={onQuery} scope={{ ...EMPTY_SCOPE, dims: { plan: "Regular" } }} actions={actions} />;
+  return <PivotsPage query={{}} onQuery={onQuery} pivots={pivots} location={location} onOpen={onOpen} onPivotQuery={onPivotQuery ?? vi.fn()} scope={{ ...EMPTY_SCOPE, dims: { plan: "Regular" } }} actions={actions} />;
 }
 
 describe("PivotsPage", () => {
-  it("lists the workbook's pivots grouped by source, labelled live or cached, and opens one", async () => {
-    mockApi({ "GET /api/research/pivots": pivotListing });
+  it("asks one question in words, carries the change since last month, and drills into a group", async () => {
+    const calls = mockApi({ "GET /api/research/pivots": pivotListing, "GET /api/research/explore": exploreResponse });
+    const onQuery = vi.fn();
+    const actions = makeActions();
+    render(<Pivots actions={actions} location={{ id: null }} onOpen={vi.fn()} onQuery={onQuery} />);
+    expect(await screen.findByRole("heading", { name: "Pivots" })).toBeInTheDocument();
+    expect(calls.some((c) => c.url.startsWith("/api/research/explore"))).toBe(true);
+
+    const question = screen.getByTestId("question-bar");
+    expect(within(question).getByLabelText("Measure")).toHaveValue("rank");
+    expect(within(question).getByLabelText("Grouping")).toHaveValue("amc");
+    expect(within(question).getByLabelText("Aggregation")).toHaveValue("mean");
+    expect(within(question).getByRole("checkbox", { name: /compared with 31 Aug/ })).toBeChecked();
+    expect(screen.getByText(narrative(/47 in all, 22 with at least 10 rated funds/))).toBeInTheDocument();
+
+    // Six columns, no sideways scroll: the group, its funds, its quartile mix, Q1 share, the
+    // measure and the median rank; every number carries its own change.
+    const grid = screen.getByTestId("explore-grid");
+    expect(within(grid).getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
+      "AMC",
+      "Funds",
+      "Quartile mix",
+      "Top quartile",
+      "average composite rank",
+      "Median rank",
+    ]);
+    const icici = within(grid).getByText("ICICI Prudential Mutual Fund").closest("tr")!;
+    expect(within(icici).getByText("36%")).toBeInTheDocument();
+    expect(within(icici).getByText("▼ 2.0")).toHaveClass("text-positive"); // a lower rank is better
+    expect(within(icici).getByText("24.0")).toBeInTheDocument(); // an averaged rank keeps its decimal
+    expect(within(icici).getByText("▲ 4pp")).toHaveClass("text-positive");
+    const axis = within(grid).getByText("Axis Mutual Fund").closest("tr")!;
+    expect(within(axis).getByText("▲ 3.0")).toHaveClass("text-negative");
+    expect(within(grid).getByText("Tiny Mutual Fund").closest("tr")!).toHaveTextContent("few rated");
+    expect(screen.getByTestId("explore-total")).toHaveTextContent("All funds in scope");
+
+    fireEvent.click(within(grid).getByRole("button", { name: "ICICI Prudential Mutual Fund" }));
+    expect(actions.openFunds).toHaveBeenCalledWith({ amc: "ICICI Prudential Mutual Fund" });
+
+    fireEvent.change(within(question).getByLabelText("Grouping"), { target: { value: "category" } });
+    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({ by: "category" }));
+    fireEvent.click(within(question).getByRole("button", { name: "Top-quartile share by house" }));
+    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({ by: "amc", measure: "quartile", sort: "q1_share" }));
+    fireEvent.click(within(question).getByRole("checkbox", { name: /compared with/ }));
+    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({ compare: false }));
+    fireEvent.click(screen.getByRole("button", { name: /Show all 47/ }));
+    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 0 }));
+  });
+
+  it("keeps the workbook's own layouts behind a fold and opens one", async () => {
+    mockApi({ "GET /api/research/pivots": pivotListing, "GET /api/research/explore": exploreResponse });
     const onOpen = vi.fn();
     render(<Pivots actions={makeActions()} location={{ id: null }} onOpen={onOpen} onQuery={vi.fn()} />);
-    expect(await screen.findByRole("heading", { name: "Pivots" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Pivots over Composite Ranks" })).toBeInTheDocument();
-    const cards = screen.getAllByTestId("pivot-card");
-    expect(cards).toHaveLength(2);
-    expect(cards[0]).toHaveTextContent("live from the engine");
-    expect(cards[1]).toHaveTextContent("cached values");
-    expect(cards[0]).toHaveTextContent("Rows: Scheme Name");
-    fireEvent.click(screen.getByRole("button", { name: "Open pivot PIVOT-Composite" }));
+    const fold = await screen.findByTestId("workbook-layouts");
+    expect(fold).toHaveTextContent("The workbook's own pivot layouts");
+    expect(within(fold).getByText("Pivot 1-Indices-Roll").closest("button")).toHaveTextContent("cached");
+    fireEvent.click(within(fold).getByRole("button", { name: /PIVOT-Composite/ }));
     expect(onOpen).toHaveBeenCalledWith("PIVOT-Composite::PivotTable1");
   });
 
-  it("pre-fills Excel's saved filters plus the global scope, renders the table, and edits the layout", async () => {
+  it("opens a workbook layout with its saved filters plus the global scope", async () => {
     const calls = mockApi({ "GET /api/research/pivots": pivotListing, "GET /api/research/pivot": pivotTable });
-    const onQuery = vi.fn();
+    const onPivotQuery = vi.fn();
     const actions = makeActions();
-    render(<Pivots actions={actions} location={{ id: "PIVOT-Composite::PivotTable1" }} onOpen={vi.fn()} onQuery={onQuery} />);
+    render(<Pivots actions={actions} location={{ id: "PIVOT-Composite::PivotTable1" }} onOpen={vi.fn()} onQuery={vi.fn()} onPivotQuery={onPivotQuery} />);
     expect(await screen.findByRole("heading", { name: "PIVOT-Composite" })).toBeInTheDocument();
-    // The scope's plan (Regular) overrides Excel's saved Sub Plan (Direct) through scopeFields.
     const url = calls.find((c) => c.url.startsWith("/api/research/pivot?"))!.url;
     const sent = JSON.parse(new URLSearchParams(url.split("?")[1]).get("spec")!) as PivotQuery;
     expect(sent.filters).toEqual({ Universe: ["Yes"], "Sub Plan": ["Regular"] });
-    expect(sent.rows).toEqual(["Scheme Name"]);
 
     const grid = await screen.findByTestId("pivot-grid");
     expect(within(grid).getByText("Kotak Nifty Bank Index Fund")).toBeInTheDocument();
     expect(within(grid).getByText("Grand total").closest("tr")).toHaveAttribute("data-kind", "total");
-    expect(within(grid).getByText("1,22,954.00")).toBeInTheDocument();
-    expect(grid).toHaveTextContent("2 of 3,232 records match");
 
-    // Filters: every value of the data is offered; choosing one updates the layout in place.
     const picker = screen.getByTestId("filter-Scheme Nature");
     fireEvent.click(within(picker).getByText("Scheme Nature"));
     fireEvent.click(within(picker).getByLabelText("Hybrid"));
-    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({ filters: { Universe: ["Yes"], "Sub Plan": ["Regular"], "Scheme Nature": ["Hybrid"] } }));
+    expect(onPivotQuery).toHaveBeenLastCalledWith(expect.objectContaining({ filters: { Universe: ["Yes"], "Sub Plan": ["Regular"], "Scheme Nature": ["Hybrid"] } }));
 
-    // Rows and values are chips over the pivot's own fields.
-    fireEvent.click(within(screen.getByRole("group", { name: "Row fields" })).getByRole("button", { name: "Scheme Nature" }));
-    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({ rows: ["Scheme Name", "Scheme Nature"] }));
-    fireEvent.change(screen.getByLabelText("Aggregation for Corpus (In crs.)"), { target: { value: "sum" } });
-    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({ values: [expect.objectContaining({ field: "Corpus (In crs.)", agg: "sum" }), expect.anything()] }));
-
-    // A leaf row label drills into Funds.
     fireEvent.click(within(grid).getByRole("button", { name: "Axis Value Fund" }));
     expect(actions.openFunds).toHaveBeenCalledWith({ q: "Axis Value Fund" });
   });
 
-  it("builds Excel's layout as the default query", () => {
+  it("builds the workbook's layout as the default query", () => {
     const q = defaultQuery(pivotListing.pivots[0], undefined, {});
     expect(q).toEqual({ filters: { Universe: ["Yes"], "Sub Plan": ["Direct"] }, rows: ["Scheme Name"], cols: [], values: pivotListing.pivots[0].layout.values });
   });

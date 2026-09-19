@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { EntityQuery, PivotQuery } from "@/api/research";
+import type { EntityQuery, ExploreQuery, PivotQuery } from "@/api/research";
 import type { AppMode, PageId } from "./navigation";
 
 /** One screen of the app: the page plus whatever it needs to be re-shown exactly. */
@@ -10,7 +10,9 @@ export interface AppLocation {
   fund?: string;
   /** The Funds page's filters, sort, pivot and page, kept so Back lands on the same list. */
   funds?: EntityQuery;
-  /** The Pivots screen: which pivot is open (null = the list) and its layout. */
+  /** The Pivots screen: the cross-tab being built. */
+  explore?: ExploreQuery;
+  /** A workbook layout opened from the Pivots screen, and any edits to it. */
   pivot?: { id: string | null; query?: PivotQuery };
 }
 

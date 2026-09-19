@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.dashboard_config import load_dashboard_config
 from app.exports.csv_export import write_csv
 from app.exports.xlsx import write_workbook
+from app.research import explore as explorer
 from app.research import export as rexport
 from app.research import insights as engine
 from app.research import pivot as pivot_engine
@@ -689,6 +690,13 @@ def research_summary(
     else:
         out["category_averages"] = None
     out["measures"] = _measure_meta(table)
+    # "Where to look": the insights the config names, each with its own drill-through.
+    wanted = _config_section("dashboard").get("callouts")
+    if isinstance(wanted, list) and wanted:
+        by_key = {c.key: c for c in _computed(session, table)}
+        out["callouts"] = [_insight_dict(by_key[k]) for k in wanted if k in by_key]
+    else:
+        out["callouts"] = []
     # Validation and findings.
     try:
         report = validation.latest_validation(session, version.id)
@@ -1630,14 +1638,18 @@ def _pivot_frame(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 
 
-def _scope_fields() -> dict[str, str]:
+def _config_section(name: str) -> dict[str, Any]:
+    """A block of the research map the semantic parser does not model (it keeps only what it
+    validates). Workbook preferences live in the config, never in code."""
     research = load_dashboard_config().research
     if not isinstance(research, dict):
         return {}
-    pivots = research.get("pivots")
-    if not isinstance(pivots, dict):
-        return {}
-    fields = pivots.get("scopeFields")
+    section = research.get(name)
+    return section if isinstance(section, dict) else {}
+
+
+def _scope_fields() -> dict[str, str]:
+    fields = _config_section("pivots").get("scopeFields")
     return {str(k): str(v) for k, v in fields.items()} if isinstance(fields, dict) else {}
 
 
@@ -1750,3 +1762,180 @@ def export_pivot(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     view = rexport.pivot_view(session, version, run, load_dashboard_config(), pspec, query, table)
     return _send(view, format, f"pivot-{rexport.slug_of(pspec.sheet)}-{version.id[:8]}")
+
+
+# ---- explore: any measure by any grouping, against last month -----------------------------
+
+
+def _previous_table(
+    session: Session, version: WorkbookVersion, scope: str | None
+) -> tuple[WorkbookVersion, ResearchTable] | tuple[None, None]:
+    """The previous activated version's table, scoped the same way, for month-over-month."""
+    previous = _previous_version(session, version)
+    if previous is None:
+        return None, None
+    run = run_store.baseline_run(session, previous.id)
+    if run is None:
+        return None, None
+    try:
+        prev_table = get_table(session, previous, run)
+    except NotConfigured:
+        return None, None
+    sc = _scope(scope)
+    if not sc.is_empty:
+        prev_table = scoping.apply_scope(prev_table, sc)
+    return previous, prev_table
+
+
+def _explore_body(
+    session: Session,
+    version: WorkbookVersion,
+    run: Run,
+    table: ResearchTable,
+    *,
+    by: str | None,
+    measure: str | None,
+    agg: str,
+    sort: str | None,
+    direction: str | None,
+    limit: int,
+    compare: bool,
+    scope: str | None,
+) -> dict[str, Any]:
+    previous, prev_table = _previous_table(session, version, scope) if compare else (None, None)
+    try:
+        body = explorer.explore(
+            table,
+            prev_table,
+            by=by,
+            measure=measure,
+            agg=agg,
+            sort=sort,
+            direction=direction,
+            limit=limit,
+        )
+    except explorer.ExploreError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+
+    prev_out = None
+    if previous is not None:
+        prev_out = _version_out(
+            previous, _snapshot_of(session, previous), _snapshot_of(session, version, table)
+        )
+    body["compare"] = {
+        "requested": compare,
+        "available": prev_table is not None,
+        "previous": prev_out,
+        "note": None
+        if prev_table is not None
+        else "no earlier version with a baseline run to compare with",
+    }
+
+    facts = body.pop("facts")
+    spec = table.map.measure(body["measure"]["key"])
+    if spec is not None:
+        spec = spec.model_copy(update={"decimals": body["measure"]["decimals"]})
+    ctx = _numbers(
+        groups=facts.get("groups"),
+        eligible=facts.get("eligible"),
+        top_q1=facts.get("top_q1"),
+        top_rated=facts.get("top_rated"),
+        min_group=facts.get("min_group"),
+    )
+    for key in ("dimension", "measure", "top", "best", "riser", "faller"):
+        ctx[key] = facts.get(key)
+    for key in ("best_value", "riser_delta", "faller_delta"):
+        if facts.get(key) is not None and spec is not None:
+            ctx[key] = fmt_measure(facts[key], spec)
+            ctx["_n"][key] = facts[key]
+    ctx["previous"] = prev_out["date"] if prev_out else None
+    body["narrative"] = render_sentences(table.map.narrative("explore"), ctx)
+    return body
+
+
+@router.get("/explore")
+def research_explore(
+    session: SessionDep,
+    by: Annotated[str | None, Query(description="dimension key, or <measure>_band")] = None,
+    measure: Annotated[str | None, Query()] = None,
+    agg: Annotated[str, Query(description="mean | median | sum | min | max")] = "mean",
+    sort: Annotated[str | None, Query()] = None,
+    dir: Annotated[Literal["asc", "desc"] | None, Query()] = None,  # noqa: A002
+    limit: Annotated[int, Query(ge=0, le=500)] = explorer.DEFAULT_LIMIT,
+    compare: Annotated[bool, Query(description="carry the change since the previous month")] = True,
+    version_id: Annotated[str | None, Query()] = None,
+    run_id: Annotated[str | None, Query()] = None,
+    scope: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    """Every fund in scope grouped by one dimension (or a factor band), summarised, and
+    matched against the same grouping of the previous month."""
+    ctx = _context(session, version_id, run_id, scope)
+    if isinstance(ctx, dict):
+        return {**ctx, "groups": [], "options": {"by": [], "measures": []}, "presets": []}
+    version, run, table = ctx
+    out = _status(version, run, table, _base(session, version, run, table))
+    out.update(
+        _explore_body(
+            session,
+            version,
+            run,
+            table,
+            by=by,
+            measure=measure,
+            agg=agg,
+            sort=sort,
+            direction=dir,
+            limit=limit,
+            compare=compare,
+            scope=scope,
+        )
+    )
+    out["options"] = {
+        "by": explorer.by_options(table),
+        "measures": explorer.measure_options(table),
+        "aggs": list(explorer.AGGREGATIONS),
+    }
+    presets = _config_section("explore").get("presets")
+    out["presets"] = presets if isinstance(presets, list) else []
+    out["footer"] = table.map.footer
+    return out
+
+
+@router.get("/explore/export")
+def export_explore(
+    session: SessionDep,
+    format: Annotated[Literal["csv", "xlsx"], Query()],  # noqa: A002
+    by: Annotated[str | None, Query()] = None,
+    measure: Annotated[str | None, Query()] = None,
+    agg: Annotated[str, Query()] = "mean",
+    sort: Annotated[str | None, Query()] = None,
+    dir: Annotated[Literal["asc", "desc"] | None, Query()] = None,  # noqa: A002
+    compare: Annotated[bool, Query()] = True,
+    version_id: Annotated[str | None, Query()] = None,
+    run_id: Annotated[str | None, Query()] = None,
+    scope: Annotated[str | None, Query()] = None,
+):
+    ctx = _context(session, version_id, run_id, scope)
+    if isinstance(ctx, dict):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"message": "research views are not configured", "problems": ctx["problems"]},
+        )
+    version, run, table = ctx
+    body = _explore_body(
+        session,
+        version,
+        run,
+        table,
+        by=by,
+        measure=measure,
+        agg=agg,
+        sort=sort,
+        direction=dir,
+        limit=0,
+        compare=compare,
+        scope=scope,
+    )
+    described = " · ".join(scoping.describe(table, scoping.parse_scope(table.scope_key)))
+    view = rexport.explore_view(session, version, run, load_dashboard_config(), body, described)
+    return _send(view, format, f"by-{rexport.slug_of(body['by']['key'])}-{version.id[:8]}")

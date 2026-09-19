@@ -150,6 +150,8 @@ export interface ResearchSummary extends Envelope {
   kpis?: { label: string; value: string; note: string | null; tone: "q1" | "q2" | "accent" | "violet" | "positive" | "warning" }[];
   distribution_narrative?: string | null;
   coverage_narrative?: string | null;
+  /** The insights the config names as the dashboard's "where to look" cards, in order. */
+  callouts?: Insight[];
   measures?: MeasureMeta[];
   validation?: { status: string; checked: number; matched: number; anomalies: number } | null;
   findings?: { open: number; fixed: number };
@@ -451,4 +453,103 @@ export const getPivot = (id: string, query?: PivotQuery, versionId?: string) =>
 
 export function pivotExportUrl(id: string, format: "csv" | "xlsx", query?: PivotQuery): string {
   return `/api/research/pivot/export${qs({ id, format, spec: query ? JSON.stringify(query) : undefined })}`;
+}
+
+// ---- explore: any measure by any grouping, against last month ------------------------------
+
+export interface ExploreDelta {
+  funds: number | null;
+  rated: number | null;
+  q1: number | null;
+  q1Share: number | null;
+  value: number | null;
+  medianRank: number | null;
+  new: boolean;
+}
+
+export interface ExploreGroup {
+  key: string;
+  label: string;
+  funds: number;
+  rated: number;
+  quartiles: Record<string, number>;
+  q1Share: number | null;
+  value: number | null;
+  medianRank: number | null;
+  /** Fewer rated funds than the workbook's own minimum: shown, never ranked. */
+  small: boolean;
+  delta: ExploreDelta | null;
+}
+
+export interface ExploreTotals {
+  funds: number;
+  rated: number;
+  quartiles: Record<string, number>;
+  q1Share: number | null;
+  value: number | null;
+  medianRank: number | null;
+  delta: ExploreDelta | null;
+}
+
+export interface ExploreQuery {
+  by?: string;
+  measure?: string;
+  agg?: string;
+  sort?: string;
+  dir?: "asc" | "desc";
+  limit?: number;
+  compare?: boolean;
+}
+
+export interface ExploreOption {
+  key: string;
+  label: string;
+  kind: "dimension" | "band";
+  groups: number;
+}
+
+export interface ExplorePreset {
+  label: string;
+  by: string;
+  measure?: string;
+  agg?: string;
+  sort?: string;
+}
+
+export interface ExploreResponse extends Envelope {
+  by: { key: string; label: string; kind: "dimension" | "band" };
+  measure: { key: string; label: string; role: MeasureRole; format: string; unit: string | null; higherIsBetter: boolean; decimals: number | null };
+  agg: string;
+  sort: string;
+  dir: "asc" | "desc";
+  limit: number;
+  minGroupCount: number;
+  groups: ExploreGroup[];
+  groupCount: number;
+  totals: ExploreTotals;
+  compare: { requested: boolean; available: boolean; previous: VersionRef | null; note: string | null };
+  narrative: string | null;
+  options: { by: ExploreOption[]; measures: MeasureMeta[]; aggs: string[] };
+  presets: ExplorePreset[];
+  footer: string | null;
+}
+
+function exploreParams(q: ExploreQuery, scope?: Scope): Record<string, string | number | undefined> {
+  return {
+    by: q.by,
+    measure: q.measure,
+    agg: q.agg,
+    sort: q.sort,
+    dir: q.dir,
+    limit: q.limit,
+    compare: q.compare === false ? "false" : undefined,
+    scope: scopeParam(scope),
+  };
+}
+
+export const getExplore = (query: ExploreQuery, scope?: Scope) =>
+  apiGet<ExploreResponse>(`/research/explore${qs(exploreParams(query, scope))}`);
+
+export function exploreExportUrl(query: ExploreQuery, format: "csv" | "xlsx", scope?: Scope): string {
+  return `/api/research/explore/export${qs({ ...exploreParams(query, scope), format })}`;
 }
